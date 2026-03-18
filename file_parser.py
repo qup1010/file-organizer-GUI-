@@ -14,16 +14,9 @@ def _normalize_local_path(path: str) -> str:
 
 
 def _is_allowed_local_path(path: str) -> bool:
-    normalized = _normalize_local_path(path)
-    if os.path.isabs(normalized):
-        return False
-    if normalized == ".":
-        return True
-    if normalized.startswith(".."):
-        return False
-
-    first_segment = normalized.split(os.sep, 1)[0]
-    return first_segment in {"test", "test_temp_list_dir"} or os.sep not in normalized
+    # 为了支持对任意绝对路径文件夹的分析，这里放宽限制，允许访问所有路径
+    # 在生产环境中，若涉及 Web 暴露，需重新考虑此处的安全性
+    return True
 
 
 def read_pdf(filepath, max_len=DEFAULT_MAX_LEN):

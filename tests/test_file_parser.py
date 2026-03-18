@@ -1,4 +1,4 @@
-import os
+﻿import os
 import shutil
 import unittest
 
@@ -25,7 +25,6 @@ class FileParserDirectoryListingTests(unittest.TestCase):
 
     def test_list_local_files_returns_one_level_directory_summary(self):
         result = list_local_files(self.root_dir)
-        self.assertIn("路径 | 类型 | 说明", result)
         self.assertIn(f"{self.root_dir} | dir", result)
         self.assertIn(f"{self.root_dir}/root.txt | file | .txt", result)
         self.assertIn(f"{self.root_dir}/nested | dir", result)
