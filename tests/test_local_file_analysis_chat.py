@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import scanner_service
+from file_organizer.analysis import service as scanner_service
 
 
 class ScannerServiceTests(unittest.TestCase):
@@ -43,3 +43,4 @@ class ScannerServiceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

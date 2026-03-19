@@ -14,23 +14,23 @@
 
 ## 运行方式
 
-主入口保持兼容：
+项目现在使用包原生入口：
 
 ```bash
-python main.py
+python -m file_organizer
 ```
 
 按目录回退最近一次执行：
 
 ```bash
-python rollback_last_execution.py D:/Downloads
+python -m file_organizer.rollback D:/Downloads
 ```
 
 回退流程会先读取该目录最近一次执行日志，展示回退预览，只有输入 `YES` 才执行。
 
 ## 当前项目结构
 
-项目已经从“根目录平铺脚本”重组为按流程域拆分的包结构：
+项目已经重组为按流程域拆分的包结构：
 
 ```text
 file_organizer/
@@ -40,10 +40,10 @@ file_organizer/
   rollback/    回退计划、回退预检、回退执行
   cli/         终端展示与事件输出
   shared/      配置、路径工具、history/journal 公共存储
-  workflows/   主流程编排与脚本入口逻辑
+  workflows/   主流程编排与入口逻辑
 ```
 
-根目录中的 `main.py`、`scanner_service.py`、`organizer_service.py`、`execution_service.py`、`rollback_service.py`、`rollback_last_execution.py`、`file_parser.py`、`app_config.py` 仍然保留，但现在主要承担兼容入口或兼容导出职责。
+根目录不再保留兼容脚本和兼容模块；所有运行入口与实现模块都收敛到 `file_organizer/` 包内。
 
 ## 测试
 
@@ -53,8 +53,10 @@ file_organizer/
 python -m unittest discover -s tests -p "test_*.py"
 ```
 
-新增的结构性测试覆盖了：
+新增与调整后的测试覆盖了：
 
+- `python -m file_organizer`
+- `python -m file_organizer.rollback`
 - `workflows` 层不再依赖 `os.chdir()` 的整理主流程编排
 - `shared` 层的 history/journal 索引存储
-- 兼容入口在保留旧用法时仍然调用新包结构中的实现
+- 包内 analysis / organize / execution / rollback 模块的核心行为

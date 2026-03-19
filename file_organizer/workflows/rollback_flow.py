@@ -12,7 +12,7 @@ def run_rollback_last_execution(
 ) -> int:
     args = list(argv if argv is not None else sys.argv[1:])
     if len(args) != 1:
-        print_func("用法: python rollback_last_execution.py <target_dir>")
+        print_func("用法: python -m file_organizer.rollback <target_dir>")
         return 1
 
     target_dir = Path(args[0]).resolve()
@@ -37,3 +37,4 @@ def run_rollback_last_execution(
     rollback_module.finalize_rollback_state(journal, report)
     print_func(rollback_module.render_rollback_report(report))
     return 0 if report.failure_count == 0 else 1
+

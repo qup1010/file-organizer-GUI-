@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import organizer_service
+from file_organizer.organize import service as organizer_service
 
 
 class OrganizerCompatibilityTests(unittest.TestCase):
@@ -48,3 +48,4 @@ class OrganizerCompatibilityTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

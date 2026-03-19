@@ -1,6 +1,6 @@
 ﻿import unittest
 
-import organizer_service
+from file_organizer.organize import service as organizer_service
 
 
 class OrganizerServiceTests(unittest.TestCase):
@@ -42,3 +42,4 @@ class OrganizerServiceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

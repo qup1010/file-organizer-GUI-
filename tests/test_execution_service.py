@@ -4,8 +4,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import execution_service
-import organizer_service
+from file_organizer.execution import service as execution_service
+from file_organizer.organize import service as organizer_service
 
 
 class ExecutionServiceTests(unittest.TestCase):
@@ -99,7 +99,7 @@ class ExecutionServiceTests(unittest.TestCase):
                 raise OSError("mock move failure")
             return original_move(src, dst)
 
-        with mock.patch("execution_service.shutil.move", side_effect=flaky_move):
+        with mock.patch("file_organizer.execution.service.shutil.move", side_effect=flaky_move):
             report = execution_service.execute_plan(plan)
 
         self.assertEqual(report.success_count, 2)
@@ -163,3 +163,5 @@ class ExecutionServiceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+

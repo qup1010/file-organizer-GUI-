@@ -2,7 +2,7 @@
 import shutil
 import unittest
 
-from file_parser import list_local_files
+from file_organizer.analysis.file_reader import list_local_files
 
 
 class FileParserDirectoryListingTests(unittest.TestCase):
@@ -38,3 +38,4 @@ class FileParserDirectoryListingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
