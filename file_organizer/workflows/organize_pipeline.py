@@ -2,11 +2,53 @@
 from pathlib import Path
 
 from file_organizer.analysis import service as analysis_service
-from file_organizer.cli.console import CLI
+from file_organizer.cli.console import default_cli
 from file_organizer.cli.event_printer import scanner_ui_handler
 from file_organizer.execution import service as execution_service
 from file_organizer.organize import service as organize_service
 from file_organizer.shared.config import ANALYSIS_MODEL_NAME, ORGANIZER_MODEL_NAME, PROJECT_ROOT, RESULT_FILE_PATH
+
+
+def _prompt_text(cli, method_name: str, message: str, *, input_func=input) -> str:
+    prompt_method = getattr(cli, method_name, None)
+    if callable(prompt_method):
+        result = prompt_method(message, input_func=input_func)
+        if isinstance(result, str):
+            return result
+    return cli.prompt(message, input_func=input_func)
+
+
+def _run_organizer_cycle_with_state(organizer_module, messages, scan_lines, *, pending_plan, user_constraints, event_handler):
+    try:
+        return organizer_module.run_organizer_cycle(
+            messages,
+            scan_lines,
+            pending_plan=pending_plan,
+            user_constraints=user_constraints,
+            event_handler=event_handler,
+        )
+    except TypeError:
+        return organizer_module.run_organizer_cycle(messages, scan_lines, event_handler=event_handler)
+
+
+def _show_plan_diff(cli, diff_summary: list[str]) -> None:
+    show_method = getattr(cli, "show_plan_diff", None)
+    if callable(show_method):
+        show_method(diff_summary)
+    elif diff_summary:
+        cli.show_list("????", diff_summary, style="blue")
+
+
+def _show_pending_plan(cli, pending_plan, display_plan: dict | None) -> None:
+    if not pending_plan or not display_plan:
+        return
+    show_method = getattr(cli, "show_pending_plan", None)
+    if callable(show_method):
+        show_method(
+            pending_plan,
+            focus=display_plan.get("focus", "full"),
+            summary=display_plan.get("summary", ""),
+        )
 
 
 def run_organize_chat(
@@ -17,43 +59,65 @@ def run_organize_chat(
     input_func=input,
     print_func=print,
     event_handler=scanner_ui_handler,
+    cli=default_cli,
 ):
     """进入双向整理交互对话。"""
+    del print_func
     messages = organizer_module.build_initial_messages(scan_lines)
-    CLI.panel("整理决策会话", "AI 将为您分析文件并给出整理建议，您可以输入意见或输入确定。")
+    pending_plan = None
+    user_constraints: list[str] = []
+    cli.panel("整理决策会话", "AI 将为您分析文件并给出整理建议，您可以输入意见或继续讨论。", style="blue")
 
     while True:
         try:
-            CLI.panel("文件整理助手 ({})".format(ORGANIZER_MODEL_NAME), color=CLI.BLUE)
-            full_content, validation = organizer_module.run_organizer_cycle(
+            cli.stage(f"文件整理助手 ({ORGANIZER_MODEL_NAME})", style="blue")
+            display_text, cycle_result = _run_organizer_cycle_with_state(
+                organizer_module,
                 messages,
                 scan_lines,
+                pending_plan=pending_plan,
+                user_constraints=user_constraints,
                 event_handler=event_handler,
             )
+            del display_text
 
-            if validation and validation["is_valid"]:
-                parsed = organizer_module.parse_commands_block(full_content)
-                plan = execution_module.build_execution_plan(parsed, target_dir)
+            cycle_result = cycle_result or {"is_valid": False}
+            pending_plan = cycle_result.get("pending_plan", pending_plan)
+            diff_summary = cycle_result.get("diff_summary", [])
+            if diff_summary:
+                _show_plan_diff(cli, diff_summary)
+
+            _show_pending_plan(cli, pending_plan, cycle_result.get("display_plan"))
+
+            if cycle_result.get("repair_mode"):
+                cli.warning("命令流多次失败，已根据权威分析结构重建整理计划。", title="修复模式")
+
+            if cycle_result.get("is_valid"):
+                final_plan = cycle_result.get("final_plan")
+                plan = execution_module.build_execution_plan(final_plan, target_dir)
                 precheck = execution_module.validate_execution_preconditions(plan)
-
-                print_func()
-                print_func(execution_module.render_execution_preview(plan, precheck))
+                cli.show_execution_preview(plan, precheck)
 
                 if not precheck.can_execute:
-                    for item in precheck.blocking_errors:
-                        print_func(f"{CLI.YELLOW}{item}{CLI.RESET}")
-                    user_text = input_func(
-                        f"\n{CLI.BOLD}预检查未通过，请输入修改意见 (quit 退出): {CLI.RESET}"
+                    user_text = _prompt_text(
+                        cli,
+                        "prompt_feedback",
+                        "预检查未通过，请输入修改意见 (quit 退出)",
+                        input_func=input_func,
                     ).strip()
                     if not user_text:
                         continue
                     if user_text.lower() in ["quit", "exit"]:
                         break
+                    user_constraints.append(user_text)
                     messages.append({"role": "user", "content": user_text})
                     continue
 
-                confirm_text = input_func(
-                    f"\n{CLI.BOLD}输入 YES 执行；其他任意输入继续讨论 (quit 退出): {CLI.RESET}"
+                confirm_text = _prompt_text(
+                    cli,
+                    "prompt_confirmation",
+                    "输入 YES 执行；其他任意输入继续讨论 (quit 退出)",
+                    input_func=input_func,
                 ).strip()
                 if not confirm_text:
                     continue
@@ -61,19 +125,20 @@ def run_organize_chat(
                     break
                 if confirm_text == "YES":
                     report = execution_module.execute_plan(plan)
-                    print_func()
-                    print_func(execution_module.render_execution_report(report))
+                    cli.show_execution_report(report, plan.base_dir)
                     break
 
+                user_constraints.append(confirm_text)
                 messages.append({"role": "user", "content": confirm_text})
                 continue
 
-            user_text = input_func(f"\n{CLI.BOLD}您的建议 (quit 退出): {CLI.RESET}").strip()
+            user_text = _prompt_text(cli, "prompt_feedback", "您的建议 (quit 退出)", input_func=input_func).strip()
             if not user_text:
                 continue
             if user_text.lower() in ["quit", "exit"]:
                 break
 
+            user_constraints.append(user_text)
             messages.append({"role": "user", "content": user_text})
 
         except KeyboardInterrupt:
@@ -88,23 +153,25 @@ def run_pipeline(
     execution_module=execution_service,
     event_handler=scanner_ui_handler,
     result_file_path=RESULT_FILE_PATH,
+    cli=default_cli,
 ):
-    CLI.panel(
-        "AI 文件一键整理系统",
-        f"项目根目录: {PROJECT_ROOT}\n模型 (分析/整理): {ANALYSIS_MODEL_NAME} / {ORGANIZER_MODEL_NAME}",
-    )
+    del print_func
+    cli.show_app_header(PROJECT_ROOT, ANALYSIS_MODEL_NAME, ORGANIZER_MODEL_NAME)
 
-    target_dir = input_func(f"\n{CLI.BOLD}请输入要分析的目录绝对路径: {CLI.RESET}").strip()
+    target_dir = _prompt_text(cli, "prompt_path", "请输入要分析的目录绝对路径", input_func=input_func).strip()
     if not target_dir:
         return
 
     path = Path(target_dir)
     if not path.is_dir():
-        print_func(f"{CLI.YELLOW}错误: '{target_dir}' 不是一个有效的目录。{CLI.RESET}")
+        cli.error(
+            f"'{target_dir}' 不是一个有效的目录。\n请输入 Windows 绝对路径，例如: D:/Users/YourName/Documents",
+            title="输入错误",
+        )
         return
 
     try:
-        CLI.panel("执行目录扫描分析")
+        cli.stage("执行目录扫描分析", style="blue")
         result = scanner_module.run_analysis_cycle(path, event_handler=event_handler)
 
         if result:
@@ -112,7 +179,7 @@ def run_pipeline(
                 result_file_path.unlink()
 
             scanner_module.append_output_result(result)
-            print_func(f"\n{CLI.GREEN}[数据已提取至 {result_file_path}]{CLI.RESET}")
+            cli.show_saved_result(result_file_path)
 
             scan_lines = organizer_module.get_scan_content()
             run_organize_chat(
@@ -121,8 +188,9 @@ def run_pipeline(
                 organizer_module=organizer_module,
                 execution_module=execution_module,
                 input_func=input_func,
-                print_func=print_func,
+                print_func=print,
                 event_handler=event_handler,
+                cli=cli,
             )
     except Exception as exc:
-        print_func(f"\n{CLI.YELLOW}工作流崩溃: {exc}{CLI.RESET}")
+        cli.error(f"工作流崩溃: {exc}", title="运行失败")

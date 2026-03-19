@@ -4,8 +4,15 @@ import docx
 import pandas as pd
 import pypdf
 
+from file_organizer.analysis.archive_reader import read_archive_index
+from file_organizer.analysis.image_describer import describe_image
+
 DEFAULT_MAX_LEN = 300
 DEFAULT_LIST_DEPTH = 1
+DEFAULT_LIST_CHAR_LIMIT = 1800
+LIST_TRUNCATION_NOTICE = "...[目录结果过长已截断]"
+TEXT_ENCODINGS = ["utf-8", "utf-8-sig", "gbk", "utf-16"]
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
 
 
 def _normalize_local_path(path: str) -> str:
@@ -16,6 +23,44 @@ def _is_allowed_local_path(path: str) -> bool:
     # 为了支持对任意绝对路径文件夹的分析，这里放宽限制，允许访问所有路径
     # 在生产环境中，若涉及 Web 暴露，需重新考虑此处的安全性
     return True
+
+
+def _read_text_with_fallback(filepath: str) -> str:
+    last_error = None
+    for encoding in TEXT_ENCODINGS:
+        try:
+            with open(filepath, "r", encoding=encoding) as file:
+                return file.read()
+        except UnicodeDecodeError as exc:
+            last_error = exc
+            continue
+    if last_error is not None:
+        raise last_error
+    raise UnicodeDecodeError("utf-8", b"", 0, 1, "unable to decode file")
+
+
+def _join_limited_lines(lines: list[str], char_limit: int, truncation_notice: str = LIST_TRUNCATION_NOTICE) -> str:
+    full_text = "\n".join(lines)
+    if char_limit <= 0 or len(full_text) <= char_limit:
+        return full_text
+
+    suffix = f"\n{truncation_notice}"
+    available = char_limit - len(suffix)
+    if available <= 0:
+        return truncation_notice[:char_limit]
+
+    kept_lines: list[str] = []
+    current_length = 0
+    for line in lines:
+        extra = len(line) if not kept_lines else len(line) + 1
+        if current_length + extra > available:
+            break
+        kept_lines.append(line)
+        current_length += extra
+
+    if not kept_lines:
+        return full_text[:available].rstrip() + suffix
+    return "\n".join(kept_lines) + suffix
 
 
 def read_pdf(filepath, max_len=DEFAULT_MAX_LEN):
@@ -66,7 +111,7 @@ def read_excel(filepath, max_len=DEFAULT_MAX_LEN):
         return f"读取 Excel 失败: {exc}"
 
 
-def list_local_files(directory=".", max_depth=DEFAULT_LIST_DEPTH):
+def list_local_files(directory=".", max_depth=DEFAULT_LIST_DEPTH, char_limit=DEFAULT_LIST_CHAR_LIMIT):
     """列出指定目录下一层内的目录和文件摘要。"""
     try:
         directory = _normalize_local_path(directory)
@@ -109,7 +154,7 @@ def list_local_files(directory=".", max_depth=DEFAULT_LIST_DEPTH):
                 suffix = os.path.splitext(entry.name)[1].lower() or "无扩展名"
                 lines.append(f"{relative_path} | file | {suffix}")
 
-        return "\n".join(lines)
+        return _join_limited_lines(lines, char_limit=char_limit)
     except Exception as exc:
         return f"无法列出目录 {directory}: {exc}"
 
@@ -130,9 +175,12 @@ def read_local_file(filename, max_len=DEFAULT_MAX_LEN):
             content = read_docx(filename, max_len=max_len)
         elif ext in [".xlsx", ".xls"]:
             content = read_excel(filename, max_len=max_len)
+        elif ext == ".zip":
+            content = read_archive_index(filename, max_entries=max_len)
+        elif ext in IMAGE_EXTENSIONS:
+            content = describe_image(filename)
         else:
-            with open(filename, "r", encoding="utf-8") as file:
-                content = file.read()
+            content = _read_text_with_fallback(filename)
 
         if len(content) > max_len:
             content = content[:max_len] + "\n...[内容过长已截断]"

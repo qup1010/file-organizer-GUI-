@@ -1,62 +1,67 @@
-﻿import re
+﻿import json
+import re
 from collections import Counter, defaultdict
 
+from file_organizer.organize.models import FinalPlan, PendingPlan, PlanDisplayRequest, PlanMove
 from file_organizer.organize.prompts import build_prompt
 from file_organizer.shared.config import ORGANIZER_MODEL_NAME, RESULT_FILE_PATH, create_openai_client
 from file_organizer.shared.events import emit
-from file_organizer.shared.path_utils import is_absolute_path, normalize_path, normalize_source_name, split_relative_parts
+from file_organizer.shared.path_utils import normalize_source_name, split_relative_parts
 
 
 COMMANDS_BLOCK_RE = re.compile(r"<COMMANDS>(.*?)</COMMANDS>", flags=re.S | re.I)
 MOVE_LINE_RE = re.compile(r'^\s*MOVE\s+"(.*?)"\s+"(.*?)"\s*$', flags=re.I)
 MKDIR_LINE_RE = re.compile(r'^\s*MKDIR\s+"(.*?)"\s*$', flags=re.I)
+PLAN_PATCH_TOOL_NAME = "submit_plan_patch"
+PRESENT_PLAN_TOOL_NAME = "present_current_plan"
+FINAL_PLAN_TOOL_NAME = "submit_final_plan"
+MODEL_WAIT_MESSAGE = "正在等待模型回复..."
 
 
 def get_scan_content() -> str:
-    """从标准输出读取扫描数据。"""
     if not RESULT_FILE_PATH.exists():
         raise FileNotFoundError(f"未找到扫描结果：{RESULT_FILE_PATH}")
     return RESULT_FILE_PATH.read_text(encoding="utf-8").strip()
 
 
 def build_initial_messages(scan_lines: str) -> list:
-    """构建初始系统提示语。"""
     return [{"role": "system", "content": build_prompt(scan_lines)}]
 
 
-def chat_one_round(messages: list, event_handler=None, model: str = ORGANIZER_MODEL_NAME):
-    """进行一轮 AI 对话，支持流式和推理链输出。"""
-    client = create_openai_client()
-    full_content = ""
-    stream = client.chat.completions.create(model=model, messages=messages, stream=True)
-
+def _emit_text_response(content: str, event_handler=None) -> None:
+    if not content:
+        return
     emit(event_handler, "ai_streaming_start")
-    for chunk in stream:
-        delta = chunk.choices[0].delta
-        reasoning = getattr(delta, "reasoning_content", None) or (
-            delta.model_extra.get("reasoning_content")
-            if hasattr(delta, "model_extra") and delta.model_extra
-            else None
+    emit(event_handler, "ai_chunk", {"content": content})
+    emit(event_handler, "ai_streaming_end", {"full_content": content})
+
+
+def chat_one_round(messages: list, event_handler=None, model: str = ORGANIZER_MODEL_NAME, tools=None, tool_choice="auto", return_message=False):
+    client = create_openai_client()
+    emit(event_handler, "model_wait_start", {"message": MODEL_WAIT_MESSAGE})
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            tools=tools or organizer_tools,
+            tool_choice=tool_choice,
         )
-        if reasoning:
-            emit(event_handler, "ai_reasoning", {"content": reasoning})
-
-        if delta.content:
-            full_content += delta.content
-            emit(event_handler, "ai_chunk", {"content": delta.content})
-
-    emit(event_handler, "ai_streaming_end", {"full_content": full_content})
-    return full_content
+    finally:
+        emit(event_handler, "model_wait_end")
+    message = response.choices[0].message
+    content = getattr(message, "content", "") or ""
+    _emit_text_response(content, event_handler=event_handler)
+    if return_message:
+        return message
+    return content
 
 
 def extract_commands(content: str) -> str | None:
-    """提取 <COMMANDS> 块内容。"""
-    match = re.search(r"<COMMANDS>(.*?)</COMMANDS>", content, flags=re.S | re.I)
+    match = re.search(r"<COMMANDS>(.*?)</COMMANDS>", content or "", flags=re.S | re.I)
     return match.group(1).strip() if match else None
 
 
 def extract_scan_items(scan_lines: str) -> list[str]:
-    """从扫描结果提取当前层条目名，保持原始顺序。"""
     items = []
     for raw_line in scan_lines.splitlines():
         line = raw_line.strip()
@@ -71,8 +76,42 @@ def extract_scan_items(scan_lines: str) -> list[str]:
     return items
 
 
+def render_final_plan_commands(final_plan: FinalPlan | dict) -> str:
+    plan = final_plan if isinstance(final_plan, FinalPlan) else FinalPlan.from_dict(final_plan)
+    lines = ["<COMMANDS>"]
+    for directory in plan.directories:
+        lines.append(f'MKDIR "{directory}"')
+    for move in plan.moves:
+        lines.append(move.to_move_command())
+    lines.append("</COMMANDS>")
+    return "\n".join(lines)
+
+
+def _final_plan_to_parsed(plan: FinalPlan) -> dict:
+    commands = []
+    mkdirs = []
+    moves = []
+    for directory in plan.directories:
+        raw = f'MKDIR "{directory}"'
+        mkdirs.append(directory)
+        commands.append({"type": "MKDIR", "name": directory, "raw": raw})
+    for move in plan.moves:
+        raw = move.to_move_command()
+        move_dict = {"source": move.source, "target": move.target, "raw": raw}
+        moves.append(move_dict)
+        commands.append({"type": "MOVE", **move_dict})
+    return {
+        "has_commands": bool(commands),
+        "mkdirs": mkdirs,
+        "moves": moves,
+        "invalid_lines": [],
+        "raw_lines": [command["raw"] for command in commands],
+        "commands": commands,
+        "parse_errors": [],
+    }
+
+
 def parse_commands_block(content: str) -> dict:
-    """提取并解析唯一的 <COMMANDS> 块。"""
     blocks = COMMANDS_BLOCK_RE.findall(content or "")
     result = {
         "has_commands": bool(blocks),
@@ -120,27 +159,24 @@ def parse_commands_block(content: str) -> dict:
     return result
 
 
-def validate_command_flow(scan_lines: str, content: str) -> dict:
-    """对命令流执行静态校验。"""
-    parsed = parse_commands_block(content)
+def validate_final_plan(scan_lines: str, final_plan: FinalPlan | dict) -> dict:
+    plan = final_plan if isinstance(final_plan, FinalPlan) else FinalPlan.from_dict(final_plan)
+    parsed = _final_plan_to_parsed(plan)
     result = {
         "is_valid": False,
         "missing": [],
         "extra": [],
         "duplicates": [],
         "order_errors": [],
-        "invalid_lines": list(parsed["invalid_lines"]) + list(parsed["parse_errors"]),
+        "invalid_lines": list(parsed["parse_errors"]),
         "path_errors": [],
         "rename_errors": [],
         "duplicate_mkdirs": [],
         "missing_mkdirs": [],
         "unused_mkdirs": [],
         "conflicting_targets": [],
+        "unresolved_items": list(plan.unresolved_items),
     }
-
-    if not parsed["has_commands"]:
-        result["invalid_lines"].append("缺少 <COMMANDS> 块")
-        return result
 
     scan_items = extract_scan_items(scan_lines)
     expected_set = set(scan_items)
@@ -148,34 +184,27 @@ def validate_command_flow(scan_lines: str, content: str) -> dict:
     required_mkdirs = set()
     normalized_targets = defaultdict(set)
 
-    move_seen = False
-    for command in parsed["commands"]:
-        if command["type"] == "MOVE":
-            move_seen = True
-        elif move_seen:
-            result["invalid_lines"].append(f"MKDIR 必须位于 MOVE 之前: {command['raw']}")
-
-    mkdir_counter = Counter(parsed["mkdirs"])
+    mkdir_counter = Counter(plan.directories)
     result["duplicate_mkdirs"] = sorted(name for name, count in mkdir_counter.items() if count > 1)
 
-    for move in parsed["moves"]:
-        source_name = normalize_source_name(move["source"])
+    for move in plan.moves:
+        source_name = normalize_source_name(move.source)
         if not source_name:
-            result["path_errors"].append(f"非法源路径: {move['raw']}")
+            result["path_errors"].append(f"非法源路径: {move.to_move_command()}")
             continue
 
         actual_sources.append(source_name)
         if source_name not in expected_set:
             continue
 
-        target_parts = split_relative_parts(move["target"])
+        target_parts = split_relative_parts(move.target)
         if not target_parts:
-            result["path_errors"].append(f"非法目标路径: {move['raw']}")
+            result["path_errors"].append(f"非法目标路径: {move.to_move_command()}")
             continue
 
         normalized_target = "/".join(target_parts)
         if len(target_parts) > 1 and target_parts[0] == source_name:
-            result["path_errors"].append(f"不能移动到自身子路径: {move['raw']}")
+            result["path_errors"].append(f"不能移动到自身子路径: {move.to_move_command()}")
             continue
 
         if target_parts[-1] != source_name:
@@ -197,16 +226,15 @@ def validate_command_flow(scan_lines: str, content: str) -> dict:
             break
         actual_name = actual_sources[index]
         if expected_name != actual_name:
-            result["order_errors"].append(
-                f"第 {index + 1} 项应为 {expected_name}，实际为 {actual_name}"
-            )
+            result["order_errors"].append(f"第 {index + 1} 项应为 {expected_name}，实际为 {actual_name}")
 
-    mkdir_set = set(parsed["mkdirs"])
+    mkdir_set = set(plan.directories)
     result["missing_mkdirs"] = sorted(required_mkdirs - mkdir_set)
     result["unused_mkdirs"] = sorted(mkdir_set - required_mkdirs)
-    result["conflicting_targets"] = sorted(
-        target for target, sources in normalized_targets.items() if len(sources) > 1
-    )
+    result["conflicting_targets"] = sorted(target for target, sources in normalized_targets.items() if len(sources) > 1)
+
+    if plan.unresolved_items:
+        result["invalid_lines"].append(f"仍有待确认条目: {plan.unresolved_items}")
 
     result["is_valid"] = not any(
         [
@@ -226,76 +254,324 @@ def validate_command_flow(scan_lines: str, content: str) -> dict:
     return result
 
 
-def build_command_retry_message(validation: dict) -> str:
-    """构造命令流校验失败后的重试提示。"""
+def validate_command_flow(scan_lines: str, content: str) -> dict:
+    parsed = parse_commands_block(content)
+    if not parsed["has_commands"]:
+        return {
+            "is_valid": False,
+            "missing": [],
+            "extra": [],
+            "duplicates": [],
+            "order_errors": [],
+            "invalid_lines": ["缺少 <COMMANDS> 块"],
+            "path_errors": [],
+            "rename_errors": [],
+            "duplicate_mkdirs": [],
+            "missing_mkdirs": [],
+            "unused_mkdirs": [],
+            "conflicting_targets": [],
+            "unresolved_items": [],
+        }
+
+    plan = FinalPlan(
+        directories=list(parsed["mkdirs"]),
+        moves=[PlanMove(source=move["source"], target=move["target"], raw=move["raw"]) for move in parsed["moves"]],
+        unresolved_items=[],
+    )
+    validation = validate_final_plan(scan_lines, plan)
+    validation["invalid_lines"] = list(parsed["invalid_lines"]) + list(parsed["parse_errors"]) + list(validation["invalid_lines"])
+    validation["is_valid"] = validation["is_valid"] and not parsed["invalid_lines"] and not parsed["parse_errors"]
+    return validation
+
+
+def apply_plan_patch(current_plan: PendingPlan | None, patch_plan: PendingPlan | dict) -> tuple[PendingPlan, list[str]]:
+    previous = current_plan or PendingPlan()
+    updated = patch_plan if isinstance(patch_plan, PendingPlan) else PendingPlan.from_dict(patch_plan)
+
+    diff_summary: list[str] = []
+    previous_dirs = set(previous.directories)
+    updated_dirs = set(updated.directories)
+    for directory in sorted(updated_dirs - previous_dirs):
+        diff_summary.append(f"新增目录：{directory}")
+    for directory in sorted(previous_dirs - updated_dirs):
+        diff_summary.append(f"移除目录：{directory}")
+
+    previous_moves = {move.source: move.target for move in previous.moves}
+    updated_moves = {move.source: move.target for move in updated.moves}
+    for source in sorted(updated_moves):
+        old_target = previous_moves.get(source)
+        new_target = updated_moves[source]
+        if old_target != new_target:
+            if old_target is None:
+                diff_summary.append(f"新增移动：{source} -> {new_target}")
+            else:
+                diff_summary.append(f"调整移动：{source} -> {new_target}")
+    for source in sorted(previous_moves.keys() - updated_moves.keys()):
+        diff_summary.append(f"移除移动：{source}")
+
+    previous_unresolved = set(previous.unresolved_items)
+    updated_unresolved = set(updated.unresolved_items)
+    for item in sorted(previous_unresolved - updated_unresolved):
+        diff_summary.append(f"已解决待确认项：{item}")
+    for item in sorted(updated_unresolved - previous_unresolved):
+        diff_summary.append(f"新增待确认项：{item}")
+
+    if updated.summary:
+        diff_summary.insert(0, updated.summary)
+    return updated, diff_summary or ["计划未发生结构性变化"]
+
+
+def _pending_from_final(final_plan: FinalPlan) -> PendingPlan:
+    return PendingPlan(
+        directories=list(final_plan.directories),
+        moves=[PlanMove(source=move.source, target=move.target, raw=move.raw) for move in final_plan.moves],
+        user_constraints=[],
+        unresolved_items=list(final_plan.unresolved_items),
+        summary=final_plan.summary,
+    )
+
+
+def build_command_retry_message(validation: dict, scan_lines: str | None = None, user_constraints: list[str] | None = None) -> str:
     details = [
-        "你刚才输出的 <COMMANDS> 未通过校验，请重新输出完整命令流。",
-        "要求：只能输出完整的 <COMMANDS> 内容；每个条目必须且只能对应一条 MOVE；所有 MKDIR 必须位于 MOVE 之前；目标路径必须是相对路径且保留原始名称。",
+        "刚才提交的整理计划未通过结构化校验，请重新提交完整计划。",
+        "要求：每个条目必须且只能对应一条 MOVE；目录列表只包含真正会被使用的目录；目标路径必须是相对路径且保留原始名称。",
     ]
 
-    if validation["missing"]:
-        details.append(f"缺少 MOVE：{', '.join(validation['missing'])}")
-    if validation["extra"]:
-        details.append(f"多余 MOVE：{', '.join(validation['extra'])}")
-    if validation["duplicates"]:
-        details.append(f"重复处理：{', '.join(validation['duplicates'])}")
-    if validation["order_errors"]:
-        details.append("顺序错误：")
-        details.extend(validation["order_errors"])
-    if validation["invalid_lines"]:
-        details.append("非法命令行：")
-        details.extend(validation["invalid_lines"])
-    if validation["path_errors"]:
-        details.append("路径错误：")
-        details.extend(validation["path_errors"])
-    if validation["rename_errors"]:
-        details.append("禁止重命名：")
-        details.extend(validation["rename_errors"])
-    if validation["duplicate_mkdirs"]:
-        details.append(f"重复 MKDIR：{', '.join(validation['duplicate_mkdirs'])}")
-    if validation["missing_mkdirs"]:
-        details.append(f"缺少 MKDIR：{', '.join(validation['missing_mkdirs'])}")
-    if validation["unused_mkdirs"]:
-        details.append(f"未使用 MKDIR：{', '.join(validation['unused_mkdirs'])}")
-    if validation["conflicting_targets"]:
-        details.append(f"目标冲突：{', '.join(validation['conflicting_targets'])}")
+    if scan_lines:
+        details.append("当前层权威条目：")
+        details.extend(f"- {item}" for item in extract_scan_items(scan_lines))
+    if user_constraints:
+        details.append("已确认用户偏好：")
+        details.extend(f"- {item}" for item in user_constraints)
 
-    details.append("请重新输出完整的 <COMMANDS> 内容，不要补充解释。")
+    for key, label in [
+        ("missing", "缺少 MOVE"),
+        ("extra", "多余 MOVE"),
+        ("duplicates", "重复处理"),
+        ("order_errors", "顺序错误"),
+        ("invalid_lines", "非法计划"),
+        ("path_errors", "路径错误"),
+        ("rename_errors", "禁止重命名"),
+        ("duplicate_mkdirs", "重复目录"),
+        ("missing_mkdirs", "缺少目录"),
+        ("unused_mkdirs", "未使用目录"),
+        ("conflicting_targets", "目标冲突"),
+    ]:
+        if validation[key]:
+            details.append(f"{label}：{validation[key]}")
+
+    details.append("请重新提交完整结构化计划，不要遗漏任何当前层条目。")
     return "\n".join(details)
+
+
+def _build_repair_messages(scan_lines: str, user_constraints: list[str], validation: dict) -> list[dict]:
+    repair_prompt = [
+        "进入修复模式。请忽略之前失败的命令文本，只根据以下权威信息重新提交最终计划。",
+        "当前层条目：",
+        scan_lines,
+    ]
+    if user_constraints:
+        repair_prompt.append("已确认用户偏好：")
+        repair_prompt.extend(f"- {item}" for item in user_constraints)
+    repair_prompt.append("最近一次失败原因：")
+    repair_prompt.append(build_command_retry_message(validation))
+    return [
+        {"role": "system", "content": "你处于整理计划修复模式，只能提交一个完整且可执行的最终计划。"},
+        {"role": "user", "content": "\n".join(repair_prompt)},
+    ]
+
+
+def _extract_plan_submissions(message) -> tuple[str, PendingPlan | None, FinalPlan | None, PlanDisplayRequest | None]:
+    content = getattr(message, "content", "") or ""
+    patch_plan = None
+    final_plan = None
+    display_request = None
+    for tool_call in getattr(message, "tool_calls", None) or []:
+        args = json.loads(tool_call.function.arguments)
+        if tool_call.function.name == PLAN_PATCH_TOOL_NAME:
+            patch_plan = PendingPlan.from_dict(args)
+        elif tool_call.function.name == PRESENT_PLAN_TOOL_NAME:
+            display_request = PlanDisplayRequest.from_dict(args)
+        elif tool_call.function.name == FINAL_PLAN_TOOL_NAME:
+            final_plan = FinalPlan.from_dict(args)
+    return content, patch_plan, final_plan, display_request
 
 
 def run_organizer_cycle(
     messages: list,
     scan_lines: str,
+    pending_plan: PendingPlan | None = None,
+    user_constraints: list[str] | None = None,
     event_handler=None,
     model: str = ORGANIZER_MODEL_NAME,
     max_retries: int = 3,
 ) -> tuple[str, dict | None]:
-    """单轮整理回复，若输出命令流则自动校验并重试。"""
+    current_pending = pending_plan or PendingPlan()
+    current_constraints = list(user_constraints or [])
+
     for attempt in range(1, max_retries + 1):
-        full_content = chat_one_round(messages, event_handler=event_handler, model=model)
-        messages.append({"role": "assistant", "content": full_content})
+        message = chat_one_round(messages, event_handler=event_handler, model=model, return_message=True)
+        content, patch_plan, final_plan, display_request = _extract_plan_submissions(message)
+        display_plan = display_request.to_dict() if display_request else None
 
-        parsed = parse_commands_block(full_content)
-        if not parsed["has_commands"]:
-            return full_content, None
+        if content:
+            messages.append({"role": "assistant", "content": content})
 
-        validation = validate_command_flow(scan_lines, full_content)
+        if patch_plan is not None:
+            updated_pending, diff_summary = apply_plan_patch(current_pending, patch_plan)
+            return content, {
+                "is_valid": False,
+                "pending_plan": updated_pending,
+                "diff_summary": diff_summary,
+                "display_plan": display_plan,
+                "final_plan": None,
+                "repair_mode": False,
+                "user_constraints": current_constraints,
+            }
+
+        if final_plan is None:
+            return content, {
+                "is_valid": False,
+                "pending_plan": current_pending,
+                "diff_summary": [],
+                "display_plan": display_plan,
+                "final_plan": None,
+                "repair_mode": False,
+                "user_constraints": current_constraints,
+            }
+
+        validation = validate_final_plan(scan_lines, final_plan)
         if validation["is_valid"]:
             emit(event_handler, "command_validation_pass", {"attempt": attempt, "details": validation})
-            return full_content, validation
+            updated_pending, diff_summary = apply_plan_patch(current_pending, _pending_from_final(final_plan))
+            return content, {
+                "is_valid": True,
+                "pending_plan": updated_pending,
+                "diff_summary": diff_summary,
+                "display_plan": display_plan,
+                "final_plan": final_plan,
+                "repair_mode": False,
+                "user_constraints": current_constraints,
+                "validation": validation,
+            }
 
         emit(event_handler, "command_validation_fail", {"attempt": attempt, "details": validation})
-        if attempt >= max_retries:
-            emit(event_handler, "command_retry_exhausted", {"attempt": attempt, "details": validation})
-            return full_content, validation
+        if attempt < max_retries:
+            messages.append({"role": "user", "content": build_command_retry_message(validation, scan_lines, current_constraints)})
+            continue
 
-        messages.append({"role": "user", "content": build_command_retry_message(validation)})
+        emit(event_handler, "command_retry_exhausted", {"attempt": attempt, "details": validation})
+        emit(event_handler, "repair_mode_start", {"attempt": attempt, "details": validation})
+        repair_message = chat_one_round(
+            _build_repair_messages(scan_lines, current_constraints, validation),
+            event_handler=event_handler,
+            model=model,
+            tools=[tool for tool in organizer_tools if tool["function"]["name"] == FINAL_PLAN_TOOL_NAME],
+            return_message=True,
+        )
+        repair_content, _, repaired_plan, _ = _extract_plan_submissions(repair_message)
+        repair_validation = validate_final_plan(scan_lines, repaired_plan or FinalPlan())
+        if repaired_plan is not None and repair_validation["is_valid"]:
+            emit(event_handler, "command_validation_pass", {"attempt": attempt + 1, "details": repair_validation})
+            updated_pending, diff_summary = apply_plan_patch(current_pending, _pending_from_final(repaired_plan))
+            return repair_content, {
+                "is_valid": True,
+                "pending_plan": updated_pending,
+                "diff_summary": diff_summary,
+                "display_plan": None,
+                "final_plan": repaired_plan,
+                "repair_mode": True,
+                "user_constraints": current_constraints,
+                "validation": repair_validation,
+            }
+
+        return repair_content, {
+            "is_valid": False,
+            "pending_plan": current_pending,
+            "diff_summary": [],
+            "display_plan": None,
+            "final_plan": None,
+            "repair_mode": True,
+            "user_constraints": current_constraints,
+            "validation": repair_validation,
+        }
 
     return "", None
 
+
+organizer_tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": PLAN_PATCH_TOOL_NAME,
+            "description": "提交待定整理计划的最新状态，用于更新目录、移动建议、用户约束和待确认项。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "directories": {"type": "array", "items": {"type": "string"}},
+                    "moves": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "source": {"type": "string"},
+                                "target": {"type": "string"},
+                            },
+                            "required": ["source", "target"],
+                        },
+                    },
+                    "user_constraints": {"type": "array", "items": {"type": "string"}},
+                    "unresolved_items": {"type": "array", "items": {"type": "string"}},
+                    "summary": {"type": "string"},
+                },
+                "required": ["directories", "moves", "user_constraints", "unresolved_items", "summary"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": PRESENT_PLAN_TOOL_NAME,
+            "description": "请求系统把当前待定整理计划展示给用户，避免在自然语言中重复整套目录和移动列表。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "focus": {"type": "string", "enum": ["full", "changes", "unresolved"]},
+                    "summary": {"type": "string"},
+                },
+                "required": ["focus", "summary"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": FINAL_PLAN_TOOL_NAME,
+            "description": "提交最终可执行的结构化整理计划。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "directories": {"type": "array", "items": {"type": "string"}},
+                    "moves": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "source": {"type": "string"},
+                                "target": {"type": "string"},
+                            },
+                            "required": ["source", "target"],
+                        },
+                    },
+                    "unresolved_items": {"type": "array", "items": {"type": "string"}},
+                    "summary": {"type": "string"},
+                },
+                "required": ["directories", "moves", "unresolved_items", "summary"],
+            },
+        },
+    },
+]
+
 # 兼容旧模块内部辅助函数命名
-_normalize_path = normalize_path
-_is_absolute_path = is_absolute_path
-_split_relative_parts = split_relative_parts
 _normalize_source_name = normalize_source_name
+_split_relative_parts = split_relative_parts

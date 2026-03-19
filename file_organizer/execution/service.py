@@ -16,6 +16,7 @@ from file_organizer.execution.models import (
     ExecutionReport,
     PrecheckResult,
 )
+from file_organizer.organize.models import FinalPlan, PlanMove
 from file_organizer.shared.history_store import build_journal_path, read_latest_index, write_latest_index
 from file_organizer.shared.path_utils import relative_display
 
@@ -56,30 +57,44 @@ def load_execution_journal(execution_id: str) -> ExecutionJournal | None:
     return ExecutionJournal.from_dict(json.loads(path.read_text(encoding="utf-8")))
 
 
-def build_execution_plan(parsed_commands: dict, base_dir: Path) -> ExecutionPlan:
+def _coerce_final_plan(parsed_commands) -> FinalPlan:
+    if isinstance(parsed_commands, FinalPlan):
+        return parsed_commands
+    if isinstance(parsed_commands, dict) and "commands" in parsed_commands:
+        directories = list(parsed_commands.get("mkdirs", []))
+        moves = [
+            PlanMove(source=move["source"], target=move["target"], raw=move.get("raw", ""))
+            for move in parsed_commands.get("moves", [])
+        ]
+        return FinalPlan(directories=directories, moves=moves, unresolved_items=[])
+    if isinstance(parsed_commands, dict):
+        return FinalPlan.from_dict(parsed_commands)
+    raise TypeError(f"不支持的执行计划输入类型: {type(parsed_commands).__name__}")
+
+
+def build_execution_plan(parsed_commands, base_dir: Path) -> ExecutionPlan:
     base_dir = Path(base_dir).resolve()
+    final_plan = _coerce_final_plan(parsed_commands)
     mkdir_actions: list[ExecutionAction] = []
     move_actions: list[ExecutionAction] = []
     all_actions: list[ExecutionAction] = []
 
-    for command in parsed_commands.get("commands", []):
-        if command["type"] == "MKDIR":
-            action = ExecutionAction(
-                type="MKDIR",
-                target=base_dir / command["name"],
-                raw=command["raw"],
-            )
-            mkdir_actions.append(action)
-            all_actions.append(action)
-        elif command["type"] == "MOVE":
-            action = ExecutionAction(
-                type="MOVE",
-                source=base_dir / command["source"],
-                target=base_dir / command["target"],
-                raw=command["raw"],
-            )
-            move_actions.append(action)
-            all_actions.append(action)
+    for directory in final_plan.directories:
+        raw = f'MKDIR "{directory}"'
+        action = ExecutionAction(type="MKDIR", target=base_dir / directory, raw=raw)
+        mkdir_actions.append(action)
+        all_actions.append(action)
+
+    for move in final_plan.moves:
+        raw = move.to_move_command()
+        action = ExecutionAction(
+            type="MOVE",
+            source=base_dir / move.source,
+            target=base_dir / move.target,
+            raw=raw,
+        )
+        move_actions.append(action)
+        all_actions.append(action)
 
     return ExecutionPlan(
         base_dir=base_dir,
@@ -292,5 +307,3 @@ def render_execution_report(report: ExecutionReport) -> str:
                 )
 
     return "\n".join(lines)
-
-

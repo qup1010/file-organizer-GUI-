@@ -38,10 +38,41 @@ def get_env(name: str, default: str | None = None, required: bool = False) -> st
     return value
 
 
+def _get_bool_env(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def create_openai_client() -> OpenAI:
     return OpenAI(
         api_key=get_env("OPENAI_API_KEY", required=True),
         base_url=get_env("OPENAI_BASE_URL", DEFAULT_BASE_URL),
+    )
+
+
+def get_image_analysis_settings() -> dict[str, str | bool | None]:
+    return {
+        "enabled": _get_bool_env("IMAGE_ANALYSIS_ENABLED", default=False),
+        "base_url": get_env("IMAGE_ANALYSIS_BASE_URL"),
+        "api_key": get_env("IMAGE_ANALYSIS_API_KEY"),
+        "model": get_env("IMAGE_ANALYSIS_MODEL"),
+    }
+
+
+def create_image_analysis_client() -> OpenAI:
+    settings = get_image_analysis_settings()
+    if not settings["enabled"]:
+        raise ValueError("未启用图片分析配置")
+    if not settings["api_key"]:
+        raise ValueError("缺少必要配置: IMAGE_ANALYSIS_API_KEY")
+    if not settings["model"]:
+        raise ValueError("缺少必要配置: IMAGE_ANALYSIS_MODEL")
+
+    return OpenAI(
+        api_key=settings["api_key"],
+        base_url=settings["base_url"] or DEFAULT_BASE_URL,
     )
 
 

@@ -1,8 +1,10 @@
 ﻿import os
 import shutil
 import unittest
+import zipfile
+from unittest import mock
 
-from file_organizer.analysis.file_reader import list_local_files
+from file_organizer.analysis.file_reader import list_local_files, read_local_file
 
 
 class FileParserDirectoryListingTests(unittest.TestCase):
@@ -31,11 +33,79 @@ class FileParserDirectoryListingTests(unittest.TestCase):
         self.assertIn(f"{self.root_dir}/nested/child.md | file | .md", result)
         self.assertNotIn("deep.txt", result)
 
+    def test_list_local_files_applies_total_character_limit(self):
+        for index in range(30):
+            with open(os.path.join(self.root_dir, f"very_long_filename_{index:02d}.txt"), "w", encoding="utf-8") as file:
+                file.write("x")
+
+        result = list_local_files(self.root_dir, char_limit=220)
+
+        self.assertLessEqual(len(result), 220)
+        self.assertIn("路径 | 类型 | 说明", result)
+        self.assertIn("...[目录结果过长已截断]", result)
+
     def test_list_local_files_rejects_directories_outside_allowed_scope(self):
         result = list_local_files("../outside")
         self.assertIn("错误", result)
 
 
+class FileReaderEncodingTests(unittest.TestCase):
+    def setUp(self):
+        self.root_dir = "test_temp_file_reader"
+        os.makedirs(self.root_dir, exist_ok=True)
+
+        self.utf8_sig_path = os.path.join(self.root_dir, "bom.txt")
+        self.gbk_path = os.path.join(self.root_dir, "gbk.txt")
+        self.utf16_path = os.path.join(self.root_dir, "utf16.txt")
+        self.zip_path = os.path.join(self.root_dir, "bundle.zip")
+        self.image_path = os.path.join(self.root_dir, "screen.png")
+
+        with open(self.utf8_sig_path, "w", encoding="utf-8-sig") as file:
+            file.write("带 BOM 的文本")
+        with open(self.gbk_path, "w", encoding="gbk") as file:
+            file.write("旧版编码内容")
+        with open(self.utf16_path, "w", encoding="utf-16") as file:
+            file.write("宽字符文本")
+        with zipfile.ZipFile(self.zip_path, "w") as archive:
+            archive.writestr("docs/readme.md", "hello")
+            archive.writestr("images/cover.png", "image")
+        with open(self.image_path, "wb") as file:
+            file.write(b"fake-image-bytes")
+
+    def tearDown(self):
+        if os.path.exists(self.root_dir):
+            shutil.rmtree(self.root_dir)
+
+    def test_read_local_file_supports_common_windows_encodings(self):
+        utf8_sig_result = read_local_file(self.utf8_sig_path)
+        gbk_result = read_local_file(self.gbk_path)
+        utf16_result = read_local_file(self.utf16_path)
+
+        self.assertIn("带 BOM 的文本", utf8_sig_result)
+        self.assertIn("旧版编码内容", gbk_result)
+        self.assertIn("宽字符文本", utf16_result)
+        self.assertNotIn("非 UTF-8 编码", gbk_result)
+        self.assertNotIn("非 UTF-8 编码", utf16_result)
+
+    def test_read_local_file_routes_zip_to_archive_index_preview(self):
+        result = read_local_file(self.zip_path)
+
+        self.assertIn("bundle.zip", result)
+        self.assertIn("docs/readme.md", result)
+        self.assertIn("文件数", result)
+        self.assertNotIn("非 UTF-8 编码", result)
+
+    def test_read_local_file_routes_images_to_isolated_summary(self):
+        with mock.patch(
+            "file_organizer.analysis.file_reader.describe_image",
+            return_value="这是一张聊天截图，主要在讨论付款安排。",
+        ) as describe_image_mock:
+            result = read_local_file(self.image_path)
+
+        self.assertIn("聊天截图", result)
+        describe_image_mock.assert_called_once_with(self.image_path)
+        self.assertNotIn("非 UTF-8 编码", result)
+
+
 if __name__ == "__main__":
     unittest.main()
-
