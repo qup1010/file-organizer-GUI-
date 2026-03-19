@@ -1,87 +1,50 @@
-import shutil
+﻿import shutil
 import unittest
 from pathlib import Path
 from unittest import mock
 
-import organize_commands_cli
+import organizer_service
 
 
-class ReadScanLinesTests(unittest.TestCase):
-    def setUp(self):
-        self.temp_dir = Path("test_temp_organize_output")
-        self.temp_dir.mkdir(exist_ok=True)
+class OrganizerCompatibilityTests(unittest.TestCase):
+    def test_get_scan_content_rejects_missing_file(self):
+        result_file = Path("test_temp_organizer_output") / "missing.txt"
+        if result_file.parent.exists():
+            shutil.rmtree(result_file.parent)
 
-    def tearDown(self):
-        if self.temp_dir.exists():
-            shutil.rmtree(self.temp_dir)
+        with mock.patch.object(organizer_service, "RESULT_FILE_PATH", result_file):
+            with self.assertRaises(FileNotFoundError):
+                organizer_service.get_scan_content()
 
-    def test_read_scan_lines_rejects_missing_file(self):
-        missing_path = self.temp_dir / "missing.txt"
+    def test_build_initial_messages_includes_scan_lines(self):
+        scan_lines = "合同.pdf | 财务/合同 | 付款协议"
 
-        with self.assertRaisesRegex(ValueError, "不存在"):
-            organize_commands_cli.read_scan_lines(missing_path)
+        messages = organizer_service.build_initial_messages(scan_lines)
 
-    def test_read_scan_lines_rejects_empty_file(self):
-        scan_path = self.temp_dir / "result.txt"
-        scan_path.write_text("", encoding="utf-8")
+        self.assertEqual(messages[0]["role"], "system")
+        self.assertIn(scan_lines, messages[0]["content"])
+        self.assertNotIn("<<<SCAN_LINES>>>", messages[0]["content"])
 
-        with self.assertRaisesRegex(ValueError, "为空"):
-            organize_commands_cli.read_scan_lines(scan_path)
+    def test_build_command_retry_message_lists_validation_errors(self):
+        validation = {
+            "missing": ["合同.pdf"],
+            "extra": [],
+            "duplicates": [],
+            "order_errors": [],
+            "invalid_lines": [],
+            "path_errors": [],
+            "rename_errors": [],
+            "duplicate_mkdirs": [],
+            "missing_mkdirs": [],
+            "unused_mkdirs": [],
+            "conflicting_targets": [],
+        }
 
-    def test_read_scan_lines_requires_analysis_header(self):
-        scan_path = self.temp_dir / "result.txt"
-        scan_path.write_text("./demo.txt | 未知 | 示例", encoding="utf-8")
+        message = organizer_service.build_command_retry_message(validation)
 
-        with self.assertRaisesRegex(ValueError, "分析目录路径"):
-            organize_commands_cli.read_scan_lines(scan_path)
-
-    def test_read_scan_lines_returns_original_content(self):
-        scan_path = self.temp_dir / "result.txt"
-        content = "分析目录路径:D:/demo\n./a.txt | Documents | sample"
-        scan_path.write_text(content, encoding="utf-8")
-
-        result = organize_commands_cli.read_scan_lines(scan_path)
-
-        self.assertEqual(result, content)
+        self.assertIn("缺少 MOVE", message)
+        self.assertIn("合同.pdf", message)
 
 
-class PromptAndGenerationTests(unittest.TestCase):
-    def test_build_command_prompt_includes_scan_lines(self):
-        scan_lines = "分析目录路径:D:/demo\n./a.txt | Documents | sample"
-
-        prompt = organize_commands_cli.build_command_prompt(scan_lines)
-
-        self.assertIn("文件整理命令生成器", prompt)
-        self.assertIn(scan_lines, prompt)
-        self.assertNotIn("<<<SCAN_LINES>>>", prompt)
-
-    def test_generate_commands_uses_model_response_content(self):
-        fake_response = mock.Mock()
-        fake_response.choices = [mock.Mock(message=mock.Mock(content="MKDIR Review\nMOVE a.txt Review/a.txt"))]
-        fake_client = mock.Mock()
-        fake_client.chat.completions.create.return_value = fake_response
-
-        result = organize_commands_cli.generate_commands(
-            "分析目录路径:D:/demo\n./a.txt | 未知 | sample",
-            client=fake_client,
-        )
-
-        self.assertEqual(result, "MKDIR Review\nMOVE a.txt Review/a.txt")
-        call_kwargs = fake_client.chat.completions.create.call_args.kwargs
-        self.assertEqual(call_kwargs["model"], organize_commands_cli.MODEL_NAME)
-        self.assertEqual(call_kwargs["messages"][0]["role"], "system")
-        self.assertIn("分析目录路径:D:/demo", call_kwargs["messages"][0]["content"])
-
-    def test_main_prints_generated_commands(self):
-        with mock.patch.object(
-            organize_commands_cli,
-            "read_scan_lines",
-            return_value="分析目录路径:D:/demo\n./a.txt | 未知 | sample",
-        ), mock.patch.object(
-            organize_commands_cli,
-            "generate_commands",
-            return_value="MKDIR Review\nMOVE a.txt Review/a.txt",
-        ), mock.patch("builtins.print") as mock_print:
-            organize_commands_cli.main()
-
-        mock_print.assert_called_with("MKDIR Review\nMOVE a.txt Review/a.txt")
+if __name__ == "__main__":
+    unittest.main()

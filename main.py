@@ -3,6 +3,7 @@ from pathlib import Path
 from app_config import PROJECT_ROOT, RESULT_FILE_PATH, ANALYSIS_MODEL_NAME, ORGANIZER_MODEL_NAME
 import scanner_service as scanner
 import organizer_service as organizer
+import execution_service as execution
 
 # --- 终端美化工具 ---
 class CLI:
@@ -75,7 +76,7 @@ def scanner_ui_handler(event_type, data):
     elif event_type == "command_retry_exhausted":
         print(f"{CLI.YELLOW}❌ 命令流自动重试已耗尽，请继续给出修改意见。{CLI.RESET}")
 
-def run_organize_chat(scan_lines):
+def run_organize_chat(scan_lines, target_dir: Path):
     """进入双向整理交互对话。"""
     messages = organizer.build_initial_messages(scan_lines)
     CLI.panel("整理决策会话", "AI 将为您分析文件并给出整理建议，您可以输入意见或输入确定。")
@@ -91,7 +92,41 @@ def run_organize_chat(scan_lines):
             )
 
             if validation and validation["is_valid"]:
-                print(f"\n{CLI.GREEN}[命令流已通过校验，您可以核对后决定是否执行]{CLI.RESET}")
+                parsed = organizer.parse_commands_block(full_content)
+                plan = execution.build_execution_plan(parsed, target_dir)
+                precheck = execution.validate_execution_preconditions(plan)
+
+                print()
+                print(execution.render_execution_preview(plan, precheck))
+
+                if not precheck.can_execute:
+                    for item in precheck.blocking_errors:
+                        print(f"{CLI.YELLOW}{item}{CLI.RESET}")
+                    user_text = input(
+                        f"\n{CLI.BOLD}预检查未通过，请输入修改意见 (quit 退出): {CLI.RESET}"
+                    ).strip()
+                    if not user_text:
+                        continue
+                    if user_text.lower() in ["quit", "exit"]:
+                        break
+                    messages.append({"role": "user", "content": user_text})
+                    continue
+
+                confirm_text = input(
+                    f"\n{CLI.BOLD}输入 YES 执行；其他任意输入继续讨论 (quit 退出): {CLI.RESET}"
+                ).strip()
+                if not confirm_text:
+                    continue
+                if confirm_text.lower() in ["quit", "exit"]:
+                    break
+                if confirm_text == "YES":
+                    report = execution.execute_plan(plan)
+                    print()
+                    print(execution.render_execution_report(report))
+                    break
+
+                messages.append({"role": "user", "content": confirm_text})
+                continue
             
             # 2. 等待用户输入意见
             user_text = input(f"\n{CLI.BOLD}您的建议 (quit 退出): {CLI.RESET}").strip()
@@ -136,7 +171,7 @@ def run_pipeline():
             # --- 阶段 2: 整理建议阶段 ---
             os.chdir(original_cwd) # 返回根目录读取并进入对话
             scan_lines = organizer.get_scan_content()
-            run_organize_chat(scan_lines)
+            run_organize_chat(scan_lines, path.resolve())
             
     except Exception as exc:
         print(f"\n{CLI.YELLOW}工作流崩溃: {exc}{CLI.RESET}")
