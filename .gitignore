@@ -1,15 +1,23 @@
 __pycache__/
 *.py[cod]
 
+# 环境与配置
 .venv/
 venv/
 env/
-
 .env
+.env.*
+!.env.example
 
+# 临时数据与结果
 output/
+result.txt
+test_folder/
+legacy_drafts/
 
+# 缓存与调试
 .pytest_cache/
 .mypy_cache/
-
+.DS_Store
+.idea/
 .vscode/

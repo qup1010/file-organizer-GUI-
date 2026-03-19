@@ -1,14 +1,17 @@
-from pathlib import Path
-from openai import OpenAI
+import re
+from app_config import ORGANIZER_MODEL_NAME, create_openai_client, RESULT_FILE_PATH
 
+def get_scan_content() -> str:
+    """从标准输出读取扫描数据。"""
+    if not RESULT_FILE_PATH.exists():
+        raise FileNotFoundError(f"未找到扫描结果：{RESULT_FILE_PATH}")
+    return RESULT_FILE_PATH.read_text(encoding="utf-8").strip()
 
-API_KEY = "sk-66a49a6465be13648a92808511184fc466413e034c52fbe1a0a9c847a3833911"
-BASE_URL = "https://sub.jlypx.de/v1"
-MODEL_NAME = "gpt-5.2"
-DEFAULT_SCAN_RESULT_PATH = Path("output") / "result.txt"
+def build_initial_messages(scan_lines: str) -> list:
+    """构建初始系统提示语。"""
+    return [{"role": "system", "content": PROMPT_TEMPLATE.replace("<<<SCAN_LINES>>>", scan_lines)}]
 
-PROMPT_TEMPLATE =  """
-你是“文件整理助手”。
+PROMPT_TEMPLATE = """你是“文件整理助手”。
 
 你的任务是：
 根据输入中的文件/文件夹信息，生成一组整理命令，用于将这些项目移动到更合理的目录中。
@@ -170,105 +173,36 @@ mv "Documents" "Documents"
 - 是否只输出了合法命令
 }
 
-
-
-
 ================
 八、输入
 ================
 <<<SCAN_LINES>>>
-
-
-
 """
 
-
-def create_client() -> OpenAI:
-    return OpenAI(api_key=API_KEY, base_url=BASE_URL)
-
-
-def read_scan_lines(scan_result_path: Path = DEFAULT_SCAN_RESULT_PATH) -> str:
-    if not scan_result_path.exists():
-        raise ValueError(f"扫描结果文件不存在: {scan_result_path}")
-
-    content = scan_result_path.read_text(encoding="utf-8").strip()
-    if not content:
-        raise ValueError(f"扫描结果文件为空: {scan_result_path}")
-
-    first_line = content.splitlines()[0].strip()
-    if not first_line.startswith("分析目录路径:"):
-        raise ValueError("扫描结果格式不正确，首行必须以“分析目录路径:”开头。")
-
-    return content
-
-
-def build_command_prompt(scan_lines: str) -> str:
-    return PROMPT_TEMPLATE.replace("<<<SCAN_LINES>>>", scan_lines)
-
-import re
-
-def generate_commands(scan_lines: str, client: OpenAI | None = None, model: str = MODEL_NAME) -> None:
-    active_client = client or create_client()
-    messages = [{"role": "system", "content": build_command_prompt(scan_lines)}]
+def chat_one_round(messages: list, event_handler=None, model: str = ORGANIZER_MODEL_NAME):
+    """进行一轮 AI 对话，支持流式和推理链输出。"""
+    client = create_openai_client()
+    full_content = ""
     
-    print(f"--- 已连接到文件整理助手 ({model}) ---")
-    print("正在分析文件内容并生成整理建议，请稍候...\n")
-
-    while True:
-        try:
-            response = active_client.chat.completions.create(
-                model=model,
-                messages=messages,
-                stream=True,
-            )
-            
-            print("AI: ", end="", flush=True)
-            full_content = ""
-            for chunk in response:
-                delta = chunk.choices[0].delta
+    stream = client.chat.completions.create(model=model, messages=messages, stream=True)
+    
+    for chunk in stream:
+        delta = chunk.choices[0].delta
+        
+        # 捕获推理链 (reasoning_content)
+        reasoning = getattr(delta, "reasoning_content", None) or (delta.model_extra.get("reasoning_content") if hasattr(delta, "model_extra") and delta.model_extra else None)
+        if reasoning and event_handler:
+            event_handler("ai_reasoning", {"content": reasoning})
+        
+        # 捕获正常内容
+        if delta.content:
+            full_content += delta.content
+            if event_handler:
+                event_handler("ai_chunk", {"content": delta.content})
                 
-                # 兼容部分大模型暴露的 reasoning_content（思考链内容）
-                reasoning = getattr(delta, "reasoning_content", None)
-                if not reasoning and hasattr(delta, "model_extra") and delta.model_extra:
-                    reasoning = delta.model_extra.get("reasoning_content")
-                    
-                if reasoning:
-                    print(f"\033[90m{reasoning}\033[0m", end="", flush=True)
+    return full_content
 
-                if delta.content:
-                    print(delta.content, end="", flush=True)
-                    full_content += delta.content
-            print("\n")
-            
-            messages.append({"role": "assistant", "content": full_content})
-            
-            # 检测是否输出了最终的 COMMANDS
-            commands_blocks = re.findall(r"<COMMANDS>(.*?)</COMMANDS>", full_content, flags=re.S | re.I)
-            if commands_blocks:
-                print("\n[系统提醒：AI 已经给出了整理命令。如果满意，可以将其应用；如果不满意，可以告诉它修改意见。]")
-            
-            user_input = input("\n用户回复 (输入 'quit' 退出): ").strip()
-            if not user_input:
-                continue
-            if user_input.lower() in ["exit", "quit"]:
-                break
-                
-            messages.append({"role": "user", "content": user_input})
-            
-        except KeyboardInterrupt:
-            print("\n已终止交互。")
-            break
-        except Exception as exc:
-            print(f"\n交互过程中出错: {exc}")
-            break
-
-
-def main() -> None:
-    try:
-        scan_lines = read_scan_lines()
-        generate_commands(scan_lines)
-    except Exception as exc:
-        print(f"初始化错误: {exc}")
-
-if __name__ == "__main__":
-    main()
+def extract_commands(content: str) -> str | None:
+    """提取 <COMMANDS> 块内容。"""
+    match = re.search(r"<COMMANDS>(.*?)</COMMANDS>", content, flags=re.S | re.I)
+    return match.group(1).strip() if match else None
