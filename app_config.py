@@ -52,6 +52,11 @@ ORGANIZER_MODEL_NAME = get_env("OPENAI_ORGANIZER_MODEL", DEFAULT_ORGANIZER_MODEL
 # 指定绝对路径，避免在执行过程中 os.chdir 导致路径失效
 OUTPUT_DIR = (PROJECT_ROOT / "output").resolve()
 RESULT_FILE_PATH = OUTPUT_DIR / "result.txt"
+HISTORY_DIR = (OUTPUT_DIR / "history").resolve()
+EXECUTION_LOG_DIR = (HISTORY_DIR / "executions").resolve()
+LATEST_BY_DIRECTORY_PATH = HISTORY_DIR / "latest_by_directory.json"
 
 # 确保输出目录始终存在
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+EXECUTION_LOG_DIR.mkdir(parents=True, exist_ok=True)
