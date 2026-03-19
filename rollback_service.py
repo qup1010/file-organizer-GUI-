@@ -116,20 +116,40 @@ def build_rollback_plan(journal: ExecutionJournal) -> RollbackPlan:
 
 def validate_rollback_preconditions(plan: RollbackPlan) -> RollbackPrecheckResult:
     blocking_errors: list[str] = []
+    simulated_removed: set[Path] = set()
+    simulated_created: set[Path] = set()
+
+    def path_exists(path: Path) -> bool:
+        if path in simulated_removed:
+            return False
+        if path in simulated_created:
+            return True
+        return path.exists()
+
+    def directory_has_contents(path: Path) -> bool:
+        for child in path.iterdir():
+            if path_exists(child):
+                return True
+        return any(created.parent == path for created in simulated_created)
 
     for action in plan.actions:
-        if not action.source.exists():
+        if not path_exists(action.source):
             blocking_errors.append(f"回退源不存在: {action.source.as_posix()}")
             continue
 
         if action.type == "MOVE":
-            if action.target.exists():
+            if path_exists(action.target):
                 blocking_errors.append(f"回退目标已存在: {action.target.as_posix()}")
+                continue
+            simulated_removed.add(action.source)
+            simulated_created.add(action.target)
         elif action.type == "RMDIR":
             if not action.source.is_dir():
                 blocking_errors.append(f"待删除目录无效: {action.source.as_posix()}")
-            elif any(action.source.iterdir()):
+            elif directory_has_contents(action.source):
                 blocking_errors.append(f"回退目录非空: {action.source.as_posix()}")
+            else:
+                simulated_removed.add(action.source)
 
     return RollbackPrecheckResult(
         can_execute=not blocking_errors,

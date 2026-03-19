@@ -106,6 +106,16 @@ class RollbackServiceTests(unittest.TestCase):
         self.assertFalse(precheck.can_execute)
         self.assertTrue(any("目标已存在" in item for item in precheck.blocking_errors))
 
+    def test_validate_rollback_preconditions_allows_rmdir_after_prior_move_empties_directory(self):
+        (self.base_dir / "demo.txt").write_text("demo", encoding="utf-8")
+        journal = self._write_execution_journal('<COMMANDS>\nMKDIR "Docs"\nMOVE "demo.txt" "Docs/demo.txt"\n</COMMANDS>')
+        plan = rollback_service.build_rollback_plan(rollback_service.ExecutionJournal.from_dict(journal))
+
+        precheck = rollback_service.validate_rollback_preconditions(plan)
+
+        self.assertTrue(precheck.can_execute)
+        self.assertEqual(precheck.blocking_errors, [])
+
     def test_execute_rollback_plan_moves_back_and_removes_empty_created_dir(self):
         (self.base_dir / "demo.txt").write_text("demo", encoding="utf-8")
         journal = self._write_execution_journal('<COMMANDS>\nMKDIR "Docs"\nMOVE "demo.txt" "Docs/demo.txt"\n</COMMANDS>')
@@ -134,4 +144,3 @@ class RollbackServiceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
