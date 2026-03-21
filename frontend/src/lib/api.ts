@@ -40,6 +40,8 @@ export interface ApiClient {
   cleanupEmptyDirs(session_id: string): Promise<CleanupResponse>;
   rollback(session_id: string, confirm?: boolean): Promise<RollbackResponse>;
   getJournal(session_id: string): Promise<JournalSummary>;
+  openDir(path: string): Promise<{ status: string }>;
+  selectDir(): Promise<{ path: string | null }>;
 }
 
 export function createApiClient(baseUrl: string): ApiClient {
@@ -147,6 +149,22 @@ export function createApiClient(baseUrl: string): ApiClient {
     async getJournal(session_id) {
       const response = await fetch(joinUrl(baseUrl, `/api/sessions/${session_id}/journal`));
       return parseResponse<JournalSummary>(response);
+    },
+    async openDir(path) {
+      const response = await fetch(joinUrl(baseUrl, "/api/utils/open-dir"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ path }),
+      });
+      return parseResponse<{ status: string }>(response);
+    },
+    async selectDir() {
+      const response = await fetch(joinUrl(baseUrl, "/api/utils/select-dir"), {
+        method: "POST",
+      });
+      return parseResponse<{ path: string | null }>(response);
     },
   };
 }

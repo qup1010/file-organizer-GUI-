@@ -579,16 +579,48 @@ button:disabled {
   to { opacity: 1; transform: translateX(0); }
 }
 
-.loader-mini {
-  width: 14px;
-  height: 14px;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
 
+/* --- Guidance Banner Styles --- */
+.guidance-banner {
+  margin: 1rem 0;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border-left: 4px solid var(--accent);
+  background: rgba(110, 231, 255, 0.05);
+  animation: fadeIn 0.4s ease-out;
+  line-height: 1.5;
+}
+
+.guidance-banner p {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.guidance-planning, .guidance-ready_for_precheck {
+  border-left-color: var(--warning);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.guidance-ready_to_execute {
+  border-left-color: var(--success);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.guidance-scanning {
+  border-left-color: var(--accent);
+  background: rgba(110, 231, 255, 0.08);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.pill.muted:hover {
+  background: rgba(239, 68, 68, 0.1) !important;
+  color: var(--danger) !important;
+  border-color: var(--danger) !important;
+}

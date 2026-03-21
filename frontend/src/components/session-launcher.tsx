@@ -29,6 +29,22 @@ export function SessionLauncher() {
     }
   }
 
+  async function handleSelectDir() {
+    setLoading(true);
+    setError(null);
+    try {
+      const api = createApiClient(getApiBaseUrl());
+      const res = await api.selectDir();
+      if (res.path) {
+        setTargetDir(res.path);
+      }
+    } catch (err) {
+      setError("无法调用文件夹选择器");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <section className="panel">
       <div className="panel-title-row">
@@ -37,18 +53,29 @@ export function SessionLauncher() {
       </div>
       <label className="field">
         <span>目标目录</span>
-        <input
-          value={targetDir}
-          onChange={(event) => setTargetDir(event.target.value)}
-          placeholder="D:/Downloads"
-        />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            style={{ flex: 1 }}
+            value={targetDir}
+            onChange={(event) => setTargetDir(event.target.value)}
+            placeholder="D:/Downloads"
+          />
+          <button 
+            type="button" 
+            className="secondary-button" 
+            onClick={handleSelectDir}
+            disabled={loading}
+          >
+            📁 选择文件夹
+          </button>
+        </div>
       </label>
-      <div className="hero-actions">
+      <div className="hero-actions" style={{ marginTop: 24 }}>
         <button type="button" className="primary-button" onClick={handleLaunch} disabled={loading || !targetDir.trim()}>
           {loading ? "创建中..." : "创建 / 恢复会话"}
         </button>
       </div>
-      {error ? <p className="muted">{error}</p> : null}
+      {error ? <p className="error-text" style={{ marginTop: 12 }}>{error}</p> : null}
     </section>
   );
 }

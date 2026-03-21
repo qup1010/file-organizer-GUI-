@@ -23,6 +23,8 @@ export function WorkspaceClient() {
     execute,
     rollback,
     cleanupEmptyDirs,
+    abandonSession,
+    openExplorer,
     loadJournal,
     activeAction,
     aiTyping,
@@ -107,8 +109,38 @@ export function WorkspaceClient() {
           <div className="status-row">
             {(isBusy || activeAction) && <span className="loader-mini" />}
             <span className={`pill pill-${stage}`}>{loading ? "处理中..." : (STAGE_LABELS[stage] || stage)}</span>
+            {sessionId && (
+              <button 
+                className="pill muted interactive-li" 
+                style={{ marginLeft: 8, border: 'none', cursor: 'pointer' }}
+                onClick={() => {
+                  if (window.confirm("确定要放弃当前会话吗？未保存的操作将被丢弃。")) {
+                    void abandonSession().then(() => router.push("/"));
+                  }
+                }}
+              >
+                ✕ 放弃并返回
+              </button>
+            )}
           </div>
         </div>
+
+        {/* 引导 Banner */}
+        {stage !== "completed" && stage !== "idle" && (
+          <div className={`guidance-banner guidance-${stage}`}>
+             {stage === "planning" || stage === "ready_for_precheck" ? (
+               plan.unresolved_items.length > 0 ? (
+                 <p>💡 <strong>发现待确认事项</strong>：请在下方对话框回复，或点击右侧事项快速补充信息。</p>
+               ) : (
+                 <p>💡 <strong>方案已就绪</strong>：请检查左侧移动项，无误后点击下方“运行执行预检”。</p>
+               )
+             ) : stage === "ready_to_execute" ? (
+               <p>✅ <strong>预检通过</strong>：点击“确认执行”即可开始物理移动文件。如有疑虑可点击“重新预检”。</p>
+             ) : stage === "scanning" ? (
+               <p>🔍 <strong>正在深度分析</strong>：AI 正在识别文件用途，请稍等片刻...</p>
+             ) : null}
+          </div>
+        )}
 
         {error ? <p className="error-text">{error}</p> : null}
 
@@ -375,12 +407,29 @@ export function WorkspaceClient() {
             )}
 
             <div className="hero-actions" style={{ marginTop: 24, paddingTop: 24, borderTop: "1px solid var(--panel-border)" }}>
-              <button className="secondary-button" onClick={() => void rollback()} disabled={isBusy}>
+              <button 
+                className="secondary-button" 
+                onClick={() => {
+                  if (window.confirm("确定要回退本次操作吗？这会将所有已移动的文件尝试搬回原位。")) {
+                    void rollback();
+                  }
+                }} 
+                disabled={isBusy}
+              >
                 操作回退
               </button>
               <button className="secondary-button" onClick={() => void cleanupEmptyDirs()} disabled={isBusy}>
                 清理空目录
               </button>
+              {snapshot?.target_dir && (
+                <button 
+                  className="primary-button" 
+                  onClick={() => void openExplorer(snapshot.target_dir)}
+                  disabled={isBusy}
+                >
+                  📂 在文件夹中查看结果
+                </button>
+              )}
             </div>
           </div>
         )}

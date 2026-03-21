@@ -106,11 +106,8 @@ def validate_analysis(content: str, directory: Path) -> dict:
         parsed_items.append(
             AnalysisItem(
                 entry_name=name,
-                entry_type="dir" if (directory / name).is_dir() else "file",
                 suggested_purpose="待判断",
                 summary=line.split("|", 2)[-1].strip(),
-                evidence_sources=[],
-                confidence=0.0,
             )
         )
 
@@ -276,19 +273,13 @@ tools = [
                             "type": "object",
                             "properties": {
                                 "entry_name": {"type": "string"},
-                                "entry_type": {"type": "string", "enum": ["file", "dir"]},
                                 "suggested_purpose": {"type": "string"},
                                 "summary": {"type": "string"},
-                                "evidence_sources": {"type": "array", "items": {"type": "string"}},
-                                "confidence": {"type": "number"},
                             },
                             "required": [
                                 "entry_name",
-                                "entry_type",
                                 "suggested_purpose",
                                 "summary",
-                                "evidence_sources",
-                                "confidence",
                             ],
                         },
                     }

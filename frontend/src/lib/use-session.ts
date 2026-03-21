@@ -214,6 +214,28 @@ export function useSession(sessionId: string | null) {
     }
   }
 
+  async function abandonSession() {
+    if (!sessionId) {
+      return;
+    }
+    setLoading(true);
+    try {
+      await api.abandonSession(sessionId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "放弃会话失败");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function openExplorer(path: string) {
+    try {
+      await api.post("/api/utils/open-dir", { path });
+    } catch (err) {
+      setError("无法打开文件夹: 路径不存在或系统错误");
+    }
+  }
+
   async function loadJournal() {
     if (!sessionId) {
       return;
@@ -238,6 +260,8 @@ export function useSession(sessionId: string | null) {
     execute,
     rollback,
     cleanupEmptyDirs,
+    abandonSession,
+    openExplorer,
     loadJournal,
     activeAction,
     aiTyping,

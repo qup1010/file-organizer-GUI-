@@ -28,12 +28,7 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
     app.state.service = service or OrganizerSessionService(SessionStore(Path("output/sessions")))
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://127.0.0.1:3000",
-            "http://localhost:3000",
-            "http://tauri.localhost",
-            "tauri://localhost",
-        ],
+        allow_origins=["*"],
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -236,5 +231,37 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
                 app.state.service.unsubscribe(session_id, subscriber)
 
         return StreamingResponse(stream(), media_type="text/event-stream")
+
+    @app.post("/api/utils/open-dir")
+    def open_dir(payload: dict):
+        path = payload.get("path")
+        if not path or not os.path.exists(path):
+            raise HTTPException(status_code=400, detail="INVALID_PATH")
+        
+        # 兼容 Windows 系统打开目录命令
+        import subprocess
+        try:
+            subprocess.run(["explorer", os.path.abspath(path)], check=True)
+            return {"status": "ok"}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.post("/api/utils/select-dir")
+    def select_dir():
+        import tkinter as tk
+        from tkinter import filedialog
+        
+        # 初始化隐藏的主窗口，防止弹出一个空的 tk 窗口
+        root = tk.Tk()
+        root.withdraw()
+        # 让弹窗出现在最前面
+        root.attributes("-topmost", True)
+        
+        directory = filedialog.askdirectory(title="选择要整理的文件夹")
+        root.destroy()
+        
+        if directory:
+            return {"path": os.path.abspath(directory)}
+        return {"path": None}
 
     return app
