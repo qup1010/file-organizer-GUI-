@@ -11,23 +11,16 @@ import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
 import { getApiBaseUrl } from "@/lib/runtime";
-import type { JournalSummary } from "@/types/session";
+import { createApiClient } from "@/lib/api";
+import type { JournalSummary, HistoryItem } from "@/types/session";
 import { EmptyState } from "@/components/ui/empty-state";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-interface HistoryEntry {
-  execution_id: string;
-  target_dir: string;
-  status: string;
-  created_at: string;
-  item_count: number;
-}
-
 export default function HistoryPage() {
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
@@ -35,15 +28,14 @@ export default function HistoryPage() {
   const [journalLoading, setJournalLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [rollbackSuccess, setRollbackSuccess] = useState(false);
+  const api = createApiClient(getApiBaseUrl());
 
   // Load history list
   async function loadHistory() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${getApiBaseUrl()}/api/history`);
-      if (!response.ok) throw new Error("无法获取历史记录");
-      const data = await response.json();
+      const data = await api.getHistory();
       setHistory(data);
       if (data.length > 0 && !selectedSessionId) {
         setSelectedSessionId(data[0].execution_id);
@@ -60,9 +52,7 @@ export default function HistoryPage() {
     setJournalLoading(true);
     setRollbackSuccess(false);
     try {
-      const response = await fetch(`${getApiBaseUrl()}/api/sessions/${id}/journal`);
-      if (!response.ok) throw new Error("无法获取详细记录");
-      const data = await response.json();
+      const data = await api.getJournal(id);
       setJournal(data);
     } catch (err) {
       console.error(err);
@@ -87,12 +77,7 @@ export default function HistoryPage() {
 
     setActionLoading(true);
     try {
-      const response = await fetch(`${getApiBaseUrl()}/api/sessions/${selectedSessionId}/rollback`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ confirm: true })
-      });
-      if (!response.ok) throw new Error("回退失败");
+      await api.rollback(selectedSessionId, true);
       setRollbackSuccess(true);
       void loadHistory(); // Refresh list
       void loadJournal(selectedSessionId); // Refresh details

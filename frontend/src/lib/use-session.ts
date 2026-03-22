@@ -29,9 +29,9 @@ export function useSession(sessionId: string | null) {
     setAiTyping("");
 
     api.getSession(sessionId)
-      .then((nextSnapshot) => {
-        if (!cancelled) {
-          setSnapshot(nextSnapshot);
+      .then((response) => {
+        if (!cancelled && response.session_snapshot) {
+          setSnapshot(response.session_snapshot);
         }
       })
       .catch((err: Error) => {
@@ -99,7 +99,8 @@ export function useSession(sessionId: string | null) {
     if (!sessionId) {
       return;
     }
-    setSnapshot(await api.getSession(sessionId));
+    const response = await api.getSession(sessionId);
+    setSnapshot(response.session_snapshot);
   }
 
   async function sendMessage(content: string) {

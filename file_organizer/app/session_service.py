@@ -179,47 +179,6 @@ class OrganizerSessionService:
         if not subscribers and session_id in self._subscribers:
             self._subscribers.pop(session_id, None)
 
-    def update_item_target(
-        self,
-        session_id: str,
-        item_id: str,
-        target_dir: str | None,
-        move_to_review: bool,
-    ) -> SessionMutationResult:
-        session = self._load_or_raise(session_id)
-        self._ensure_mutable_stage(session)
-
-        pending = self._pending_plan_from_session(session)
-        file_name = Path(item_id).name
-        target_relpath = f"Review/{file_name}" if move_to_review else f"{(target_dir or '').strip('/')}/{file_name}".lstrip("/")
-        if not target_relpath:
-            raise ValueError("target_dir_required")
-
-        found = False
-        updated_moves: list[PlanMove] = []
-        for move in pending.moves:
-            if move.source == item_id:
-                updated_moves.append(PlanMove(source=move.source, target=target_relpath, raw=move.raw))
-                found = True
-            else:
-                updated_moves.append(move)
-
-        if not found:
-            raise KeyError(item_id)
-
-        pending = PendingPlan(
-            directories=self._directories_from_moves(updated_moves),
-            moves=updated_moves,
-            user_constraints=list(pending.user_constraints),
-            unresolved_items=[item for item in pending.unresolved_items if item != item_id],
-            summary=pending.summary,
-        )
-        session.pending_plan = self._pending_plan_to_dict(pending)
-        session.plan_snapshot = self._plan_snapshot(pending, {"diff_summary": [f"update:{item_id}"]}, scan_lines=session.scan_lines)
-        session.stage = "planning"
-        self.store.save(session)
-        self._record_event("plan.updated", session)
-        return SessionMutationResult(session_snapshot=self._build_snapshot(session))
 
     def submit_user_intent(self, session_id: str, content: str) -> SessionMutationResult:
         session = self._load_or_raise(session_id)
@@ -568,7 +527,7 @@ class OrganizerSessionService:
             return ["execute", "abandon", "view_journal"]
         if stage == "completed":
             return ["rollback", "view_journal", "cleanup_empty_dirs"]
-        return ["submit_intent", "update_item", "precheck", "abandon"]
+        return ["submit_intent", "precheck", "abandon"]
 
     def _record_event(self, event_type: str, session: OrganizerSession | None = None, session_id: str | None = None, **extra) -> None:
         sid = session_id or (session.session_id if session else None)

@@ -91,7 +91,10 @@ class SessionApiTests(unittest.TestCase):
         response = self.client.get(f"/api/sessions/{created['session_id']}")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["session_id"], created["session_id"])
+        payload = response.json()
+        self.assertEqual(payload["session_id"], created["session_id"])
+        self.assertEqual(payload["session_snapshot"]["session_id"], created["session_id"])
+        self.assertEqual(payload["session_snapshot"]["stage"], "draft")
 
     def test_resume_endpoint_returns_stale_snapshot_when_directory_changed(self):
         created = self.client.post(
@@ -108,7 +111,10 @@ class SessionApiTests(unittest.TestCase):
         response = self.client.post(f"/api/sessions/{session.session_id}/resume")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["stage"], "stale")
+        payload = response.json()
+        self.assertEqual(payload["session_id"], session.session_id)
+        self.assertEqual(payload["session_snapshot"]["session_id"], session.session_id)
+        self.assertEqual(payload["session_snapshot"]["stage"], "stale")
 
     def test_refresh_endpoint_returns_updated_snapshot(self):
         created = self.client.post(

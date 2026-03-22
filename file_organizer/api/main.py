@@ -63,7 +63,10 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
     @app.get("/api/sessions/{session_id}")
     def get_session(session_id: str):
         try:
-            return app.state.service.get_snapshot(session_id)
+            return {
+                "session_id": session_id,
+                "session_snapshot": app.state.service.get_snapshot(session_id)
+            }
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail="SESSION_NOT_FOUND")
 
@@ -71,7 +74,10 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
     def resume_session(session_id: str):
         try:
             session = app.state.service.resume_session(session_id)
-            return app.state.service.get_snapshot(session.session_id)
+            return {
+                "session_id": session_id,
+                "session_snapshot": app.state.service.get_snapshot(session.session_id)
+            }
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail="SESSION_NOT_FOUND")
         except RuntimeError as exc:
@@ -125,27 +131,6 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
         except RuntimeError:
             return _error_response(app.state.service, session_id, "SESSION_STAGE_CONFLICT", 409)
 
-    @app.post("/api/sessions/{session_id}/update-item")
-    def update_item(session_id: str, payload: dict):
-        try:
-            result = app.state.service.update_item_target(
-                session_id,
-                payload["item_id"],
-                payload.get("target_dir"),
-                bool(payload.get("move_to_review", False)),
-            )
-            return {
-                "session_id": session_id,
-                "session_snapshot": result.session_snapshot,
-            }
-        except FileNotFoundError:
-            raise HTTPException(status_code=404, detail="SESSION_NOT_FOUND")
-        except KeyError:
-            raise HTTPException(status_code=404, detail="ITEM_NOT_FOUND")
-        except RuntimeError as exc:
-            if str(exc) == "SESSION_STAGE_CONFLICT":
-                return _error_response(app.state.service, session_id, "SESSION_STAGE_CONFLICT", 409)
-            raise
 
     @app.post("/api/sessions/{session_id}/precheck")
     def precheck(session_id: str):
@@ -327,6 +312,9 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
             client.models.list()
             return {"status": "ok", "message": f"{'视觉' if test_type == 'vision' else '文本'}模型链路连通性测试通过"}
         except Exception as e:
-            return {"status": "error", "message": str(e)}
+            return JSONResponse(
+                status_code=400,
+                content={"status": "error", "message": str(e)}
+            )
 
     return app

@@ -38,7 +38,43 @@ def build_initial_messages(scan_lines: str) -> list:
     ]
 
 def chat_one_round(messages: list, event_handler=None, model: str = ORGANIZER_MODEL_NAME, tools=None, tool_choice="auto", return_message=False):
-    from file_organizer.shared.config import DEBUG_MODE
+    from file_organizer.shared.config import RUNTIME_DIR, config_manager
+    import json
+    import os
+    from datetime import datetime
+    
+    # 动态获取状态
+    is_debug = config_manager.get("DEBUG_MODE", False) or os.getenv("DEBUG_MODE") == "True"
+    debug_log = RUNTIME_DIR / "debug_prompt.json"
+    
+    if is_debug:
+        history = []
+        # 如果是起始消息（系统提示+第一条提问），则清空之前的日志
+        is_first_round = len(messages) <= 2
+        
+        if not is_first_round and debug_log.exists():
+            try:
+                with open(debug_log, "r", encoding="utf-8") as f:
+                    history = json.load(f)
+                    if not isinstance(history, list): history = []
+            except Exception:
+                history = []
+        
+        current_round = len(history) + 1
+        new_entry = {
+            "round": current_round,
+            "timestamp": datetime.now().strftime("%H:%M:%S"),
+            "request": messages,
+            "response": "processing..."
+        }
+        history.append(new_entry)
+        
+        try:
+            with open(debug_log, "w", encoding="utf-8") as f:
+                json.dump(history, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"[DEBUG] Failed to write debug log: {e}")
+
     client = create_openai_client()
     
     emit(event_handler, "model_wait_start", {"message": MODEL_WAIT_MESSAGE})
@@ -101,6 +137,24 @@ def chat_one_round(messages: list, event_handler=None, model: str = ORGANIZER_MO
                         full_tool_calls_raw[idx]["function"]["arguments"] += tc_delta.function.arguments
 
     emit(event_handler, "ai_streaming_end", {"full_content": full_content})
+
+    # 在请求结束后更新调试日志，补全 AI 的回复
+    if is_debug:
+        try:
+            # 重新读取以防并发写入（虽然概率低）
+            with open(debug_log, "r", encoding="utf-8") as f:
+                history = json.load(f)
+            
+            history[-1]["response"] = {
+                "content": full_content,
+                "tool_calls": full_tool_calls_raw
+            }
+            
+            with open(debug_log, "w", encoding="utf-8") as f:
+                json.dump(history, f, indent=2, ensure_ascii=False)
+            print(f"[DEBUG] Round {len(history)} response recorded.")
+        except Exception:
+            pass
 
     # 构造兼容的 Message 对象供后续解析
     from types import SimpleNamespace
@@ -584,37 +638,22 @@ def run_organizer_cycle(
     current_pending = pending_plan or PendingPlan()
     current_constraints = list(user_constraints or [])
 
-    # === Context Truncation (修剪长对话记忆，仅限于发送给模型的消息) ===
-    # 限制发送给模型的消息总长度，避免在几十轮对话后超出 token 限制或导致遗忘 System Prompt
     llm_messages = list(messages)
-    MAX_HISTORY = 8
-    if len(llm_messages) > MAX_HISTORY + 1:
-        system_prompt = llm_messages[0]
-        tail = llm_messages[-MAX_HISTORY:]
-        state_snapshot = "[系统内部快照：由于对话过长，早期的交互记录已被清除]\n当前已形成的待定计划如下，请基于此状态继续与用户讨论增量修改，不要遗失已有分类：\n"
-        state_snapshot += f"当前摘要：{current_pending.summary}\n"
-        if current_pending.moves:
-            state_snapshot += "移动关系：\n" + "\n".join(f"- {m.source} -> {m.target}" for m in current_pending.moves[:20])
-            if len(current_pending.moves) > 20:
-                state_snapshot += f"\n... (还有 {len(current_pending.moves) - 20} 项已省略)"
-        if current_pending.unresolved_items:
-            state_snapshot += f"\n待确认项：{current_pending.unresolved_items}"
-        if current_constraints:
-            state_snapshot += f"\n用户强制约束：{current_constraints}"
-            
-        llm_messages = [system_prompt, {"role": "system", "content": state_snapshot}] + tail
-
+    
+    # NOTE: 采用循环机制实现后台自动修正。若 AI 提交的指令（如 FINAL_PLAN）校验失败，
+    # 系统会根据失败细节构造反馈消息并触发下一次尝试，直到达到最大重试次数。
     for attempt in range(1, max_retries + 1):
         # 核心：发起 AI 对话获取建议
         message = chat_one_round(llm_messages, event_handler=event_handler, model=model, return_message=True)
         content, plan_diff, final_plan, display_request = _extract_plan_submissions(message)
         
-        # 补救逻辑：如果模型没说话但有变更总结，则使用该总结作为回复文本
+        # HACK: 补救逻辑。如果模型没说话（可能由于 Tool Use 机制仅输出了工具调用）
+        # 但 plan_diff 中带有 summary，则借用该 summary 作为对话文本进行流式输出。
         if not content and plan_diff and plan_diff.summary:
             content = f"我已经根据你的要求更新了计划：{plan_diff.summary}"
             emit(event_handler, "ai_chunk", {"content": content})
 
-        # 这里的 content 是用于返回给上层的，不要污染原始历史直到上层确认保存
+        # 这里的 content 是用于返回给上层的（用于渲染 UI 对话气泡），不要污染原始历史直到最终落盘。
         if content:
             llm_messages.append({"role": "assistant", "content": content})
             
@@ -647,6 +686,7 @@ def run_organizer_cycle(
                 "user_constraints": current_constraints,
             }
 
+        # 场景 B: AI 仅回复文字说明，未发起任何方案层面的增量修改或最终提交
         if final_plan is None:
             return content, {
                 "is_valid": False,
@@ -658,6 +698,8 @@ def run_organizer_cycle(
                 "user_constraints": current_constraints,
             }
 
+        # 场景 C: AI 尝试提交最终可执行方案
+        # NOTE: 严苛校验是防止 AI 幻觉引发文件丢失/错误操作的最后防线。
         validation = validate_final_plan(scan_lines, final_plan)
         if validation["is_valid"]:
             emit(event_handler, "command_validation_pass", {"attempt": attempt, "details": validation})
@@ -674,11 +716,15 @@ def run_organizer_cycle(
                 "validation": validation,
             }
 
+        # 如果最终方案校验失败（例如 AI 忽略了部分文件或生成了错误的 mkdir 路径），则反馈具体原因并递归重试。
         emit(event_handler, "command_validation_fail", {"attempt": attempt, "details": validation})
         if attempt < max_retries:
             messages.append({"role": "user", "content": build_command_retry_message(validation, scan_lines, current_constraints)})
             continue
 
+        # 极限情况：标准重试次数耗尽，仍无法给出合法方案。此时开启“修复模式”。
+        # NOTE: 修复模式旨在通过“权威隔离”消除长对话中的上下文噪声。我们丢弃多轮对话历史，
+        # 并给 AI 一个极其简短、严厉且唯一的指令，强制其根据当前的 scan_lines 重新生成 FinalPlan。
         emit(event_handler, "command_retry_exhausted", {"attempt": attempt, "details": validation})
         emit(event_handler, "repair_mode_start", {"attempt": attempt, "details": validation})
         repair_message = chat_one_round(

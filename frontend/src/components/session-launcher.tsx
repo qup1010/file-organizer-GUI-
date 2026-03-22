@@ -8,6 +8,7 @@ import { twMerge } from "tailwind-merge";
 import { motion, AnimatePresence } from "motion/react";
 
 import { createApiClient } from "@/lib/api";
+import { startFreshSession } from "@/lib/session-launcher-actions";
 import { getApiBaseUrl } from "@/lib/runtime";
 import { SessionSnapshot } from "@/types/session";
 
@@ -82,9 +83,29 @@ export function SessionLauncher() {
     router.push(`/workspace?session_id=${resumePrompt.sessionId}&dir=${encodeURIComponent(targetDir)}`);
   }
 
-  function handleStartFresh() {
-    setResumePrompt(null);
-    void handleLaunch(true);
+  async function handleStartFresh() {
+    if (!resumePrompt) return;
+
+    setLoading(true);
+    setError(null);
+    try {
+      const api = createApiClient(getApiBaseUrl());
+      const response = await startFreshSession(api, resumePrompt.sessionId, targetDir);
+      setResumePrompt(null);
+
+      if (!response.session_id) {
+        throw new Error("重新开始失败：后端未返回有效的访问 ID");
+      }
+      router.push(`/workspace?session_id=${response.session_id}&dir=${encodeURIComponent(targetDir)}`);
+    } catch (err: any) {
+      if (err.message && err.message.toLowerCase().includes("failed to fetch")) {
+        setError("系统离线：无法连接到本地服务引擎。请检查后端是否正在运行 (localhost:8000)。");
+      } else {
+        setError(err instanceof Error ? err.message : "重新开始失败");
+      }
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (

@@ -139,10 +139,39 @@ export interface ScanAcceptedResponse {
   session_snapshot: SessionSnapshot;
 }
 
+export interface GetSessionResponse {
+  session_id: string;
+  session_snapshot: SessionSnapshot;
+}
+
+export interface ResumeSessionResponse {
+  session_id: string;
+  session_snapshot: SessionSnapshot;
+}
+
 export interface MessageResponse {
   session_id: string;
   assistant_message: AssistantMessage | null;
   session_snapshot: SessionSnapshot;
+}
+
+export interface HistoryItem {
+  execution_id: string;
+  target_dir: string;
+  status: string;
+  created_at: string;
+  item_count: number;
+}
+
+export interface AppProfile {
+  id: string;
+  name: string;
+}
+
+export interface AppConfig {
+  active_id: string;
+  config: Record<string, any>;
+  profiles: AppProfile[];
 }
 
 export interface UpdateItemRequest {
