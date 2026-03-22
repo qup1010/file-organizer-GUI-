@@ -106,13 +106,26 @@ export function useSession(sessionId: string | null) {
     if (!sessionId) {
       return;
     }
+    
+    // 乐观更新：立即将用户消息加入本地快照
+    setSnapshot(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        messages: [...prev.messages, { role: "user", content }]
+      };
+    });
+
     setLoading(true);
     setError(null);
+    setAiTyping(""); // 发送新消息时重置打字机
+    
     try {
       const response = await api.sendMessage(sessionId, content);
       setSnapshot(response.session_snapshot);
     } catch (err) {
       setError(err instanceof Error ? err.message : "发送消息失败");
+      // 出错时如果需要可以回滚本地状态，但通常重新拉取会话即可
     } finally {
       setLoading(false);
     }

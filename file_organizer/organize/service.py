@@ -20,7 +20,7 @@ COMMANDS_BLOCK_RE = re.compile(r"<COMMANDS>(.*?)</COMMANDS>", flags=re.S | re.I)
 MOVE_LINE_RE = re.compile(r'^\s*MOVE\s+"(.*?)"\s+"(.*?)"\s*$', flags=re.I)
 MKDIR_LINE_RE = re.compile(r'^\s*MKDIR\s+"(.*?)"\s*$', flags=re.I)
 PLAN_DIFF_TOOL_NAME = "submit_plan_diff"
-PRESENT_PLAN_TOOL_NAME = "present_current_plan"
+PRESENT_PLAN_TOOL_NAME = "focus_ui_section"
 FINAL_PLAN_TOOL_NAME = "submit_final_plan"
 MODEL_WAIT_MESSAGE = "正在等待模型回复..."
 
@@ -37,45 +37,86 @@ def build_initial_messages(scan_lines: str) -> list:
         {"role": "user", "content": "请基于上述扫描结果和整理规则，为我生成初始的整理建议。请先调用 submit_plan_diff 提交你的初步设想，然后告诉我你的整体思路。"}
     ]
 
-
-def _emit_text_response(content: str, event_handler=None) -> None:
-    if not content:
-        return
-    emit(event_handler, "ai_streaming_start")
-    emit(event_handler, "ai_chunk", {"content": content})
-    emit(event_handler, "ai_streaming_end", {"full_content": content})
-
-
 def chat_one_round(messages: list, event_handler=None, model: str = ORGANIZER_MODEL_NAME, tools=None, tool_choice="auto", return_message=False):
     from file_organizer.shared.config import DEBUG_MODE
     client = create_openai_client()
-    # DEBUG: 打印发送给模型的请求关键信息
-    if DEBUG_MODE:
-        print(f"\n[DEBUG] 开始 AI 对话循环录制:")
-        print(f"  - 目标模型: {model}")
-        print(f"  - 历史消息条数: {len(messages)}")
-        if messages:
-            print(f"  - 最后一贴角色: {messages[-1]['role']}")
-            print(f"  - 系统提示词预览 (前50字): {messages[0]['content'][:50]}...")
-        else:
-            print("  - [ERROR] messages 列表为空！")
-
+    
     emit(event_handler, "model_wait_start", {"message": MODEL_WAIT_MESSAGE})
+    
+    # 启用流式传输以获得更好的 UI 体验
+    full_content = ""
+    full_tool_calls_raw = []
+    
     try:
-        response = client.chat.completions.create(
+        stream = client.chat.completions.create(
             model=model,
             messages=messages,
             tools=tools or organizer_tools,
             tool_choice=tool_choice,
+            stream=True
         )
+
     finally:
         emit(event_handler, "model_wait_end")
-    message = response.choices[0].message
-    content = getattr(message, "content", "") or ""
-    _emit_text_response(content, event_handler=event_handler)
+
+    emit(event_handler, "ai_streaming_start")
+    if hasattr(stream, "choices"):
+        message = stream.choices[0].message
+        full_content = getattr(message, "content", "") or ""
+        if full_content:
+            emit(event_handler, "ai_chunk", {"content": full_content})
+        for tool_call in getattr(message, "tool_calls", None) or []:
+            full_tool_calls_raw.append({
+                "id": getattr(tool_call, "id", None),
+                "type": getattr(tool_call, "type", "function"),
+                "function": {
+                    "name": getattr(tool_call.function, "name", ""),
+                    "arguments": getattr(tool_call.function, "arguments", ""),
+                },
+            })
+    else:
+        # 收集流式输出
+        for chunk in stream:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+            
+            # 文本部分
+            if delta.content:
+                full_content += delta.content
+                emit(event_handler, "ai_chunk", {"content": delta.content})
+            
+            # 工具调用部分
+            if delta.tool_calls:
+                for tc_delta in delta.tool_calls:
+                    idx = tc_delta.index
+                    while len(full_tool_calls_raw) <= idx:
+                        full_tool_calls_raw.append({"id": None, "type": "function", "function": {"name": "", "arguments": ""}})
+                    
+                    if tc_delta.id:
+                        full_tool_calls_raw[idx]["id"] = tc_delta.id
+                    if tc_delta.function.name:
+                        full_tool_calls_raw[idx]["function"]["name"] += tc_delta.function.name
+                    if tc_delta.function.arguments:
+                        full_tool_calls_raw[idx]["function"]["arguments"] += tc_delta.function.arguments
+
+    emit(event_handler, "ai_streaming_end", {"full_content": full_content})
+
+    # 构造兼容的 Message 对象供后续解析
+    from types import SimpleNamespace
+    tool_calls = []
+    for tc in full_tool_calls_raw:
+        if tc["function"]["name"]:
+            tool_calls.append(SimpleNamespace(
+                id=tc["id"],
+                type="function",
+                function=SimpleNamespace(name=tc["function"]["name"], arguments=tc["function"]["arguments"])
+            ))
+            
+    message = SimpleNamespace(content=full_content, tool_calls=tool_calls if tool_calls else None)
     if return_message:
         return message
-    return content
+    return full_content
 
 
 def extract_commands(content: str) -> str | None:
@@ -177,8 +218,8 @@ def parse_commands_block(content: str) -> dict:
             continue
 
         result["invalid_lines"].append(line)
-
     return result
+
 
 
 def validate_final_plan(scan_lines: str, final_plan: FinalPlan | dict) -> dict:
@@ -239,6 +280,11 @@ def validate_final_plan(scan_lines: str, final_plan: FinalPlan | dict) -> dict:
 
         if target_parts[-1] != source_name:
             result["rename_errors"].append(f"{source_name} -> {normalized_target}")
+            continue
+
+        # [漏洞 3 修复]：最终提交不允许存在 Review 路径
+        if normalized_target.lower().startswith("review/") or normalized_target.lower() == "review":
+            result["path_errors"].append(f"最终计划中不允许存在 Review 目录：{source_name} -> {normalized_target}")
             continue
 
         normalized_targets[normalized_target].add(source_name)
@@ -403,6 +449,12 @@ def apply_plan_diff(current_plan: PendingPlan | None, patch_diff: PlanDiff | dic
         if src not in move_order:
             move_order.append(src)
         moves_by_source[src] = PlanMove(source=src, target=move.target, raw=move.raw)
+        
+        # [漏洞 1 修复]：如果 AI 手动分配了具体目录（非 Review/），则自动视为已确认
+        target_path = move.target.lower().replace("\\", "/")
+        if not target_path.startswith("review/") and target_path != "review":
+            # 将其加入临时移除集合
+            diff.unresolved_removals.append(src)
 
     if valid_sources is not None:
         for original_source in valid_sources:
@@ -532,33 +584,41 @@ def run_organizer_cycle(
     current_pending = pending_plan or PendingPlan()
     current_constraints = list(user_constraints or [])
 
-    # === Context Truncation (修剪长对话记忆) ===
-    # 限制 messages 的总长度，避免在几十轮对话后超出大模型 token 限制或导致遗忘 System Prompt
+    # === Context Truncation (修剪长对话记忆，仅限于发送给模型的消息) ===
+    # 限制发送给模型的消息总长度，避免在几十轮对话后超出 token 限制或导致遗忘 System Prompt
+    llm_messages = list(messages)
     MAX_HISTORY = 8
-    if len(messages) > MAX_HISTORY + 1:
-        system_prompt = messages[0]
-        tail = messages[-MAX_HISTORY:]
+    if len(llm_messages) > MAX_HISTORY + 1:
+        system_prompt = llm_messages[0]
+        tail = llm_messages[-MAX_HISTORY:]
         state_snapshot = "[系统内部快照：由于对话过长，早期的交互记录已被清除]\n当前已形成的待定计划如下，请基于此状态继续与用户讨论增量修改，不要遗失已有分类：\n"
         state_snapshot += f"当前摘要：{current_pending.summary}\n"
         if current_pending.moves:
-            state_snapshot += "移动关系：\n" + "\n".join(f"- {m.source} -> {m.target}" for m in current_pending.moves[:30])
-            if len(current_pending.moves) > 30:
-                state_snapshot += f"\n... (还有 {len(current_pending.moves) - 30} 项已省略)"
+            state_snapshot += "移动关系：\n" + "\n".join(f"- {m.source} -> {m.target}" for m in current_pending.moves[:20])
+            if len(current_pending.moves) > 20:
+                state_snapshot += f"\n... (还有 {len(current_pending.moves) - 20} 项已省略)"
         if current_pending.unresolved_items:
             state_snapshot += f"\n待确认项：{current_pending.unresolved_items}"
         if current_constraints:
             state_snapshot += f"\n用户强制约束：{current_constraints}"
             
-        messages.clear()
-        messages.extend([system_prompt, {"role": "system", "content": state_snapshot}] + tail)
+        llm_messages = [system_prompt, {"role": "system", "content": state_snapshot}] + tail
 
     for attempt in range(1, max_retries + 1):
-        message = chat_one_round(messages, event_handler=event_handler, model=model, return_message=True)
+        # 核心：发起 AI 对话获取建议
+        message = chat_one_round(llm_messages, event_handler=event_handler, model=model, return_message=True)
         content, plan_diff, final_plan, display_request = _extract_plan_submissions(message)
-        display_plan = display_request.to_dict() if display_request else None
+        
+        # 补救逻辑：如果模型没说话但有变更总结，则使用该总结作为回复文本
+        if not content and plan_diff and plan_diff.summary:
+            content = f"我已经根据你的要求更新了计划：{plan_diff.summary}"
+            emit(event_handler, "ai_chunk", {"content": content})
 
+        # 这里的 content 是用于返回给上层的，不要污染原始历史直到上层确认保存
         if content:
-            messages.append({"role": "assistant", "content": content})
+            llm_messages.append({"role": "assistant", "content": content})
+            
+        display_plan = display_request.to_dict() if display_request else None
 
         if plan_diff is not None:
             scan_items = extract_scan_items(scan_lines)
@@ -702,14 +762,21 @@ organizer_tools = [
         "type": "function",
         "function": {
             "name": PRESENT_PLAN_TOOL_NAME,
-            "description": "请求系统把当前待定整理计划展示给用户，优先使用摘要视图，避免在自然语言中重复整套列表。",
+            "description": "引导用户查看前端界面的特定区域（如：切换到变动详情页或问题项列表）。由于数据状态会自动同步，你仅在需要引导用户视觉焦点时调用此工具。",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "focus": {"type": "string", "enum": ["summary", "changes", "details", "unresolved"]},
-                    "summary": {"type": "string"},
+                    "focus": {
+                        "type": "string", 
+                        "enum": ["summary", "changes", "details", "unresolved"],
+                        "description": "焦点目标区域：summary(概览面板), changes(本轮变动详情), details(完整计划列表), unresolved(待确认项列表)"
+                    },
+                    "reason": {
+                        "type": "string",
+                        "description": "引导用户查看该区域的简短中文理由（例如：'请检查我刚才为您调整的财务分类'）"
+                    },
                 },
-                "required": ["focus", "summary"],
+                "required": ["focus", "reason"],
             },
         },
     },

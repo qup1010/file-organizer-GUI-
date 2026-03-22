@@ -105,16 +105,22 @@ class FinalPlan:
 class PlanDisplayRequest:
     focus: str = "summary"
     summary: str = ""
+    reason: str = ""
 
     @classmethod
     def from_dict(cls, data: dict) -> "PlanDisplayRequest":
         return cls(
             focus=data.get("focus", "summary"),
             summary=data.get("summary", ""),
+            reason=data.get("reason", ""),
         )
 
     def to_dict(self) -> dict:
-        return {"focus": self.focus, "summary": self.summary}
+        return {
+            "focus": self.focus,
+            "summary": self.summary,
+            "reason": self.reason
+        }
 
 
 def derive_directories_from_moves(moves: list[PlanMove]) -> list[str]:

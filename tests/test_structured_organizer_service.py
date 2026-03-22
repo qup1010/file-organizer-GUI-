@@ -1,4 +1,4 @@
-﻿import unittest
+import unittest
 from types import SimpleNamespace
 from unittest import mock
 
@@ -51,7 +51,7 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
             "summary": "已按要求改名并调整截图归类",
         }
 
-        updated, diff_summary = organizer_service.apply_plan_diff(old_plan, diff)
+        updated, diff_summary, _ = organizer_service.apply_plan_diff(old_plan, diff)
 
         self.assertEqual(updated.directories, ["Bills", "Screenshots"])
         self.assertEqual(
@@ -69,8 +69,8 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
     def test_run_organizer_cycle_returns_display_request_without_mutating_plan(self):
         display_call = SimpleNamespace(
             function=SimpleNamespace(
-                name="present_current_plan",
-                arguments='{"focus": "details", "summary": "请先看当前计划"}',
+                name="focus_ui_section",
+                arguments='{"focus": "details", "reason": "请先看当前计划"}',
             )
         )
         message = SimpleNamespace(content="我先给你看看当前计划。", tool_calls=[display_call])
@@ -89,7 +89,7 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
 
         self.assertEqual(content, "我先给你看看当前计划。")
         self.assertIs(result["pending_plan"], current_plan)
-        self.assertEqual(result["display_plan"], {"focus": "details", "summary": "请先看当前计划"})
+        self.assertEqual(result["display_plan"], {"focus": "details", "summary": "", "reason": "请先看当前计划"})
         self.assertFalse(result["is_valid"])
 
     def test_run_organizer_cycle_auto_displays_summary_after_diff_when_model_omits_present_tool(self):
@@ -109,12 +109,45 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
             )
 
         self.assertFalse(result["is_valid"])
-        self.assertEqual(result["display_plan"], {"focus": "summary", "summary": "先按用途归类"})
+        self.assertEqual(result["display_plan"], {"focus": "summary", "summary": "先按用途归类", "reason": ""})
         self.assertEqual(result["pending_plan"].directories, ["Review", "Study"])
         self.assertEqual(
             {move.source: move.target for move in result["pending_plan"].moves},
             {"合同.pdf": "Study/合同.pdf", "截图1.png": "Review/截图1.png"},
         )
+    def test_apply_plan_diff_auto_removes_unresolved_when_moved_to_non_review(self):
+        old_plan = PendingPlan(
+            moves=[PlanMove(source="合同.pdf", target="Review/合同.pdf")],
+            unresolved_items=["合同.pdf"],
+        )
+        # AI 只更新了路径，忘记显式调用 unresolved_removals
+        diff = {
+            "directory_renames": [],
+            "move_updates": [{"source": "合同.pdf", "target": "Finance/合同.pdf"}],
+            "unresolved_adds": [],
+            "unresolved_removals": [], 
+            "summary": "自动同步测试",
+        }
+        
+        updated, _, _ = organizer_service.apply_plan_diff(old_plan, diff)
+        
+        # 验证：虽然 AI 忘记传 removals，但因为目标是 Finance/，系统应自动移除待确认标记
+        self.assertEqual(updated.unresolved_items, [])
+        self.assertEqual(updated.moves[0].target, "Finance/合同.pdf")
+
+    def test_validate_final_plan_blocks_review_path(self):
+        scan_lines = "合同.pdf | 财务 | ..."
+        final_plan = FinalPlan(
+            directories=["Review"],
+            moves=[PlanMove(source="合同.pdf", target="Review/合同.pdf")],
+            unresolved_items=[],
+        )
+        
+        validation = organizer_service.validate_final_plan(scan_lines, final_plan)
+        
+        self.assertFalse(validation["is_valid"])
+        self.assertTrue(any("Review" in err for err in validation["path_errors"]))
+
     def test_chat_one_round_emits_wait_events_before_stream_output(self):
         response = SimpleNamespace(
             choices=[SimpleNamespace(message=SimpleNamespace(content="先讨论整理方案。", tool_calls=[]))]

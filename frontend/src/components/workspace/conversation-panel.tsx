@@ -129,17 +129,18 @@ export function ConversationPanel({
            </motion.div>
         )}
 
-        {/* Thinking Indicator */}
+        {/* Thinking Indicator / Streaming */}
         {aiTyping && (
            <motion.div initial={{opacity:0, y: 10}} animate={{opacity:1, y: 0}} className="flex gap-6">
               <div className="w-8 h-8 rounded-md bg-white border border-on-surface/5 flex items-center justify-center text-primary shrink-0 shadow-sm"><Bot className="w-4 h-4"/></div>
-              <div className="p-4 bg-white border border-on-surface/5 rounded-md text-[13px] text-on-surface-variant italic flex items-center gap-3 shadow-sm shadow-black/5">
-                 <div className="flex gap-1 items-center">
-                   <span className="w-1 h-1 bg-primary/40 rounded-full animate-bounce" />
-                   <span className="w-1 h-1 bg-primary/40 rounded-full animate-bounce [animation-delay:0.2s]" />
-                   <span className="w-1 h-1 bg-primary/40 rounded-full animate-bounce [animation-delay:0.4s]" />
+              <div className="p-5 flex-1 bg-white border border-on-surface/5 rounded-md text-[13px] leading-relaxed text-on-surface shadow-sm shadow-black/5 whitespace-pre-wrap font-sans relative">
+                 <div className="mb-2 flex gap-1 items-center opacity-40">
+                   <span className="w-1 h-1 bg-primary rounded-full animate-bounce" />
+                   <span className="w-1 h-1 bg-primary rounded-full animate-bounce [animation-delay:0.2s]" />
+                   <span className="w-1 h-1 bg-primary rounded-full animate-bounce [animation-delay:0.4s]" />
+                   <span className="uppercase tracking-widest text-[9px] font-black ml-2">正在构建回复...</span>
                  </div>
-                 <span className="uppercase tracking-widest text-[10px] font-black opacity-30">思考中</span>
+                 {aiTyping}
               </div>
            </motion.div>
         )}

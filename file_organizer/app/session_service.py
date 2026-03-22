@@ -110,7 +110,7 @@ class OrganizerSessionService:
 
         session.scan_lines = scan_lines
         session.pending_plan = self._pending_plan_to_dict(rebuilt_pending)
-        session.plan_snapshot = self._plan_snapshot(rebuilt_pending, {"diff_summary": ["refresh"]})
+        session.plan_snapshot = self._plan_snapshot(rebuilt_pending, {"diff_summary": ["refresh"]}, scan_lines=scan_lines)
         session.plan_snapshot["invalidated_items"] = invalidated_items
         session.integrity_flags["is_stale"] = False
         session.integrity_flags["has_invalidated_items"] = bool(invalidated_items)
@@ -215,7 +215,7 @@ class OrganizerSessionService:
             summary=pending.summary,
         )
         session.pending_plan = self._pending_plan_to_dict(pending)
-        session.plan_snapshot = self._plan_snapshot(pending, {"diff_summary": [f"update:{item_id}"]})
+        session.plan_snapshot = self._plan_snapshot(pending, {"diff_summary": [f"update:{item_id}"]}, scan_lines=session.scan_lines)
         session.stage = "planning"
         self.store.save(session)
         self._record_event("plan.updated", session)
@@ -241,7 +241,7 @@ class OrganizerSessionService:
         )
         updated_pending = cycle_result.get("pending_plan", pending_plan) if cycle_result else pending_plan
         session.pending_plan = self._pending_plan_to_dict(updated_pending)
-        session.plan_snapshot = self._plan_snapshot(updated_pending, cycle_result or {})
+        session.plan_snapshot = self._plan_snapshot(updated_pending, cycle_result or {}, scan_lines=session.scan_lines)
         session.assistant_message = {"role": "assistant", "content": assistant_message}
         session.messages.append(session.assistant_message)
         session.summary = updated_pending.summary
@@ -484,7 +484,7 @@ class OrganizerSessionService:
                     updated_pending = cycle_result.get("pending_plan")
                     if updated_pending:
                         session.pending_plan = self._pending_plan_to_dict(updated_pending)
-                        session.plan_snapshot = self._plan_snapshot(updated_pending, cycle_result)
+                        session.plan_snapshot = self._plan_snapshot(updated_pending, cycle_result, scan_lines=session.scan_lines)
                         session.summary = updated_pending.summary
                         
                     if cycle_result.get("is_valid"):
@@ -660,7 +660,12 @@ class OrganizerSessionService:
             "summary": pending.summary,
         }
 
-    def _plan_snapshot(self, pending: PendingPlan, cycle_result: dict) -> dict:
+    def _plan_snapshot(self, pending: PendingPlan, cycle_result: dict, scan_lines: str | None = None) -> dict:
+        analysis_map = {}
+        if scan_lines:
+            for entry in self._scan_entries(scan_lines):
+                analysis_map[entry["item_id"]] = entry
+
         items = []
         grouped: dict[str, list[dict]] = {}
         for move in pending.moves:
@@ -668,11 +673,16 @@ class OrganizerSessionService:
             status = "review" if move.target.startswith("Review/") else "planned"
             if move.source in pending.unresolved_items:
                 status = "unresolved"
+            
+            # 回填扫描阶段产出的业务语义
+            analysis = analysis_map.get(move.source, {})
             item = {
                 "item_id": move.source,
                 "display_name": Path(move.source).name,
                 "source_relpath": move.source,
                 "target_relpath": move.target,
+                "suggested_purpose": analysis.get("suggested_purpose", ""),
+                "content_summary": analysis.get("summary", ""),
                 "status": status,
             }
             items.append(item)
@@ -685,6 +695,7 @@ class OrganizerSessionService:
             "summary": pending.summary,
             "items": items,
             "groups": groups,
+            "display_plan": cycle_result.get("display_plan"), # 包含 focus 和 reason
             "unresolved_items": list(pending.unresolved_items),
             "review_items": [item for item in items if item["status"] == "review"],
             "invalidated_items": [],

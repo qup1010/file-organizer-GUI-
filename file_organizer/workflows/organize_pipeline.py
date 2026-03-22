@@ -108,7 +108,7 @@ def _show_pending_plan(cli, pending_plan, display_plan: dict | None) -> None:
         show_method(
             pending_plan,
             focus=display_plan.get("focus", "summary"),
-            summary=display_plan.get("summary", ""),
+            summary=display_plan.get("reason") or display_plan.get("summary") or "",
         )
 
 
