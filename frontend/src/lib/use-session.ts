@@ -251,6 +251,23 @@ export function useSession(sessionId: string | null) {
     }
   }
 
+  async function resolveUnresolvedChoices(payload: { request_id: string; resolutions: { item_id: string; selected_folder: string; note: string }[] }) {
+    if (!sessionId) {
+      return;
+    }
+    setLoading(true);
+    setChatError(null);
+    try {
+      const response = await api.resolveUnresolvedChoices(sessionId, payload);
+      setSnapshot(response.session_snapshot);
+      setAssistantDraft("");
+    } catch (err) {
+      setChatError(err instanceof Error ? err.message : "提交待确认项失败");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function scan() {
     if (!sessionId) {
       return;
@@ -294,6 +311,22 @@ export function useSession(sessionId: string | null) {
       setSnapshot(response.session_snapshot);
     } catch (err) {
       setChatError(err instanceof Error ? err.message : "预检失败");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function returnToPlanning() {
+    if (!sessionId) {
+      return;
+    }
+    setLoading(true);
+    setChatError(null);
+    try {
+      const response = await api.returnToPlanning(sessionId);
+      setSnapshot(response.session_snapshot);
+    } catch (err) {
+      setChatError(err instanceof Error ? err.message : "返回草案失败");
     } finally {
       setLoading(false);
     }
@@ -414,9 +447,11 @@ export function useSession(sessionId: string | null) {
     composerMode,
     refreshSnapshot,
     sendMessage,
+    resolveUnresolvedChoices,
     scan,
     refreshPlan,
     runPrecheck,
+    returnToPlanning,
     execute,
     rollback,
     cleanupEmptyDirs,

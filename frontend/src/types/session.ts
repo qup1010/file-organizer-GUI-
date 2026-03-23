@@ -117,10 +117,36 @@ export interface RollbackReport {
   status: "success" | "partial_failure" | "aborted" | string;
 }
 
+export interface UnresolvedChoiceItem {
+  item_id: string;
+  display_name: string;
+  question: string;
+  suggested_folders: string[];
+}
+
+export interface UnresolvedChoiceResolution {
+  item_id: string;
+  display_name?: string;
+  selected_folder: string;
+  note: string;
+}
+
+export interface UnresolvedChoicesBlock {
+  type: "unresolved_choices";
+  request_id: string;
+  summary: string;
+  status?: "pending" | "submitted" | string;
+  items: UnresolvedChoiceItem[];
+  submitted_resolutions?: UnresolvedChoiceResolution[];
+}
+
+export type AssistantMessageBlock = UnresolvedChoicesBlock;
+
 export interface AssistantMessage {
   id: string;
   role: string;
   content: string;
+  blocks?: AssistantMessageBlock[];
 }
 
 export interface ActivityFeedEntry {
@@ -195,6 +221,12 @@ export interface MessageResponse {
   session_snapshot: SessionSnapshot;
 }
 
+export interface ResolveUnresolvedChoicesResponse {
+  session_id: string;
+  assistant_message: AssistantMessage | null;
+  session_snapshot: SessionSnapshot;
+}
+
 export interface HistoryItem {
   execution_id: string;
   target_dir: string;
@@ -218,6 +250,11 @@ export interface UpdateItemRequest {
   item_id: string;
   target_dir?: string;
   move_to_review?: boolean;
+}
+
+export interface ResolveUnresolvedChoicesRequest {
+  request_id: string;
+  resolutions: UnresolvedChoiceResolution[];
 }
 
 export interface PrecheckResponse {

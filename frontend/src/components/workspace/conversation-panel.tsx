@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   AlertTriangle,
+  ArrowRight,
   Bot,
   ChevronDown,
   ChevronRight,
@@ -16,7 +17,14 @@ import {
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
-import type { ActivityFeedEntry, AssistantMessage, ComposerMode, SessionStage } from "@/types/session";
+import type {
+  ActivityFeedEntry,
+  AssistantMessage,
+  ComposerMode,
+  SessionStage,
+  UnresolvedChoiceResolution,
+  UnresolvedChoicesBlock,
+} from "@/types/session";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -48,11 +56,170 @@ interface ConversationPanelProps {
   setMessageInput: (val: string) => void;
   onSendMessage: () => void;
   onStartScan: () => void;
+  onResolveUnresolved: (payload: { request_id: string; resolutions: UnresolvedChoiceResolution[] }) => Promise<void> | void;
   unresolvedCount: number;
   notice?: ConversationNotice | null;
 }
 
 const BUSY_STAGES = new Set<SessionStage>(["scanning", "planning", "executing", "rolling_back"]);
+
+interface ResolutionDraft {
+  selected_folder: string;
+  note: string;
+  custom_selected: boolean;
+}
+
+type ResolutionDraftMap = Record<string, ResolutionDraft>;
+
+interface UnresolvedChoicesBubbleProps {
+  block: UnresolvedChoicesBlock;
+  drafts: ResolutionDraftMap;
+  warning: string | null;
+  isSubmitting: boolean;
+  onPickFolder: (itemId: string, folder: string) => void;
+  onPickCustom: (itemId: string) => void;
+  onChangeNote: (itemId: string, note: string) => void;
+  onSetAllReview: () => void;
+  onSubmit: () => void;
+}
+
+function UnresolvedChoicesBubble({
+  block,
+  drafts,
+  warning,
+  isSubmitting,
+  onPickFolder,
+  onPickCustom,
+  onChangeNote,
+  onSetAllReview,
+  onSubmit,
+}: UnresolvedChoicesBubbleProps) {
+  const isSubmitted = block.status === "submitted";
+  const submittedMap = Object.fromEntries(
+    (block.submitted_resolutions || []).map((item) => [item.item_id, item]),
+  );
+
+  return (
+    <div className="mt-3 rounded-2xl border border-warning/20 bg-warning-container/10 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h4 className="text-sm font-bold text-on-surface">待确认项选择</h4>
+          <p className="mt-1 text-sm leading-6 text-on-surface-variant">
+            {block.summary || "请为以下文件选择更合适的目录，或补充你的分类想法。"}
+          </p>
+        </div>
+        {!isSubmitted ? (
+          <button
+            type="button"
+            onClick={onSetAllReview}
+            className="rounded-full border border-on-surface/10 px-3 py-1.5 text-xs font-bold text-on-surface-variant transition-colors hover:bg-white hover:text-on-surface"
+          >
+            全部归入 Review
+          </button>
+        ) : null}
+      </div>
+
+      <div className="mt-4 space-y-3">
+        {block.items.map((item) => {
+          const submitted = submittedMap[item.item_id];
+          const draft = drafts[item.item_id] || { selected_folder: "", note: "", custom_selected: false };
+          const selectedFolder = isSubmitted ? (submitted?.selected_folder || "") : draft.selected_folder;
+          const currentNote = isSubmitted ? (submitted?.note || "") : draft.note;
+          const customSelected = isSubmitted ? Boolean(submitted?.note) && !submitted?.selected_folder : draft.custom_selected;
+          return (
+            <div key={item.item_id} className="rounded-2xl border border-on-surface/8 bg-white/80 p-4">
+              <div className="space-y-1">
+                <p className="text-sm font-bold text-on-surface">{item.display_name}</p>
+                <p className="text-sm leading-6 text-on-surface-variant">{item.question}</p>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                {item.suggested_folders.map((folder) => (
+                  <button
+                    key={folder}
+                    type="button"
+                    disabled={isSubmitted}
+                    onClick={() => onPickFolder(item.item_id, folder)}
+                    className={cn(
+                      "rounded-full border px-3 py-2 text-xs font-bold transition-colors",
+                      selectedFolder === folder
+                        ? "border-primary bg-primary text-white"
+                        : "border-on-surface/10 bg-surface text-on-surface-variant hover:text-on-surface",
+                      isSubmitted && "cursor-default",
+                    )}
+                  >
+                    {folder}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  disabled={isSubmitted}
+                  onClick={() => onPickFolder(item.item_id, "Review")}
+                  className={cn(
+                    "rounded-full border px-3 py-2 text-xs font-bold transition-colors",
+                    selectedFolder === "Review"
+                      ? "border-warning bg-warning text-white"
+                      : "border-warning/20 bg-warning-container/10 text-warning hover:bg-warning/15",
+                    isSubmitted && "cursor-default",
+                  )}
+                >
+                  归入 Review
+                </button>
+                <button
+                  type="button"
+                  disabled={isSubmitted}
+                  onClick={() => onPickCustom(item.item_id)}
+                  className={cn(
+                    "rounded-full border px-3 py-2 text-xs font-bold transition-colors",
+                    customSelected
+                      ? "border-on-surface bg-on-surface text-white"
+                      : "border-on-surface/10 bg-surface text-on-surface-variant hover:text-on-surface",
+                    isSubmitted && "cursor-default",
+                  )}
+                >
+                  自定义
+                </button>
+              </div>
+
+              {(customSelected || (isSubmitted && currentNote)) ? (
+                <textarea
+                  value={currentNote}
+                  disabled={isSubmitted}
+                  onChange={(event) => onChangeNote(item.item_id, event.target.value)}
+                  placeholder="请输入你的自定义分类想法。"
+                  className="mt-3 min-h-[84px] w-full rounded-2xl border border-on-surface/8 bg-surface px-4 py-3 text-sm leading-6 text-on-surface outline-none transition-all placeholder:text-on-surface-variant/45 focus:border-primary/25 disabled:opacity-70"
+                />
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+
+      {warning ? (
+        <div className="mt-4 rounded-xl border border-warning/20 bg-white/80 px-4 py-3 text-sm text-warning">
+          {warning}
+        </div>
+      ) : null}
+
+      {isSubmitted ? (
+        <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-emerald-500 px-3 py-1.5 text-xs font-bold text-white">
+          <ArrowRight className="h-3.5 w-3.5" />
+          已提交本批选择
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={onSubmit}
+          disabled={isSubmitting}
+          className="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+        >
+          {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          提交这些选择
+        </button>
+      )}
+    </div>
+  );
+}
 
 export function ConversationPanel({
   messages,
@@ -66,6 +233,7 @@ export function ConversationPanel({
   setMessageInput,
   onSendMessage,
   onStartScan,
+  onResolveUnresolved,
   unresolvedCount,
   notice,
 }: ConversationPanelProps) {
@@ -73,10 +241,35 @@ export function ConversationPanel({
   const inputRef = useRef<HTMLInputElement>(null);
   const [isPinnedToBottom, setIsPinnedToBottom] = useState(true);
   const [activityOpen, setActivityOpen] = useState(BUSY_STAGES.has(stage));
+  const [resolutionDrafts, setResolutionDrafts] = useState<Record<string, ResolutionDraftMap>>({});
+  const [resolutionWarnings, setResolutionWarnings] = useState<Record<string, string | null>>({});
+  const [submittingRequestId, setSubmittingRequestId] = useState<string | null>(null);
 
   useEffect(() => {
     setActivityOpen(BUSY_STAGES.has(stage));
   }, [stage]);
+
+  useEffect(() => {
+    setResolutionDrafts((prev) => {
+      const next = { ...prev };
+      for (const message of messages) {
+        for (const block of message.blocks || []) {
+          if (block.type !== "unresolved_choices") {
+            continue;
+          }
+          const existing = next[block.request_id] || {};
+          const merged: ResolutionDraftMap = { ...existing };
+          for (const item of block.items) {
+            if (!merged[item.item_id]) {
+              merged[item.item_id] = { selected_folder: "", note: "", custom_selected: false };
+            }
+          }
+          next[block.request_id] = merged;
+        }
+      }
+      return next;
+    });
+  }, [messages]);
 
   useEffect(() => {
     if (!isPinnedToBottom) {
@@ -110,6 +303,53 @@ export function ConversationPanel({
     }
     container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
     setIsPinnedToBottom(true);
+  };
+
+  const updateDraft = (requestId: string, itemId: string, updater: (draft: ResolutionDraft) => ResolutionDraft) => {
+    setResolutionDrafts((prev) => ({
+      ...prev,
+      [requestId]: {
+        ...(prev[requestId] || {}),
+        [itemId]: updater(prev[requestId]?.[itemId] || { selected_folder: "", note: "", custom_selected: false }),
+      },
+    }));
+  };
+
+  const handleSubmitUnresolved = async (block: UnresolvedChoicesBlock) => {
+    const drafts = resolutionDrafts[block.request_id] || {};
+    const missing = block.items
+      .filter((item) => {
+        const draft = drafts[item.item_id] || { selected_folder: "", note: "", custom_selected: false };
+        const customNote = draft.custom_selected ? draft.note.trim() : "";
+        return !draft.selected_folder && !customNote;
+      })
+      .map((item) => item.display_name);
+
+    if (missing.length > 0) {
+      setResolutionWarnings((prev) => ({
+        ...prev,
+        [block.request_id]: `以下条目仍未处理：${missing.join("、")}`,
+      }));
+      return;
+    }
+
+    setResolutionWarnings((prev) => ({ ...prev, [block.request_id]: null }));
+    setSubmittingRequestId(block.request_id);
+    try {
+      await onResolveUnresolved({
+        request_id: block.request_id,
+        resolutions: block.items.map((item) => {
+          const draft = drafts[item.item_id] || { selected_folder: "", note: "", custom_selected: false };
+          return {
+            item_id: item.item_id,
+            selected_folder: draft.selected_folder,
+            note: draft.custom_selected ? draft.note.trim() : "",
+          };
+        }),
+      });
+    } finally {
+      setSubmittingRequestId((current) => (current === block.request_id ? null : current));
+    }
   };
 
   const renderNotice = notice ? (
@@ -255,7 +495,60 @@ export function ConversationPanel({
                       : "bg-primary/7 text-on-surface font-medium",
                   )}
                 >
-                  {message.content}
+                  {message.content ? <div>{message.content}</div> : null}
+                  {isAssistant && (message.blocks || []).map((block) => {
+                    if (block.type !== "unresolved_choices") {
+                      return null;
+                    }
+                    return (
+                      <UnresolvedChoicesBubble
+                        key={block.request_id}
+                        block={block}
+                        drafts={resolutionDrafts[block.request_id] || {}}
+                        warning={resolutionWarnings[block.request_id] || null}
+                        isSubmitting={submittingRequestId === block.request_id}
+                        onPickFolder={(itemId, folder) => {
+                          updateDraft(block.request_id, itemId, (draft) => ({
+                            ...draft,
+                            selected_folder: folder,
+                            custom_selected: false,
+                          }));
+                        }}
+                        onPickCustom={(itemId) => {
+                          updateDraft(block.request_id, itemId, (draft) => ({
+                            ...draft,
+                            selected_folder: "",
+                            custom_selected: true,
+                          }));
+                        }}
+                        onChangeNote={(itemId, note) => {
+                          updateDraft(block.request_id, itemId, (draft) => ({
+                            ...draft,
+                            note,
+                            custom_selected: true,
+                            selected_folder: "",
+                          }));
+                        }}
+                        onSetAllReview={() => {
+                          setResolutionDrafts((prev) => ({
+                            ...prev,
+                            [block.request_id]: Object.fromEntries(
+                              block.items.map((item) => {
+                                const current = prev[block.request_id]?.[item.item_id] || {
+                                  selected_folder: "",
+                                  note: "",
+                                  custom_selected: false,
+                                };
+                                return [item.item_id, { ...current, selected_folder: "Review", custom_selected: false }];
+                              }),
+                            ),
+                          }));
+                          setResolutionWarnings((prev) => ({ ...prev, [block.request_id]: null }));
+                        }}
+                        onSubmit={() => void handleSubmitUnresolved(block)}
+                      />
+                    );
+                  })}
                 </div>
               </motion.div>
             );

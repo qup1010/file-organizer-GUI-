@@ -38,9 +38,9 @@ interface PreviewPanelProps {
   plan: PlanSnapshot;
   stage: SessionStage;
   isBusy: boolean;
+  readOnly?: boolean;
   onRunPrecheck: () => void;
   onUpdateItem: (itemId: string, payload: { target_dir?: string; move_to_review?: boolean }) => void;
-  onPromptConflict: (itemText: string) => void;
 }
 
 function findPlanItemForConflict(plan: PlanSnapshot, rawConflict: string): PlanItem | undefined {
@@ -66,13 +66,14 @@ export function PreviewPanel({
   plan,
   stage,
   isBusy,
+  readOnly = false,
   onRunPrecheck,
   onUpdateItem,
-  onPromptConflict,
 }: PreviewPanelProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const canPrecheck = plan.readiness.can_precheck;
 
   const toggleGroup = (dir: string) => {
     setExpandedGroups((prev) => ({ ...prev, [dir]: !prev[dir] }));
@@ -101,6 +102,10 @@ export function PreviewPanel({
             ) : stage === "ready_to_execute" ? (
               <div className="px-3 py-1 bg-emerald-500 text-white rounded text-[11px] font-black shadow-sm">
                 已通过预检
+              </div>
+            ) : canPrecheck ? (
+              <div className="px-3 py-1 bg-primary text-white rounded text-[11px] font-black shadow-sm">
+                可进入预检
               </div>
             ) : (
               <div className="px-3 py-1 bg-surface-container-highest text-on-surface-variant/60 rounded text-[11px] font-black">
@@ -154,28 +159,14 @@ export function PreviewPanel({
                         <div className="flex-1">
                           <p className="text-[12.5px] font-bold text-on-surface leading-normal">{item}</p>
                           <p className="mt-2 text-[10px] text-on-surface-variant leading-relaxed">
-                            点击这里不再默认等同于“已解决”。你可以继续向 AI 澄清，或者直接把它移到 Review。
+                            这些待确认项现在只在聊天区里处理。请在左侧聊天气泡中选择候选目录、归入 Review，或填写你的分类想法。
                           </p>
-                          <div className="mt-4 flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              onClick={() => onPromptConflict(item)}
-                              className="inline-flex items-center gap-1.5 rounded-md border border-warning/20 px-3 py-2 text-[11px] font-black text-warning transition-colors hover:bg-warning/10"
-                            >
-                              继续向 AI 澄清
-                              <ChevronRight className="w-3 h-3" />
-                            </button>
-                            {matchedItem ? (
-                              <button
-                                type="button"
-                                onClick={() => onUpdateItem(matchedItem.item_id, { move_to_review: true })}
-                                className="inline-flex items-center gap-1.5 rounded-md border border-on-surface/10 px-3 py-2 text-[11px] font-black text-on-surface-variant transition-colors hover:bg-surface-container-low hover:text-on-surface"
-                              >
-                                直接移到 Review
-                                <ArrowRight className="w-3 h-3" />
-                              </button>
-                            ) : null}
-                          </div>
+                          {matchedItem ? (
+                            <div className="mt-4 inline-flex items-center gap-1.5 rounded-md border border-on-surface/10 px-3 py-2 text-[11px] font-black text-on-surface-variant">
+                              <ArrowRight className="w-3 h-3" />
+                              可在聊天区直接归入 Review
+                            </div>
+                          ) : null}
                         </div>
                       </motion.div>
                     );
@@ -190,13 +181,30 @@ export function PreviewPanel({
               <h3 className="text-xs font-black text-on-surface-variant/70 flex items-center gap-2">
                 <Layers className="w-4 h-4" /> 架构层级预览
               </h3>
-              <button
-                onClick={onRunPrecheck}
-                disabled={isBusy}
-                className="hover:text-primary transition-colors disabled:opacity-30"
-              >
-                <RefreshCw className={cn("w-3.5 h-3.5", isBusy && "animate-spin")} />
-              </button>
+              {!readOnly && canPrecheck ? (
+                <button
+                  type="button"
+                  onClick={onRunPrecheck}
+                  disabled={isBusy}
+                  className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-[11px] font-black text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-30"
+                >
+                  <RefreshCw className={cn("w-3.5 h-3.5", isBusy && "animate-spin")} />
+                  开始预检
+                </button>
+              ) : !readOnly ? (
+                <button
+                  onClick={onRunPrecheck}
+                  disabled={isBusy}
+                  className="hover:text-primary transition-colors disabled:opacity-30"
+                  title="进入预检"
+                >
+                  <RefreshCw className={cn("w-3.5 h-3.5", isBusy && "animate-spin")} />
+                </button>
+              ) : (
+                <div className="rounded-full border border-on-surface/10 px-3 py-2 text-[11px] font-bold text-on-surface-variant">
+                  只读查看
+                </div>
+              )}
             </div>
 
             <div className="space-y-1">
@@ -237,6 +245,7 @@ export function PreviewPanel({
                               <Icon className="w-3.5 h-3.5 opacity-30 group-hover/item:opacity-80 transition-opacity" />
                               <span className="truncate flex-1 tracking-tight pr-4">{item.display_name}</span>
 
+                              {!readOnly ? (
                               <div className="opacity-0 group-hover/item:opacity-100 flex items-center gap-2 transition-opacity">
                                 <button
                                   onClick={() => {
@@ -256,9 +265,10 @@ export function PreviewPanel({
                                   <ArrowRight className="w-3 h-3" />
                                 </button>
                               </div>
+                              ) : null}
                             </div>
 
-                            {isEditing ? (
+                            {!readOnly && isEditing ? (
                               <div className="flex gap-2 mt-1 px-1">
                                 <input
                                   autoFocus

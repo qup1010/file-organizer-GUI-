@@ -38,7 +38,7 @@ const STAGE_LABELS: Record<string, string> = {
   draft: "草案生成中",
   scanning: "正在分析目录",
   planning: "架构方案构思中",
-  ready_for_precheck: "等待冲突预检",
+  ready_for_precheck: "草案满足预检条件",
   ready_to_execute: "等待执行确认",
   executing: "正在执行整理",
   completed: "整理任务已完成",
@@ -315,6 +315,8 @@ export function SessionLauncher() {
   const [resumePrompt, setResumePrompt] = useState<{ sessionId: string; snapshot: SessionSnapshot } | null>(null);
 
   const resumeStrategy = resumePrompt?.snapshot.strategy || DEFAULT_STRATEGY_SUMMARY;
+  const resumeStage = resumePrompt?.snapshot.stage;
+  const isCompletedResume = resumeStage === "completed";
 
   async function handleSelectDir() {
     setLoading(true);
@@ -388,7 +390,13 @@ export function SessionLauncher() {
     setError(null);
     try {
       const api = createApiClient(apiBaseUrl);
-      const response = await startFreshSession(api, resumePrompt.sessionId, targetDir, strategy);
+      const response = await startFreshSession(
+        api,
+        resumePrompt.sessionId,
+        targetDir,
+        strategy,
+        resumePrompt.snapshot.stage,
+      );
       setResumePrompt(null);
       if (!response.session_id) {
         throw new Error("重新开始失败：后端未返回有效的访问 ID");
@@ -413,6 +421,11 @@ export function SessionLauncher() {
   function handleConfirmResume() {
     if (!resumePrompt) return;
     router.push(`/workspace?session_id=${resumePrompt.sessionId}&dir=${encodeURIComponent(targetDir)}`);
+  }
+
+  function handleReadOnlyView() {
+    if (!resumePrompt) return;
+    router.push(`/workspace?session_id=${resumePrompt.sessionId}&dir=${encodeURIComponent(targetDir)}&readonly=1`);
   }
 
   return (
@@ -510,15 +523,20 @@ export function SessionLauncher() {
                   <History className="h-6 w-6" />
                 </div>
                 <div className="space-y-1">
-                  <h2 className="text-xl font-bold font-headline text-on-surface">发现进行中的整理工作</h2>
+                  <h2 className="text-xl font-bold font-headline text-on-surface">
+                    {isCompletedResume ? "发现该目录的历史整理记录" : "发现进行中的整理工作"}
+                  </h2>
                   <p className="text-sm text-on-surface-variant">
-                    如果继续上次会话，将沿用当时的策略配置和当前整理阶段。
+                    {isCompletedResume
+                      ? "你可以只读查看旧结果，也可以直接用当前策略重新开始新一轮整理。"
+                      : "如果继续上次会话，将沿用当时的策略配置和当前整理阶段。"}
                   </p>
                 </div>
               </div>
 
               <p className="mb-5 text-sm leading-relaxed text-on-surface-variant">
-                引擎检测到该目录（<strong>{targetDir.split(/[\\/]/).pop()}</strong>）之前有未完成的整理进度（所在阶段：
+                引擎检测到该目录（<strong>{targetDir.split(/[\\/]/).pop()}</strong>）
+                {isCompletedResume ? "之前已有一条整理记录" : "之前有未完成的整理进度"}（所在阶段：
                 <em>{STAGE_LABELS[resumePrompt.snapshot.stage] || resumePrompt.snapshot.stage}</em>）。
               </p>
 
@@ -532,17 +550,25 @@ export function SessionLauncher() {
                   onClick={handleConfirmResume}
                   className="w-full rounded-xl bg-primary py-3 font-bold text-white transition-opacity hover:opacity-90 active:scale-[0.98]"
                 >
-                  继续上次整理
+                  {isCompletedResume ? "打开这次历史结果" : "继续上次整理"}
                 </button>
                 <div className="rounded-[20px] border border-on-surface/8 px-4 py-3 text-xs leading-6 text-on-surface-variant">
-                  如果选择“重新开始”，将放弃旧会话并使用你当前选中的新策略重新创建整理任务。
+                  {isCompletedResume
+                    ? "如果选择“重新开始”，将直接使用你当前选中的新策略创建一条新的整理会话。"
+                    : "如果选择“重新开始”，将放弃旧会话并使用你当前选中的新策略重新创建整理任务。"}
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-3 gap-3">
                   <button
                     onClick={() => void handleStartFresh()}
                     className="w-full rounded-xl bg-surface-container py-3 font-bold text-on-surface transition-colors hover:bg-surface-container-high active:scale-[0.98]"
                   >
                     重新开始
+                  </button>
+                  <button
+                    onClick={handleReadOnlyView}
+                    className="w-full rounded-xl bg-white py-3 font-bold text-on-surface transition-colors border border-outline-variant/20 hover:bg-surface-container-low active:scale-[0.98]"
+                  >
+                    只读查看
                   </button>
                   <button
                     onClick={handleCancelResume}

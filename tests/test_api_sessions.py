@@ -133,6 +133,26 @@ class SessionApiTests(unittest.TestCase):
         self.assertEqual(payload["restorable_session"]["strategy"]["template_id"], "project_workspace")
         self.assertEqual(payload["restorable_session"]["strategy"]["note"], "旧策略")
 
+    def test_post_sessions_allows_new_creation_when_previous_session_completed(self):
+        created = self.client.post(
+            "/api/sessions",
+            json={"target_dir": str(self.target_dir), "resume_if_exists": False},
+        ).json()
+        session = self.store.load(created["session_id"])
+        assert session is not None
+        session.stage = "completed"
+        self.store.save(session)
+
+        response = self.client.post(
+            "/api/sessions",
+            json={"target_dir": str(self.target_dir), "resume_if_exists": False},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["mode"], "created")
+        self.assertNotEqual(payload["session_id"], created["session_id"])
+
     def test_get_session_returns_snapshot(self):
         created = self.client.post(
             "/api/sessions",
@@ -249,6 +269,36 @@ class SessionApiTests(unittest.TestCase):
         self.assertEqual(rollback.status_code, 200)
         self.assertEqual(rollback.json()["session_snapshot"]["stage"], "stale")
 
+    def test_return_to_planning_endpoint_restores_ready_for_precheck_stage(self):
+        created = self.client.post(
+            "/api/sessions",
+            json={"target_dir": str(self.target_dir), "resume_if_exists": False},
+        ).json()
+        session = self.store.load(created["session_id"])
+        assert session is not None
+        session.stage = "ready_to_execute"
+        session.scan_lines = "a.txt | 文档 | A"
+        session.pending_plan = {
+            "directories": ["Docs"],
+            "moves": [{"source": "a.txt", "target": "Docs/a.txt"}],
+            "unresolved_items": [],
+            "summary": "move to docs",
+        }
+        session.precheck_summary = {
+            "can_execute": True,
+            "blocking_errors": [],
+            "warnings": [],
+            "mkdir_preview": ["Docs"],
+            "move_preview": [{"source": "a.txt", "target": "Docs/a.txt"}],
+        }
+        self.store.save(session)
+
+        response = self.client.post(f"/api/sessions/{session.session_id}/return-to-planning")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["session_snapshot"]["stage"], "ready_for_precheck")
+        self.assertIsNone(response.json()["session_snapshot"]["precheck_summary"])
+
     def test_journal_endpoint_returns_summary(self):
         (self.target_dir / "a.txt").write_text("hello", encoding="utf-8")
         created = self.client.post(
@@ -354,6 +404,44 @@ class SessionApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["assistant_message"]["content"], "已调整")
+
+    def test_unresolved_resolutions_endpoint_returns_updated_snapshot(self):
+        created = self.client.post(
+            "/api/sessions",
+            json={"target_dir": str(self.target_dir), "resume_if_exists": False},
+        ).json()
+
+        with mock.patch.object(self.service, "resolve_unresolved_choices") as resolve_unresolved_choices:
+            resolve_unresolved_choices.return_value = mock.Mock(
+                assistant_message={"role": "assistant", "content": ""},
+                session_snapshot={"stage": "planning", "messages": []},
+            )
+
+            response = self.client.post(
+                f"/api/sessions/{created['session_id']}/unresolved-resolutions",
+                json={
+                    "request_id": "req_1",
+                    "resolutions": [{"item_id": "md", "selected_folder": "Review", "note": ""}],
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["session_snapshot"]["stage"], "planning")
+
+    def test_unresolved_resolutions_endpoint_returns_409_for_conflict(self):
+        created = self.client.post(
+            "/api/sessions",
+            json={"target_dir": str(self.target_dir), "resume_if_exists": False},
+        ).json()
+
+        with mock.patch.object(self.service, "resolve_unresolved_choices", side_effect=RuntimeError("UNRESOLVED_ITEM_CONFLICT")):
+            response = self.client.post(
+                f"/api/sessions/{created['session_id']}/unresolved-resolutions",
+                json={"request_id": "req_1", "resolutions": []},
+            )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["error_code"], "UNRESOLVED_ITEM_CONFLICT")
 
 
 if __name__ == "__main__":

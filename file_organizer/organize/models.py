@@ -123,6 +123,53 @@ class PlanDisplayRequest:
         }
 
 
+@dataclass
+class UnresolvedChoiceItem:
+    item_id: str
+    display_name: str
+    question: str
+    suggested_folders: list[str] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "UnresolvedChoiceItem":
+        return cls(
+            item_id=data.get("item_id", ""),
+            display_name=data.get("display_name", ""),
+            question=data.get("question", ""),
+            suggested_folders=list(data.get("suggested_folders", [])),
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "item_id": self.item_id,
+            "display_name": self.display_name,
+            "question": self.question,
+            "suggested_folders": list(self.suggested_folders),
+        }
+
+
+@dataclass
+class UnresolvedChoiceRequest:
+    request_id: str
+    summary: str = ""
+    items: list[UnresolvedChoiceItem] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "UnresolvedChoiceRequest":
+        return cls(
+            request_id=data.get("request_id", ""),
+            summary=data.get("summary", ""),
+            items=[UnresolvedChoiceItem.from_dict(item) for item in data.get("items", [])],
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "request_id": self.request_id,
+            "summary": self.summary,
+            "items": [item.to_dict() for item in self.items],
+        }
+
+
 def derive_directories_from_moves(moves: list[PlanMove]) -> list[str]:
     directories = set()
     for move in moves:

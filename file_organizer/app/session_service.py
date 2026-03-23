@@ -228,6 +228,58 @@ class OrganizerSessionService:
         self._ensure_message_ids(context_messages)
         return assistant_message, context_messages
 
+    @staticmethod
+    def _message_blocks(message: dict) -> list[dict]:
+        blocks = message.get("blocks")
+        return blocks if isinstance(blocks, list) else []
+
+    def _find_unresolved_request_message(self, session: OrganizerSession, request_id: str) -> tuple[dict | None, dict | None]:
+        for message in reversed(session.messages):
+            if message.get("role") != "assistant":
+                continue
+            for block in self._message_blocks(message):
+                if block.get("type") == "unresolved_choices" and block.get("request_id") == request_id:
+                    return message, block
+        return None, None
+
+    @staticmethod
+    def _set_unresolved_request_status(message: dict, request_id: str, submitted_resolutions: list[dict]) -> bool:
+        updated = False
+        blocks = message.get("blocks")
+        if not isinstance(blocks, list):
+            return updated
+        for block in blocks:
+            if block.get("type") != "unresolved_choices" or block.get("request_id") != request_id:
+                continue
+            block["status"] = "submitted"
+            block["submitted_resolutions"] = [dict(item) for item in submitted_resolutions]
+            updated = True
+        return updated
+
+    def _mark_unresolved_request_submitted(
+        self,
+        session: OrganizerSession,
+        request_id: str,
+        submitted_resolutions: list[dict],
+    ) -> None:
+        for message in session.messages:
+            self._set_unresolved_request_status(message, request_id, submitted_resolutions)
+        if session.assistant_message:
+            self._set_unresolved_request_status(session.assistant_message, request_id, submitted_resolutions)
+
+    @staticmethod
+    def _resolution_summary_lines(resolutions: list[dict]) -> list[str]:
+        lines = ["我已提交以下待确认项选择："]
+        for item in resolutions:
+            label = item.get("display_name") or item.get("item_id", "")
+            selected_folder = (item.get("selected_folder") or "").strip()
+            note = (item.get("note") or "").strip()
+            if selected_folder:
+                lines.append(f"- {label} -> {selected_folder}")
+            if note:
+                lines.append(f"- {label} 备注：{note}")
+        return lines
+
 
     def submit_user_intent(self, session_id: str, content: str) -> SessionMutationResult:
         session = self._load_or_raise(session_id)
@@ -255,7 +307,121 @@ class OrganizerSessionService:
         session.messages.extend(assistant_context_messages)
         session.summary = updated_pending.summary
         session.user_constraints = list(updated_pending.user_constraints or session.user_constraints)
-        session.stage = "planning" if not (cycle_result or {}).get("is_valid") else "ready_for_precheck"
+        session.stage = self._planning_stage_for(updated_pending, session.scan_lines)
+        self.store.save(session)
+        self._record_event("plan.updated", session)
+        return SessionMutationResult(
+            session_snapshot=self._build_snapshot(session),
+            assistant_message=session.assistant_message,
+        )
+
+    def resolve_unresolved_choices(self, session_id: str, request_id: str, resolutions: list[dict]) -> SessionMutationResult:
+        session = self._load_or_raise(session_id)
+        self._ensure_mutable_stage(session)
+
+        message, request_block = self._find_unresolved_request_message(session, request_id)
+        if request_block is None or message is None:
+            raise RuntimeError("UNRESOLVED_REQUEST_NOT_FOUND")
+        if request_block.get("status") == "submitted":
+            return SessionMutationResult(
+                session_snapshot=self._build_snapshot(session),
+                assistant_message=session.assistant_message,
+                changed=False,
+            )
+
+        request_items = request_block.get("items") or []
+        item_map = {
+            item.get("item_id"): dict(item)
+            for item in request_items
+            if isinstance(item, dict) and item.get("item_id")
+        }
+        if not item_map:
+            raise ValueError("UNRESOLVED_REQUEST_INVALID")
+
+        submitted_map: dict[str, dict] = {}
+        for resolution in resolutions or []:
+            item_id = str(resolution.get("item_id") or "").strip()
+            if not item_id or item_id not in item_map:
+                raise RuntimeError("UNRESOLVED_ITEM_CONFLICT")
+            selected_folder = str(resolution.get("selected_folder") or "").strip()
+            note = str(resolution.get("note") or "").strip()
+            allowed_folders = set(item_map[item_id].get("suggested_folders") or [])
+            if selected_folder and selected_folder not in allowed_folders and selected_folder != "Review":
+                raise ValueError("UNRESOLVED_RESOLUTION_INVALID_FOLDER")
+            if not selected_folder and not note:
+                raise ValueError("UNRESOLVED_RESOLUTION_EMPTY")
+            submitted_map[item_id] = {
+                "item_id": item_id,
+                "display_name": item_map[item_id].get("display_name", item_id),
+                "selected_folder": selected_folder,
+                "note": note,
+            }
+
+        if set(submitted_map) != set(item_map):
+            raise ValueError("UNRESOLVED_RESOLUTION_INCOMPLETE")
+
+        pending = self._pending_plan_from_session(session)
+        move_map = {move.source: move for move in pending.moves}
+        for item_id in submitted_map:
+            if item_id not in move_map or item_id not in pending.unresolved_items:
+                raise RuntimeError("UNRESOLVED_ITEM_CONFLICT")
+
+        has_note = False
+        for item_id, resolution in submitted_map.items():
+            selected_folder = resolution["selected_folder"]
+            note = resolution["note"]
+            if note:
+                has_note = True
+            if not selected_folder:
+                continue
+
+            move = move_map[item_id]
+            filename = Path(item_id).name
+            normalized_dir = selected_folder.strip().strip("/\\").replace("\\", "/")
+            move.target = f"{normalized_dir}/{filename}" if normalized_dir else filename
+            pending.unresolved_items = [value for value in pending.unresolved_items if value != item_id]
+
+        pending.directories = self._directories_from_moves(pending.moves)
+        self._mark_unresolved_request_submitted(session, request_id, list(submitted_map.values()))
+        summary_message = self._ensure_message_id(
+            {
+                "role": "user",
+                "content": "\n".join(self._resolution_summary_lines(list(submitted_map.values()))),
+            }
+        )
+        session.messages.append(summary_message)
+
+        if has_note:
+            def on_plan_event(event_type: str, data: dict):
+                if event_type in {"model_wait_start", "tool_start"}:
+                    self._record_event("plan.action", session_id=session.session_id, action=data)
+                elif event_type == "ai_chunk":
+                    self._record_event("plan.ai_typing", session_id=session.session_id, content=data.get("content"))
+
+            assistant_message, cycle_result = organize_service.run_organizer_cycle(
+                messages=list(session.messages),
+                scan_lines=session.scan_lines,
+                pending_plan=pending,
+                user_constraints=list(session.user_constraints),
+                strategy_instructions=self._strategy_prompt_fragment(session),
+                event_handler=on_plan_event,
+            )
+            updated_pending = cycle_result.get("pending_plan", pending) if cycle_result else pending
+            session.pending_plan = self._pending_plan_to_dict(updated_pending)
+            session.plan_snapshot = self._plan_snapshot(updated_pending, cycle_result or {}, scan_lines=session.scan_lines)
+            session.assistant_message, assistant_context_messages = self._assistant_messages_from_cycle(assistant_message, cycle_result)
+            session.messages.extend(assistant_context_messages)
+            session.summary = updated_pending.summary
+            session.user_constraints = list(updated_pending.user_constraints or session.user_constraints)
+            session.stage = self._planning_stage_for(updated_pending, session.scan_lines)
+            session.precheck_summary = None
+        else:
+            session.pending_plan = self._pending_plan_to_dict(pending)
+            session.plan_snapshot = self._plan_snapshot(pending, {"diff_summary": ["resolve_unresolved_choices"]}, scan_lines=session.scan_lines)
+            session.summary = pending.summary
+            session.stage = self._planning_stage_for(pending, session.scan_lines)
+            session.precheck_summary = None
+
         self.store.save(session)
         self._record_event("plan.updated", session)
         return SessionMutationResult(
@@ -286,6 +452,18 @@ class OrganizerSessionService:
         session.stage = "ready_to_execute" if precheck.can_execute else "planning"
         self.store.save(session)
         self._record_event("precheck.ready", session)
+        return SessionMutationResult(session_snapshot=self._build_snapshot(session))
+
+    def return_to_planning(self, session_id: str) -> SessionMutationResult:
+        session = self._load_or_raise(session_id)
+        if session.stage != "ready_to_execute":
+            raise RuntimeError("SESSION_STAGE_CONFLICT")
+
+        pending = self._pending_plan_from_session(session)
+        session.precheck_summary = None
+        session.stage = self._planning_stage_for(pending, session.scan_lines)
+        self.store.save(session)
+        self._record_event("plan.updated", session)
         return SessionMutationResult(session_snapshot=self._build_snapshot(session))
 
     def update_item_target(
@@ -322,7 +500,7 @@ class OrganizerSessionService:
         session.plan_snapshot = self._plan_snapshot(pending, {"diff_summary": ["update_item"]}, scan_lines=session.scan_lines)
         session.summary = pending.summary
         session.precheck_summary = None
-        session.stage = "planning" if pending.unresolved_items else "ready_for_precheck"
+        session.stage = self._planning_stage_for(pending, session.scan_lines)
         self.store.save(session)
         self._record_event("plan.updated", session)
         return SessionMutationResult(session_snapshot=self._build_snapshot(session))
@@ -559,9 +737,7 @@ class OrganizerSessionService:
                         session.pending_plan = self._pending_plan_to_dict(updated_pending)
                         session.plan_snapshot = self._plan_snapshot(updated_pending, cycle_result, scan_lines=session.scan_lines)
                         session.summary = updated_pending.summary
-                        
-                    if cycle_result.get("is_valid"):
-                        session.stage = "ready_for_precheck"
+                        session.stage = self._planning_stage_for(updated_pending, session.scan_lines)
                 
                 self.store.save(session)
                 self._record_event("plan.updated", session)
@@ -620,6 +796,8 @@ class OrganizerSessionService:
     def _display_content_for_assistant(self, session: OrganizerSession, index: int) -> str:
         message = session.messages[index]
         content = message.get("content", "") or ""
+        if self._message_blocks(message):
+            return content
         if content:
             return content
 
@@ -641,6 +819,8 @@ class OrganizerSessionService:
                 return "我已经根据校验结果重新整理了计划，请看最新结果。"
             if tool_name == "focus_ui_section":
                 return "我已经把界面焦点切换到对应区域，请查看最新提示。"
+            if tool_name == "request_unresolved_choices":
+                return ""
             cursor += 1
 
         later_assistant_exists = any(
@@ -790,6 +970,27 @@ class OrganizerSessionService:
             summary=pending.get("summary", ""),
         )
 
+    @staticmethod
+    def _pending_to_final_plan(pending: PendingPlan, *, clear_unresolved: bool = False) -> FinalPlan:
+        return FinalPlan(
+            directories=list(pending.directories),
+            moves=[PlanMove(source=move.source, target=move.target, raw=move.raw) for move in pending.moves],
+            unresolved_items=[] if clear_unresolved else list(pending.unresolved_items),
+            summary=pending.summary,
+        )
+
+    def _can_precheck_pending_plan(self, pending: PendingPlan, scan_lines: str | None) -> bool:
+        if not scan_lines or not pending.moves or pending.unresolved_items:
+            return False
+        validation = organize_service.validate_final_plan(
+            scan_lines,
+            self._pending_to_final_plan(pending, clear_unresolved=True),
+        )
+        return bool(validation.get("is_valid"))
+
+    def _planning_stage_for(self, pending: PendingPlan, scan_lines: str | None) -> str:
+        return "ready_for_precheck" if self._can_precheck_pending_plan(pending, scan_lines) else "planning"
+
     def _pending_plan_from_session(self, session: OrganizerSession) -> PendingPlan:
         pending = session.pending_plan or {}
         return PendingPlan(
@@ -860,7 +1061,7 @@ class OrganizerSessionService:
                 "move_count": len(pending.moves),
                 "unresolved_count": len(pending.unresolved_items),
             },
-            "readiness": {"can_precheck": not pending.unresolved_items},
+            "readiness": {"can_precheck": self._can_precheck_pending_plan(pending, scan_lines)},
         }
 
     def _latest_execution_id(self, target_dir: Path) -> str | None:

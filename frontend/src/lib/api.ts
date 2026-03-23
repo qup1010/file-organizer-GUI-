@@ -9,6 +9,8 @@ import {
   type ScanAcceptedResponse,
   type GetSessionResponse,
   type ResumeSessionResponse,
+  type ResolveUnresolvedChoicesRequest,
+  type ResolveUnresolvedChoicesResponse,
   type SessionSnapshot,
   type HistoryItem,
   type AppConfig,
@@ -39,8 +41,10 @@ export interface ApiClient {
   scanSession(session_id: string): Promise<ScanAcceptedResponse>;
   refreshSession(session_id: string): Promise<ScanAcceptedResponse>;
   sendMessage(session_id: string, content: string): Promise<MessageResponse>;
+  resolveUnresolvedChoices(session_id: string, payload: ResolveUnresolvedChoicesRequest): Promise<ResolveUnresolvedChoicesResponse>;
   updateItem(session_id: string, payload: UpdateItemRequest): Promise<{ session_id: string; session_snapshot: SessionSnapshot }>;
   runPrecheck(session_id: string): Promise<PrecheckResponse>;
+  returnToPlanning(session_id: string): Promise<{ session_id: string; session_snapshot: SessionSnapshot }>;
   execute(session_id: string, confirm?: boolean): Promise<ExecuteResponse>;
   cleanupEmptyDirs(session_id: string): Promise<CleanupResponse>;
   rollback(session_id: string, confirm?: boolean): Promise<RollbackResponse>;
@@ -104,6 +108,14 @@ export function createApiClient(baseUrl: string): ApiClient {
       });
       return parseResponse<MessageResponse>(response);
     },
+    async resolveUnresolvedChoices(session_id, payload) {
+      const response = await fetch(joinUrl(baseUrl, `/api/sessions/${session_id}/unresolved-resolutions`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      return parseResponse<ResolveUnresolvedChoicesResponse>(response);
+    },
     async updateItem(session_id, payload) {
       const response = await fetch(joinUrl(baseUrl, `/api/sessions/${session_id}/update-item`), {
         method: "POST",
@@ -117,6 +129,12 @@ export function createApiClient(baseUrl: string): ApiClient {
         method: "POST",
       });
       return parseResponse<PrecheckResponse>(response);
+    },
+    async returnToPlanning(session_id) {
+      const response = await fetch(joinUrl(baseUrl, `/api/sessions/${session_id}/return-to-planning`), {
+        method: "POST",
+      });
+      return parseResponse<{ session_id: string; session_snapshot: SessionSnapshot }>(response);
     },
     async execute(session_id, confirm = true) {
       const response = await fetch(joinUrl(baseUrl, `/api/sessions/${session_id}/execute`), {

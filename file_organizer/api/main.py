@@ -154,11 +154,44 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
                 raise HTTPException(status_code=404, detail="ITEM_NOT_FOUND")
             return _error_response(app.state.service, session_id, "SESSION_STAGE_CONFLICT", 409)
 
+    @app.post("/api/sessions/{session_id}/unresolved-resolutions")
+    def resolve_unresolved_choices(session_id: str, payload: dict):
+        try:
+            result = app.state.service.resolve_unresolved_choices(
+                session_id,
+                str(payload.get("request_id") or ""),
+                list(payload.get("resolutions") or []),
+            )
+            return {
+                "session_id": session_id,
+                "assistant_message": result.assistant_message,
+                "session_snapshot": result.session_snapshot,
+            }
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="SESSION_NOT_FOUND")
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        except RuntimeError as exc:
+            if str(exc) == "UNRESOLVED_REQUEST_NOT_FOUND":
+                return _error_response(app.state.service, session_id, "UNRESOLVED_REQUEST_NOT_FOUND", 409)
+            if str(exc) == "UNRESOLVED_ITEM_CONFLICT":
+                return _error_response(app.state.service, session_id, "UNRESOLVED_ITEM_CONFLICT", 409)
+            return _error_response(app.state.service, session_id, "SESSION_STAGE_CONFLICT", 409)
 
     @app.post("/api/sessions/{session_id}/precheck")
     def precheck(session_id: str):
         try:
             result = app.state.service.run_precheck(session_id)
+            return {"session_id": session_id, "session_snapshot": result.session_snapshot}
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="SESSION_NOT_FOUND")
+        except RuntimeError:
+            return _error_response(app.state.service, session_id, "SESSION_STAGE_CONFLICT", 409)
+
+    @app.post("/api/sessions/{session_id}/return-to-planning")
+    def return_to_planning(session_id: str):
+        try:
+            result = app.state.service.return_to_planning(session_id)
             return {"session_id": session_id, "session_snapshot": result.session_snapshot}
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail="SESSION_NOT_FOUND")

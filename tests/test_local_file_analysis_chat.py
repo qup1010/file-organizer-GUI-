@@ -15,13 +15,13 @@ class ScannerServiceTests(unittest.TestCase):
         self.assertIn("items", system_prompt)
         self.assertIn("当前层", system_prompt)
 
-    def test_build_system_prompt_describes_image_and_archive_capabilities(self):
+    def test_build_system_prompt_describes_local_file_and_submission_capabilities(self):
         system_prompt = scanner_service.build_system_prompt("示例文件列表")
 
-        self.assertIn("图片", system_prompt)
-        self.assertIn("zip", system_prompt.lower())
-        self.assertIn("简短摘要", system_prompt)
-        self.assertIn("编码", system_prompt)
+        self.assertIn("read_local_file", system_prompt)
+        self.assertIn("list_local_files", system_prompt)
+        self.assertIn("summary 要简洁", system_prompt)
+        self.assertIn("一一对应", system_prompt)
 
     def test_tool_list_contains_submission_and_reading_tools(self):
         tool_names = [tool["function"]["name"] for tool in scanner_service.tools]
@@ -38,45 +38,43 @@ class ScannerServiceTests(unittest.TestCase):
         self.assertIn("zip", description.lower())
         self.assertIn("编码", description)
 
-    def test_organizer_prompt_requires_diff_display_and_final_tools(self):
+    def test_organizer_prompt_requires_diff_focus_and_unresolved_choice_tools(self):
         prompt = organizer_service.build_prompt("合同.pdf | 财务/合同 | 付款协议")
 
         self.assertIn("submit_plan_diff", prompt)
         self.assertNotIn("submit_plan_patch", prompt)
-        self.assertIn("present_current_plan", prompt)
-        self.assertIn("submit_final_plan", prompt)
+        self.assertIn("request_unresolved_choices", prompt)
+        self.assertIn("focus_ui_section", prompt)
+        self.assertNotIn("submit_final_plan", prompt)
         self.assertIn("unresolved_items", prompt)
 
     def test_organizer_prompt_restores_classification_rules_and_diff_semantics(self):
         prompt = organizer_service.build_prompt("合同.pdf | 财务/合同 | 付款协议")
 
         self.assertIn("若用途不明确，再结合“内容摘要”判断", prompt)
-        self.assertIn("若到最终提交前仍无法判断，则归入 Review", prompt)
-        self.assertIn("目录尽量少", prompt)
-        self.assertIn("同一用途的项目应尽量进入同一目录", prompt)
-        self.assertIn("Finance > Documents", prompt)
-        self.assertIn("Projects > Documents", prompt)
-        self.assertIn("Study > Media", prompt)
-        self.assertIn("Screenshots > Media", prompt)
+        self.assertIn("若到最终提交前仍无法判断或用户未回答，默认落点统一归入 Review/", prompt)
+        self.assertIn("不要过度细分", prompt)
+        self.assertIn("按实际用途归到清晰的大类", prompt)
+        self.assertIn("Finance > Projects > Study > Screenshots > Media > Documents", prompt)
         self.assertIn("submit_plan_diff", prompt)
         self.assertIn("directory_renames", prompt)
         self.assertIn("move_updates", prompt)
-        self.assertIn("未回答则归入 Review", prompt)
+        self.assertIn("默认落点统一归入 Review/", prompt)
 
     def test_organizer_prompt_describes_directory_semantics_and_user_preference_priority(self):
         prompt = organizer_service.build_prompt("合同.pdf | 财务/合同 | 付款协议")
 
-        self.assertIn("Installers：安装包、安装程序、软件分发文件", prompt)
-        self.assertIn("Projects：项目代码、项目文档、项目资源", prompt)
-        self.assertIn("Finance：合同、账单、发票、报销、付款记录等财务相关内容", prompt)
-        self.assertIn("Archives：备份、历史归档、旧资料；不能仅因为是压缩包就放入此类", prompt)
-        self.assertIn("若用户没有明确要求，优先复用推荐目录名", prompt)
-        self.assertIn("若用户明确指定目录命名或归类方式，应优先遵循用户偏好", prompt)
-        self.assertIn("默认展示“摘要视图”", prompt)
+        self.assertIn("优先考虑的目录语义：项目资料、财务票据、学习资料、安装程序、截图记录、媒体素材、历史归档、待确认", prompt)
+        self.assertIn("目录命名风格：优先使用简洁、自然、统一的中文目录名", prompt)
+        self.assertIn("整理保守度：平衡", prompt)
+        self.assertIn("允许为清晰结构创建适量目录，但不要过度细分", prompt)
+        self.assertIn("当前固定整理策略（必须优先遵守）", prompt)
+        self.assertIn("suggested_folders", prompt)
+        self.assertIn("focus_ui_section", prompt)
         self.assertIn("summary", prompt)
         self.assertIn("details", prompt)
-        self.assertIn("不要在自然语言中重复完整计划", prompt)
-        self.assertNotIn("目标路径必须与原路径一致", prompt)
+        self.assertIn("不要在“content”中罗列完整计划列表", prompt)
+        self.assertNotIn("submit_final_plan", prompt)
 
     def test_append_output_result_extracts_output_block(self):
         output_dir = Path("test_temp_scanner_output")

@@ -8,6 +8,7 @@ from file_organizer.organize.models import (
     PlanDiff,
     PlanDisplayRequest,
     PlanMove,
+    UnresolvedChoiceRequest,
     derive_directories_from_moves,
 )
 from file_organizer.organize.prompts import build_prompt
@@ -21,6 +22,7 @@ MOVE_LINE_RE = re.compile(r'^\s*MOVE\s+"(.*?)"\s+"(.*?)"\s*$', flags=re.I)
 MKDIR_LINE_RE = re.compile(r'^\s*MKDIR\s+"(.*?)"\s*$', flags=re.I)
 PLAN_DIFF_TOOL_NAME = "submit_plan_diff"
 PRESENT_PLAN_TOOL_NAME = "focus_ui_section"
+UNRESOLVED_CHOICES_TOOL_NAME = "request_unresolved_choices"
 FINAL_PLAN_TOOL_NAME = "submit_final_plan"
 MODEL_WAIT_MESSAGE = "正在等待模型回复..."
 
@@ -88,12 +90,26 @@ def _serialize_tool_call_delta(tool_call_delta) -> dict:
     }
 
 
-def _build_assistant_message(content: str, tool_calls=None) -> dict:
+def _build_assistant_message(content: str, tool_calls=None, blocks: list[dict] | None = None) -> dict:
     message = {"role": "assistant", "content": content or ""}
     serialized_tool_calls = _serialize_tool_calls(tool_calls)
     if serialized_tool_calls:
         message["tool_calls"] = serialized_tool_calls
+    if blocks:
+        message["blocks"] = list(blocks)
     return message
+
+
+def _unresolved_request_to_block(request: UnresolvedChoiceRequest | None) -> dict | None:
+    if request is None:
+        return None
+    return {
+        "type": "unresolved_choices",
+        "request_id": request.request_id,
+        "summary": request.summary,
+        "status": "pending",
+        "items": [item.to_dict() for item in request.items],
+    }
 
 
 def _build_tool_result_message(tool_call_id: str | None, name: str, content: dict) -> dict:
@@ -111,6 +127,7 @@ def _build_tool_result_messages(
     plan_diff=None,
     diff_errors: list[str] | None = None,
     display_request: PlanDisplayRequest | None = None,
+    unresolved_request: UnresolvedChoiceRequest | None = None,
     validation: dict | None = None,
 ) -> list[dict]:
     tool_messages = []
@@ -127,6 +144,11 @@ def _build_tool_result_messages(
                 "ok": display_request is not None,
                 "display_plan": display_request.to_dict() if display_request else None,
             }
+        elif name == UNRESOLVED_CHOICES_TOOL_NAME:
+            payload = {
+                "ok": unresolved_request is not None,
+                "request_id": getattr(unresolved_request, "request_id", ""),
+            }
         elif name == FINAL_PLAN_TOOL_NAME:
             payload = {
                 "ok": bool(validation and validation.get("is_valid")),
@@ -139,6 +161,94 @@ def _build_tool_result_messages(
             _build_tool_result_message(getattr(tool_call, "id", None), name, payload)
         )
     return tool_messages
+
+
+def _render_blocks_for_llm(blocks: list[dict] | None) -> str:
+    if not blocks:
+        return ""
+
+    lines: list[str] = []
+    for block in blocks:
+        if not isinstance(block, dict):
+            continue
+        if block.get("type") != "unresolved_choices":
+            continue
+
+        request_id = str(block.get("request_id") or "").strip()
+        summary = str(block.get("summary") or "").strip()
+        status = str(block.get("status") or "pending").strip()
+        header = f"[待确认请求 {request_id} | 状态: {status}]".strip()
+        if summary:
+            header = f"{header} {summary}"
+        lines.append(header)
+
+        for item in block.get("items") or []:
+            if not isinstance(item, dict):
+                continue
+            display_name = str(item.get("display_name") or item.get("item_id") or "").strip()
+            question = str(item.get("question") or "").strip()
+            folders = [str(folder).strip() for folder in (item.get("suggested_folders") or []) if str(folder).strip()]
+            item_line = f"- {display_name}"
+            if question:
+                item_line = f"{item_line}: {question}"
+            lines.append(item_line)
+            if folders:
+                lines.append(f"  候选目录: {' / '.join(folders)}")
+
+        submitted = block.get("submitted_resolutions") or []
+        if submitted:
+            lines.append("  用户已提交选择：")
+            for resolution in submitted:
+                if not isinstance(resolution, dict):
+                    continue
+                label = str(resolution.get("display_name") or resolution.get("item_id") or "").strip()
+                selected_folder = str(resolution.get("selected_folder") or "").strip()
+                note = str(resolution.get("note") or "").strip()
+                if selected_folder:
+                    lines.append(f"  - {label} -> {selected_folder}")
+                if note:
+                    lines.append(f"  - {label} 备注: {note}")
+
+    return "\n".join(lines).strip()
+
+
+def _sanitize_messages_for_llm(messages: list[dict]) -> list[dict]:
+    sanitized: list[dict] = []
+    for message in messages or []:
+        if not isinstance(message, dict):
+            continue
+        role = str(message.get("role") or "").strip()
+        if not role:
+            continue
+
+        content = str(message.get("content") or "")
+        block_context = _render_blocks_for_llm(message.get("blocks"))
+        if block_context:
+            content = f"{content}\n\n{block_context}".strip() if content.strip() else block_context
+
+        if role in {"system", "user"}:
+            sanitized.append({"role": role, "content": content})
+            continue
+
+        if role == "assistant":
+            assistant_message = {"role": "assistant", "content": content}
+            serialized_tool_calls = _serialize_tool_calls(message.get("tool_calls"))
+            if serialized_tool_calls:
+                assistant_message["tool_calls"] = serialized_tool_calls
+            sanitized.append(assistant_message)
+            continue
+
+        if role == "tool":
+            tool_message = {
+                "role": "tool",
+                "content": content,
+                "tool_call_id": message.get("tool_call_id"),
+            }
+            sanitized.append(tool_message)
+            continue
+
+        sanitized.append({"role": role, "content": content})
+    return sanitized
 
 
 def _debug_enabled() -> bool:
@@ -223,10 +333,12 @@ def chat_one_round(messages: list, event_handler=None, model: str = ORGANIZER_MO
     stream_enabled = _stream_enabled()
     debug_log = RUNTIME_DIR / "debug_prompt.json"
     
+    request_messages = _sanitize_messages_for_llm(messages)
+
     if is_debug:
         history = []
         # 如果是起始消息（系统提示+第一条提问），则清空之前的日志
-        is_first_round = len(messages) <= 2
+        is_first_round = len(request_messages) <= 2
         
         if not is_first_round and debug_log.exists():
             history = _load_debug_history(debug_log)
@@ -235,7 +347,7 @@ def chat_one_round(messages: list, event_handler=None, model: str = ORGANIZER_MO
         new_entry = {
             "round": current_round,
             "timestamp": datetime.now().strftime("%H:%M:%S"),
-            "request": messages,
+            "request": request_messages,
             "request_meta": {
                 "stream": stream_enabled,
                 "tool_choice": tool_choice,
@@ -264,7 +376,7 @@ def chat_one_round(messages: list, event_handler=None, model: str = ORGANIZER_MO
     try:
         stream = client.chat.completions.create(
             model=model,
-            messages=messages,
+            messages=request_messages,
             tools=tools or organizer_tools,
             tool_choice=tool_choice,
             stream=stream_enabled
@@ -796,17 +908,22 @@ def _build_repair_messages(
     ]
 
 
-def _extract_plan_submissions(message) -> tuple[str, PlanDiff | None, FinalPlan | None, PlanDisplayRequest | None]:
+def _extract_plan_submissions(
+    message,
+) -> tuple[str, PlanDiff | None, FinalPlan | None, PlanDisplayRequest | None, UnresolvedChoiceRequest | None]:
     content = getattr(message, "content", "") or ""
     plan_diff = None
     final_plan = None
     display_request = None
+    unresolved_request = None
     for tool_call in getattr(message, "tool_calls", None) or []:
         args = json.loads(tool_call.function.arguments)
         if tool_call.function.name == PLAN_DIFF_TOOL_NAME:
             plan_diff = PlanDiff.from_dict(args)
         elif tool_call.function.name == PRESENT_PLAN_TOOL_NAME:
             display_request = PlanDisplayRequest.from_dict(args)
+        elif tool_call.function.name == UNRESOLVED_CHOICES_TOOL_NAME:
+            unresolved_request = UnresolvedChoiceRequest.from_dict(args)
         elif tool_call.function.name == FINAL_PLAN_TOOL_NAME:
             final_plan = FinalPlan.from_dict(args)
             
@@ -814,7 +931,7 @@ def _extract_plan_submissions(message) -> tuple[str, PlanDiff | None, FinalPlan 
         final_plan = None
         content += "\n[系统提示: 你在同一轮回复中既提交了 plan_diff 增量更新，又提交了 final_plan 最终计划。系统已优先执行 plan_diff 更新状态。请在之后用户确认无误的一轮中，单独调用 final_plan。]"
         
-    return content, plan_diff, final_plan, display_request
+    return content, plan_diff, final_plan, display_request, unresolved_request
 
 
 def run_organizer_cycle(
@@ -838,8 +955,16 @@ def run_organizer_cycle(
         # 核心：发起 AI 对话获取建议
         message = chat_one_round(llm_messages, event_handler=event_handler, model=model, return_message=True)
         raw_content = getattr(message, "content", "") or ""
-        content, plan_diff, final_plan, display_request = _extract_plan_submissions(message)
-        assistant_context_message = _build_assistant_message(raw_content, getattr(message, "tool_calls", None))
+        content, plan_diff, final_plan, display_request, unresolved_request = _extract_plan_submissions(message)
+        message_blocks = []
+        unresolved_block = _unresolved_request_to_block(unresolved_request)
+        if unresolved_block:
+            message_blocks.append(unresolved_block)
+        assistant_context_message = _build_assistant_message(
+            raw_content,
+            getattr(message, "tool_calls", None),
+            blocks=message_blocks,
+        )
         synthetic_content_used = False
         
         # HACK: 补救逻辑。如果模型没说话（可能由于 Tool Use 机制仅输出了工具调用）
@@ -849,7 +974,11 @@ def run_organizer_cycle(
             content = f"我已经根据你的要求更新了计划：{plan_diff.summary}"
             emit(event_handler, "ai_chunk", {"content": content})
 
-        assistant_display_message = _build_assistant_message(content, getattr(message, "tool_calls", None))
+        assistant_display_message = _build_assistant_message(
+            content,
+            getattr(message, "tool_calls", None),
+            blocks=message_blocks,
+        )
         _update_debug_log_response(
             raw_content=raw_content,
             display_content=content,
@@ -868,6 +997,7 @@ def run_organizer_cycle(
                 plan_diff=plan_diff,
                 diff_errors=diff_errors,
                 display_request=display_request,
+                unresolved_request=unresolved_request,
             )
             assistant_context_messages = [assistant_context_message, *tool_result_messages]
             
@@ -890,6 +1020,7 @@ def run_organizer_cycle(
                 "pending_plan": updated_pending,
                 "diff_summary": diff_summary,
                 "display_plan": display_plan,
+                "unresolved_request": unresolved_request.to_dict() if unresolved_request else None,
                 "final_plan": None,
                 "repair_mode": False,
                 "user_constraints": current_constraints,
@@ -903,12 +1034,14 @@ def run_organizer_cycle(
             tool_result_messages = _build_tool_result_messages(
                 message,
                 display_request=display_request,
+                unresolved_request=unresolved_request,
             )
             return content, {
                 "is_valid": False,
                 "pending_plan": current_pending,
                 "diff_summary": [],
                 "display_plan": display_plan,
+                "unresolved_request": unresolved_request.to_dict() if unresolved_request else None,
                 "final_plan": None,
                 "repair_mode": False,
                 "user_constraints": current_constraints,
@@ -923,6 +1056,7 @@ def run_organizer_cycle(
         tool_result_messages = _build_tool_result_messages(
             message,
             display_request=display_request,
+            unresolved_request=unresolved_request,
             validation=validation,
         )
         assistant_context_messages = [assistant_context_message, *tool_result_messages]
@@ -935,6 +1069,7 @@ def run_organizer_cycle(
                 "pending_plan": updated_pending,
                 "diff_summary": diff_summary,
                 "display_plan": display_plan,
+                "unresolved_request": unresolved_request.to_dict() if unresolved_request else None,
                 "final_plan": final_plan,
                 "repair_mode": False,
                 "user_constraints": current_constraints,
@@ -963,7 +1098,7 @@ def run_organizer_cycle(
             tools=[tool for tool in organizer_tools if tool["function"]["name"] == FINAL_PLAN_TOOL_NAME],
             return_message=True,
         )
-        repair_content, _, repaired_plan, _ = _extract_plan_submissions(repair_message)
+        repair_content, _, repaired_plan, _, _ = _extract_plan_submissions(repair_message)
         repair_validation = validate_final_plan(scan_lines, repaired_plan or FinalPlan())
         if repaired_plan is not None and repair_validation["is_valid"]:
             emit(event_handler, "command_validation_pass", {"attempt": attempt + 1, "details": repair_validation})
@@ -1056,6 +1191,39 @@ organizer_tools = [
     {
         "type": "function",
         "function": {
+            "name": UNRESOLVED_CHOICES_TOOL_NAME,
+            "description": "为需要用户明确决策的待确认项生成聊天区交互卡片。每个 item 必须提供 2 个候选目录名，且不要把 Review 放进 suggested_folders。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "request_id": {"type": "string"},
+                    "summary": {"type": "string"},
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "item_id": {"type": "string"},
+                                "display_name": {"type": "string"},
+                                "question": {"type": "string"},
+                                "suggested_folders": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                    "minItems": 2,
+                                    "maxItems": 2,
+                                },
+                            },
+                            "required": ["item_id", "display_name", "question", "suggested_folders"],
+                        },
+                    },
+                },
+                "required": ["request_id", "summary", "items"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": PRESENT_PLAN_TOOL_NAME,
             "description": "引导用户查看前端界面的特定区域（如：切换到变动详情页或问题项列表）。由于数据状态会自动同步，你仅在需要引导用户视觉焦点时调用此工具。",
             "parameters": {
@@ -1072,33 +1240,6 @@ organizer_tools = [
                     },
                 },
                 "required": ["focus", "reason"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": FINAL_PLAN_TOOL_NAME,
-            "description": "提交最终可执行的结构化整理计划。",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "directories": {"type": "array", "items": {"type": "string"}},
-                    "moves": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "source": {"type": "string"},
-                                "target": {"type": "string"},
-                            },
-                            "required": ["source", "target"],
-                        },
-                    },
-                    "unresolved_items": {"type": "array", "items": {"type": "string"}},
-                    "summary": {"type": "string"},
-                },
-                "required": ["directories", "moves", "unresolved_items", "summary"],
             },
         },
     },

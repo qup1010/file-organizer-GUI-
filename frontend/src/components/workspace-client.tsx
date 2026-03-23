@@ -18,6 +18,7 @@ export default function WorkspaceClient() {
   const router = useRouter();
   const sessionIdParam = searchParams.get("session_id");
   const dirParam = searchParams.get("dir");
+  const isReadOnly = searchParams.get("readonly") === "1";
 
   const {
     snapshot,
@@ -31,9 +32,11 @@ export default function WorkspaceClient() {
     chatError,
     composerMode,
     sendMessage,
+    resolveUnresolvedChoices,
     scan,
     refreshPlan,
     runPrecheck,
+    returnToPlanning,
     execute,
     rollback,
     cleanupEmptyDirs,
@@ -80,6 +83,8 @@ export default function WorkspaceClient() {
   const precheck = snapshot?.precheck_summary ?? null;
   const isBusy = ["scanning", "executing", "rolling_back"].includes(stage) || loading;
   const progressPercent = scanner.total_count > 0 ? (scanner.processed_count / scanner.total_count) * 100 : 0;
+  const showConversationPane = !["ready_to_execute", "completed"].includes(stage);
+  const effectiveComposerMode = isReadOnly ? "hidden" : composerMode;
 
   const handleStartResizing = () => {
     isResizing.current = true;
@@ -106,7 +111,7 @@ export default function WorkspaceClient() {
   };
 
   const handleSendMessage = async () => {
-    if (!messageInput.trim() || isBusy) {
+    if (isReadOnly || !messageInput.trim() || isBusy) {
       return;
     }
     const content = messageInput;
@@ -114,29 +119,48 @@ export default function WorkspaceClient() {
     await sendMessage(content);
   };
 
-  const handlePromptConflict = (itemText: string) => {
-    const prompt = `请继续澄清这个冲突项：${itemText}\n请明确说明它应该归到哪个目录；如果你已经能确定，请直接更新计划并移除对应的待确认项。`;
-    if (!messageInput.includes(prompt)) {
-      setMessageInput((prev) => (prev ? `${prev}\n${prompt}` : prompt));
-    }
-  };
-
   const handleExitWorkbench = () => {
+    if (isReadOnly) {
+      router.push("/");
+      return;
+    }
     if (window.confirm("确定要放弃当前会话并返回首页吗？")) {
       void abandonSession().then(() => router.push("/"));
     }
   };
 
   const statusNotice = useMemo<ConversationNotice | null>(() => {
+    if (isReadOnly && stage !== "completed") {
+      return {
+        tone: "warning",
+        title: "这是旧会话的只读视图",
+        description: "你当前只能查看旧草案和历史消息，不能继续提交修改、预检或执行。如需继续整理，请返回启动页选择恢复上次整理或重新开始。",
+      };
+    }
+
+    if (stage === "ready_for_precheck" || (stage === "planning" && plan.readiness.can_precheck)) {
+      return {
+        tone: "info",
+        title: "当前整理草案已满足预检条件",
+        description: "当前已经没有待确认项，结构校验也已通过。你可以开始预检真实文件系统冲突；这一步不会立即执行文件移动。",
+        primaryAction: isReadOnly ? undefined : {
+          label: "开始预检",
+          onClick: () => {
+            void runPrecheck();
+          },
+        },
+      };
+    }
+
     if (stage === "ready_to_execute") {
       return {
         tone: "info",
-        title: "方案已进入预检确认阶段",
-        description: "当前聊天输入已收起。请在右侧确认执行，或返回上一阶段继续修改方案。",
-        primaryAction: {
+        title: "真实文件系统预检已完成",
+        description: "当前草案已经通过真实文件系统检查。请在右侧核对目录树前后变化，再决定是否执行。",
+        primaryAction: isReadOnly ? undefined : {
           label: "返回修改方案",
           onClick: () => {
-            void sendMessage("我需要修改方案，请重新评估。");
+            void returnToPlanning();
           },
         },
       };
@@ -177,13 +201,13 @@ export default function WorkspaceClient() {
     if (stage === "completed") {
       return {
         tone: "info",
-        title: "整理已完成",
-        description: "左侧保留本次会话摘要，右侧展示执行结果与回退操作。",
+        title: isReadOnly ? "历史整理结果（只读）" : "整理已完成",
+        description: isReadOnly ? "当前仅查看历史结果，不会触发新的执行或回退动作。" : "左侧保留本次会话摘要，右侧展示执行结果与回退操作。",
       };
     }
 
     return null;
-  }, [refreshPlan, sendMessage, snapshot?.last_error, stage]);
+  }, [isReadOnly, plan.readiness.can_precheck, refreshPlan, runPrecheck, returnToPlanning, snapshot?.last_error, stage]);
 
   React.useEffect(() => {
     if (stage === "completed" && !journal && !journalLoading && !isBusy) {
@@ -194,6 +218,7 @@ export default function WorkspaceClient() {
   return (
     <div className="flex-1 flex min-h-0 overflow-hidden relative bg-surface">
       <ErrorBoundary fallbackTitle="工作台引擎崩溃" className="flex-1">
+        {showConversationPane ? (
         <section style={{ width: `${leftWidth}%` }} className="relative flex min-h-0 h-full min-w-[400px] flex-col">
           <div className="shrink-0 px-8 py-5 min-h-[104px] flex items-start justify-between border-b border-on-surface/5 bg-surface/88 backdrop-blur-sm z-10 gap-4">
             <div className="flex items-start gap-4">
@@ -249,28 +274,36 @@ export default function WorkspaceClient() {
             assistantDraft={assistantDraft}
             activityFeed={activityFeed}
             error={chatError}
-            composerMode={composerMode}
+            composerMode={effectiveComposerMode}
             isBusy={isBusy}
             stage={stage}
             messageInput={messageInput}
             setMessageInput={setMessageInput}
             onSendMessage={handleSendMessage}
             onStartScan={() => void scan()}
+            onResolveUnresolved={(payload) => {
+              if (!isReadOnly) {
+                void resolveUnresolvedChoices(payload);
+              }
+            }}
             unresolvedCount={plan.unresolved_items.length}
             notice={statusNotice}
           />
         </section>
+        ) : null}
 
-        <div
-          onMouseDown={handleStartResizing}
-          className="absolute top-0 bottom-0 w-1 hover:bg-primary/20 cursor-col-resize z-20 transition-all flex items-center justify-center group"
-          style={{ left: `calc(${leftWidth}% - 0.5px)` }}
-        >
-          <div className="w-[1px] h-full bg-on-surface/5 transition-colors group-hover:bg-primary/40" />
-        </div>
+        {showConversationPane ? (
+          <div
+            onMouseDown={handleStartResizing}
+            className="absolute top-0 bottom-0 w-1 hover:bg-primary/20 cursor-col-resize z-20 transition-all flex items-center justify-center group"
+            style={{ left: `calc(${leftWidth}% - 0.5px)` }}
+          >
+            <div className="w-[1px] h-full bg-on-surface/5 transition-colors group-hover:bg-primary/40" />
+          </div>
+        ) : null}
 
         <section
-          style={{ width: `${100 - leftWidth}%` }}
+          style={{ width: showConversationPane ? `${100 - leftWidth}%` : "100%" }}
           className="flex min-h-0 h-full min-w-[340px] flex-col bg-surface overflow-y-auto"
         >
           <div className="flex-1">
@@ -285,9 +318,18 @@ export default function WorkspaceClient() {
                   loading={journalLoading || !journal}
                   targetDir={snapshot?.target_dir || ""}
                   isBusy={isBusy}
+                  readOnly={isReadOnly}
                   onOpenExplorer={() => void openExplorer(snapshot?.target_dir || "")}
-                  onCleanupDirs={() => void cleanupEmptyDirs()}
-                  onRollback={() => void rollback()}
+                  onCleanupDirs={() => {
+                    if (!isReadOnly) {
+                      void cleanupEmptyDirs();
+                    }
+                  }}
+                  onRollback={() => {
+                    if (!isReadOnly) {
+                      void rollback();
+                    }
+                  }}
                 />
               </div>
             ) : stage === "ready_to_execute" ? (
@@ -295,9 +337,16 @@ export default function WorkspaceClient() {
                 <PrecheckView
                   summary={precheck}
                   isBusy={isBusy}
-                  onExecute={() => void execute()}
+                  readOnly={isReadOnly}
+                  onExecute={() => {
+                    if (!isReadOnly) {
+                      void execute();
+                    }
+                  }}
                   onBack={() => {
-                    void sendMessage("我需要修改方案，请重新评估。");
+                    if (!isReadOnly) {
+                      void returnToPlanning();
+                    }
                   }}
                 />
               </div>
@@ -351,9 +400,17 @@ export default function WorkspaceClient() {
                     plan={plan}
                     stage={stage}
                     isBusy={isBusy}
-                    onRunPrecheck={() => void runPrecheck()}
-                    onUpdateItem={(id, payload) => void updateItem({ item_id: id, ...payload })}
-                    onPromptConflict={handlePromptConflict}
+                    readOnly={isReadOnly}
+                    onRunPrecheck={() => {
+                      if (!isReadOnly) {
+                        void runPrecheck();
+                      }
+                    }}
+                    onUpdateItem={(id, payload) => {
+                      if (!isReadOnly) {
+                        void updateItem({ item_id: id, ...payload });
+                      }
+                    }}
                   />
                 )}
               </ErrorBoundary>

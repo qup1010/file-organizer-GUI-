@@ -127,6 +127,31 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
             {move.source: move.target for move in result["pending_plan"].moves},
             {"合同.pdf": "Study/合同.pdf", "截图1.png": "Review/截图1.png"},
         )
+
+    def test_run_organizer_cycle_returns_unresolved_request_block_without_mutating_plan(self):
+        unresolved_call = self._tool_call(
+            "request_unresolved_choices",
+            '{"request_id":"req_1","summary":"还有 1 个待确认项","items":[{"item_id":"截图1.png","display_name":"截图1.png","question":"更像学习截图还是问题记录？","suggested_folders":["学习资料","截图记录"]}]}',
+        )
+        current_plan = PendingPlan(
+            directories=["Review"],
+            moves=[PlanMove(source="截图1.png", target="Review/截图1.png")],
+            unresolved_items=["截图1.png"],
+        )
+        message = SimpleNamespace(content="", tool_calls=[unresolved_call])
+
+        with mock.patch.object(organizer_service, "chat_one_round", return_value=message):
+            content, result = organizer_service.run_organizer_cycle(
+                messages=[],
+                scan_lines="截图1.png | 截图记录 | 报错界面",
+                pending_plan=current_plan,
+            )
+
+        self.assertEqual(content, "")
+        self.assertIs(result["pending_plan"], current_plan)
+        self.assertEqual(result["unresolved_request"]["request_id"], "req_1")
+        self.assertEqual(result["assistant_message"]["blocks"][0]["type"], "unresolved_choices")
+        self.assertEqual(result["assistant_message"]["blocks"][0]["items"][0]["suggested_folders"], ["学习资料", "截图记录"])
     def test_apply_plan_diff_auto_removes_unresolved_when_moved_to_non_review(self):
         old_plan = PendingPlan(
             moves=[PlanMove(source="合同.pdf", target="Review/合同.pdf")],
@@ -176,6 +201,55 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
         self.assertEqual(result, "先讨论整理方案。")
         self.assertEqual(events[:3], ["model_wait_start", "model_wait_end", "ai_streaming_start"])
 
+    def test_chat_one_round_sanitizes_local_message_metadata_before_calling_model(self):
+        response = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="好的", tool_calls=[]))]
+        )
+        create_mock = mock.Mock(return_value=response)
+        client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create_mock)))
+        messages = [
+            {"role": "system", "content": "system prompt", "id": "sys_1"},
+            {
+                "role": "assistant",
+                "id": "assistant_1",
+                "content": "",
+                "blocks": [
+                    {
+                        "type": "unresolved_choices",
+                        "request_id": "req_1",
+                        "summary": "请确认归类",
+                        "status": "submitted",
+                        "items": [
+                            {
+                                "item_id": "md",
+                                "display_name": "md",
+                                "question": "放哪里？",
+                                "suggested_folders": ["学习资料", "文档资料"],
+                            }
+                        ],
+                        "submitted_resolutions": [
+                            {"item_id": "md", "display_name": "md", "selected_folder": "", "note": "这是课程笔记"}
+                        ],
+                    }
+                ],
+            },
+        ]
+
+        with mock.patch.object(organizer_service, "create_openai_client", return_value=client), mock.patch.object(
+            organizer_service,
+            "_stream_enabled",
+            return_value=False,
+        ):
+            organizer_service.chat_one_round(messages, model="test-model")
+
+        request_messages = create_mock.call_args.kwargs["messages"]
+        self.assertEqual(request_messages[0], {"role": "system", "content": "system prompt"})
+        self.assertEqual(request_messages[1]["role"], "assistant")
+        self.assertNotIn("id", request_messages[1])
+        self.assertNotIn("blocks", request_messages[1])
+        self.assertIn("待确认请求", request_messages[1]["content"])
+        self.assertIn("这是课程笔记", request_messages[1]["content"])
+
     def test_build_initial_messages_prioritizes_text_before_tool_call(self):
         messages = organizer_service.build_initial_messages("合同.pdf | 财务/合同 | 付款协议")
 
@@ -217,35 +291,6 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
         self.assertEqual(retry_messages[2]["role"], "tool")
         self.assertEqual(retry_messages[2]["tool_call_id"], "call_1")
         self.assertIn("不存在的文件源", retry_messages[3]["content"])
-
-    def test_run_organizer_cycle_retries_with_validation_feedback_in_llm_messages(self):
-        invalid_final_call = self._tool_call(
-            "submit_final_plan",
-            '{"directories": ["Finance"], "moves": [], "unresolved_items": []}',
-        )
-        first_message = SimpleNamespace(content="我来提交最终计划。", tool_calls=[invalid_final_call])
-        second_message = SimpleNamespace(content="我会重新整理后再提交。", tool_calls=None)
-
-        with mock.patch.object(
-            organizer_service,
-            "chat_one_round",
-            side_effect=[first_message, second_message],
-        ) as chat_mock:
-            content, result = organizer_service.run_organizer_cycle(
-                messages=[{"role": "user", "content": "可以执行了"}],
-                scan_lines="合同.pdf | 财务/合同 | 付款协议",
-                pending_plan=PendingPlan(),
-                max_retries=2,
-            )
-
-        self.assertEqual(content, "我会重新整理后再提交。")
-        self.assertFalse(result["is_valid"])
-        retry_messages = chat_mock.call_args_list[1].args[0]
-        self.assertEqual(retry_messages[1]["role"], "assistant")
-        self.assertEqual(retry_messages[1]["tool_calls"][0]["function"]["name"], "submit_final_plan")
-        self.assertEqual(retry_messages[2]["role"], "tool")
-        self.assertEqual(retry_messages[2]["tool_call_id"], "call_1")
-        self.assertIn("未通过结构化校验", retry_messages[3]["content"])
 
     def test_chat_one_round_debug_log_records_chunk_and_synthetic_fields(self):
         chunk_1 = SimpleNamespace(

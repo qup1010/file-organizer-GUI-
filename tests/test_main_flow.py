@@ -22,6 +22,7 @@ class RunOrganizeChatTests(unittest.TestCase):
         execution_module.build_execution_plan.return_value = plan
         execution_module.validate_execution_preconditions.return_value = precheck
         execution_module.execute_plan.return_value = report
+        execution_module.get_empty_source_dirs.return_value = []
         cli.prompt.return_value = "YES"
 
         organize_pipeline.run_organize_chat(
