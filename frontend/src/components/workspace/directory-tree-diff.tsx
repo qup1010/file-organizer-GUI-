@@ -243,7 +243,7 @@ function DirectoryTreePanel({ column, filter = "all" }: { column: DirectoryTreeC
               <File className="h-4 w-4 shrink-0 text-on-surface-variant/55" />
             )}
             <span className="min-w-0 flex-1 truncate text-on-surface">{node.name}</span>
-            <span className={cn("shrink-0 rounded-full border px-2 py-1 text-[10px] font-bold", badge.className)}>
+            <span className={cn("shrink-0 rounded-full border px-2 py-1 text-[12px] font-medium", badge.className)}>
               {badge.label}
             </span>
           </div>
@@ -272,11 +272,11 @@ function DirectoryTreePanel({ column, filter = "all" }: { column: DirectoryTreeC
             <Folder className="h-4 w-4 shrink-0 text-primary" />
           )}
           <span className="min-w-0 flex-1 truncate font-medium text-on-surface">{node.name}</span>
-          <span className="shrink-0 text-[11px] font-medium text-on-surface-variant/60">
+          <span className="shrink-0 text-[12px] font-medium text-on-surface-variant/60">
             {node.descendantFileCount} 项
           </span>
           {isReviewDirectory ? (
-            <span className="shrink-0 rounded-full border border-warning/20 bg-warning-container/20 px-2 py-1 text-[10px] font-bold text-warning">
+            <span className="shrink-0 rounded-full border border-warning/20 bg-warning-container/20 px-2 py-1 text-[12px] font-medium text-warning">
               Review
             </span>
           ) : null}
@@ -292,17 +292,17 @@ function DirectoryTreePanel({ column, filter = "all" }: { column: DirectoryTreeC
   };
 
   return (
-    <div className="rounded-[1.75rem] border border-on-surface/6 bg-white/78 p-5 shadow-sm">
+    <div className="rounded-[12px] border border-on-surface/8 bg-surface-container-lowest p-5 shadow-sm">
       <div className="border-b border-on-surface/6 pb-4">
-        <h3 className="text-sm font-bold text-on-surface">{column.title}</h3>
-        <p className="mt-1 text-xs leading-5 text-on-surface-variant">{column.subtitle}</p>
+        <h3 className="text-[14px] font-semibold text-on-surface">{column.title}</h3>
+        <p className="mt-1 text-[12px] leading-6 text-on-surface-variant">{column.subtitle}</p>
       </div>
 
       <div className="mt-4 min-h-[320px] space-y-1">
         {tree.length > 0 ? (
           tree.map((node) => renderNode(node, 0))
         ) : (
-          <div className="rounded-2xl border border-dashed border-on-surface/10 bg-surface-container-low/45 px-4 py-12 text-center text-sm text-on-surface-variant">
+          <div className="rounded-[10px] border border-dashed border-on-surface/10 bg-surface-container-low/45 px-4 py-12 text-center text-sm text-on-surface-variant">
             {column.emptyLabel || "当前没有可展示的目录结构。"}
           </div>
         )}

@@ -45,28 +45,30 @@
 
 @layer base {
   :root {
-    --surface: #f5f6f3;
-    --surface-container: #e8ece7;
-    --surface-container-low: #eef1ec;
-    --surface-container-high: #e1e6e0;
-    --surface-container-highest: #d7dfd8;
-    --surface-container-lowest: #ffffff;
-    
-    --primary: #4c6258;
-    --primary-dim: #41564d;
-    --primary-container: #dbe8df;
-    
-    --on-surface: #24302a;
-    --on-surface-variant: #5f6b65;
-    
-    --outline: #7b857f;
-    --outline-variant: #b7bdb8;
-    
-    --error: #9f403d;
-    --error-container: #fe8983;
-    
-    --warning: #8f5e16;
-    --warning-container: #fbf2c6;
+    color-scheme: light;
+
+    --surface: #f3f1eb;
+    --surface-container: #e6e1d7;
+    --surface-container-low: #ede8de;
+    --surface-container-high: #ddd7cc;
+    --surface-container-highest: #cfc8bb;
+    --surface-container-lowest: #fbfaf6;
+
+    --primary: #4d6357;
+    --primary-dim: #42574c;
+    --primary-container: #d9e3db;
+
+    --on-surface: #252d28;
+    --on-surface-variant: #646a63;
+
+    --outline: #88847b;
+    --outline-variant: #c6c0b5;
+
+    --error: #984643;
+    --error-container: #efd5d1;
+
+    --warning: #866126;
+    --warning-container: #f0e4bf;
   }
 
   .dark {
@@ -96,7 +98,9 @@
 
   body {
     @apply bg-surface text-on-surface font-sans antialiased;
-    background-image: radial-gradient(circle at top left, rgba(76, 98, 88, 0.07), transparent 40%), linear-gradient(180deg, rgba(255,255,255,0.8), rgba(255,255,255,0));
+    background-image:
+      radial-gradient(circle at top left, rgba(77, 99, 87, 0.045), transparent 34%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0));
   }
   
   h1, h2, h3, h4 {
@@ -104,7 +108,7 @@
   }
 
   p {
-    color: color-mix(in srgb, var(--on-surface) 78%, transparent);
+    color: color-mix(in srgb, var(--on-surface) 82%, transparent);
   }
 }
 
@@ -128,16 +132,16 @@
 .text-ui-meta {
   font-size: 0.75rem;
   line-height: 1.5;
-  color: color-mix(in srgb, var(--on-surface-variant) 88%, transparent);
+  color: color-mix(in srgb, var(--on-surface-variant) 92%, transparent);
 }
 
 .text-ui-muted {
-  color: color-mix(in srgb, var(--on-surface-variant) 76%, transparent);
+  color: color-mix(in srgb, var(--on-surface-variant) 84%, transparent);
 }
 
 .glass-surface {
-  background: rgba(255, 255, 255, 0.78);
-  backdrop-filter: blur(14px);
+  background: color-mix(in srgb, var(--surface-container-lowest) 92%, var(--surface) 8%);
+  backdrop-filter: blur(8px);
 }
 
 .dark .glass-surface {

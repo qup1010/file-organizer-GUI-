@@ -11,7 +11,6 @@ import {
   FolderOpen,
   History,
   Layers3,
-  MousePointer2,
   Search,
   ShieldCheck,
   Sparkles,
@@ -62,15 +61,15 @@ const DEFAULT_STRATEGY_SUMMARY: SessionStrategySummary = {
 function StrategySummaryChips({ strategy }: { strategy: SessionStrategySummary }) {
   return (
     <div className="flex flex-wrap gap-2">
-      <span className="rounded-full bg-primary/10 px-3 py-1 text-[11px] font-bold text-primary">{strategy.template_label}</span>
-      <span className="rounded-full border border-on-surface/8 bg-white px-3 py-1 text-[11px] font-bold text-on-surface-variant">
+      <span className="rounded-[8px] border border-primary/12 bg-primary/8 px-2.5 py-1 text-[12px] font-semibold text-primary">{strategy.template_label}</span>
+      <span className="rounded-[8px] border border-on-surface/8 bg-surface-container-lowest px-2.5 py-1 text-[12px] font-medium text-on-surface-variant">
         {strategy.naming_style_label}
       </span>
-      <span className="rounded-full border border-on-surface/8 bg-white px-3 py-1 text-[11px] font-bold text-on-surface-variant">
+      <span className="rounded-[8px] border border-on-surface/8 bg-surface-container-lowest px-2.5 py-1 text-[12px] font-medium text-on-surface-variant">
         {strategy.caution_level_label}
       </span>
       {strategy.note ? (
-        <span className="rounded-full bg-warning-container/20 px-3 py-1 text-[11px] font-bold text-on-surface-variant">
+        <span className="rounded-[8px] border border-warning/10 bg-warning-container/30 px-2.5 py-1 text-[12px] font-medium text-on-surface-variant">
           偏好：{strategy.note}
         </span>
       ) : null}
@@ -115,30 +114,30 @@ function StrategyDialog({
   return (
     <AnimatePresence>
       {open ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface/70 px-6 py-8 backdrop-blur-md">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface/72 px-4 py-6 backdrop-blur-[4px]">
           <motion.div
             initial={{ opacity: 0, scale: 0.97, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 20 }}
-            className="flex h-[min(86vh,920px)] w-full max-w-6xl flex-col overflow-hidden rounded-[34px] border border-outline-variant/12 bg-white/92 shadow-[0_28px_100px_rgba(36,48,42,0.16)]"
+            className="flex h-[min(84vh,820px)] w-full max-w-[1080px] flex-col overflow-hidden rounded-[14px] border border-on-surface/8 bg-surface-container-lowest shadow-[0_18px_52px_rgba(37,45,40,0.14)]"
           >
-            <div className="flex shrink-0 items-start justify-between gap-6 border-b border-on-surface/6 px-8 py-6">
+            <div className="flex shrink-0 items-start justify-between gap-6 border-b border-on-surface/8 bg-surface-container-low px-5 py-4 lg:px-6">
               <div className="space-y-3">
                 <div className="flex items-center gap-3">
-                  <div className="inline-flex items-center gap-2 rounded-full border border-primary/10 bg-primary/8 px-3 py-1 text-[11px] font-black uppercase tracking-widest text-primary">
+                  <div className="inline-flex items-center gap-2 rounded-[8px] border border-primary/12 bg-primary/8 px-2.5 py-1 text-[12px] font-semibold text-primary">
                     <Layers3 className="h-3.5 w-3.5" />
                     整理设置
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <div className={cn("h-1 w-8 rounded-full transition-all duration-500", step === 1 ? "bg-primary w-12" : "bg-primary/10")} />
-                    <div className={cn("h-1 w-8 rounded-full transition-all duration-500", step === 2 ? "bg-primary w-12" : "bg-primary/10")} />
+                  <div className="flex items-center gap-2">
+                    <div className={cn("h-1.5 w-7 rounded-full transition-all duration-300", step === 1 ? "bg-primary" : "bg-primary/12")} />
+                    <div className={cn("h-1.5 w-7 rounded-full transition-all duration-300", step === 2 ? "bg-primary" : "bg-primary/12")} />
                   </div>
                 </div>
-                <div className="space-y-1">
-                  <h2 className="text-2xl font-black font-headline tracking-tight text-on-surface uppercase tracking-widest leading-tight">
-                    {step === 1 ? "第一步：选择整理模板" : "第二步：补充一些偏好"}
+                <div className="space-y-1.5">
+                  <h2 className="text-[1.15rem] font-black font-headline tracking-tight text-on-surface leading-tight lg:text-[1.32rem]">
+                    {step === 1 ? "第一步：选择整理模板" : "第二步：补充整理偏好"}
                   </h2>
-                  <p className="max-w-2xl text-[13px] font-bold text-on-surface-variant/60 uppercase tracking-widest">
+                  <p className="max-w-2xl text-[13px] leading-6 text-ui-muted">
                     {step === 1 
                       ? "先选一个更接近当前目录的整理方式" 
                       : "如果你有明确习惯，也可以在这里补充给系统"}
@@ -147,15 +146,15 @@ function StrategyDialog({
               </div>
 
               <div className="flex items-start gap-3">
-                <div className="hidden rounded-2xl border border-on-surface/8 bg-surface-container-low/35 px-5 py-3 lg:block">
-                  <div className="text-[11px] font-black text-on-surface-variant/40 uppercase tracking-widest">目标目录</div>
-                  <p className="mt-1 max-w-[260px] truncate text-[13px] font-black text-on-surface font-mono opacity-80" title={targetDir}>{targetDir}</p>
+                <div className="hidden rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-4 py-3 lg:block">
+                  <div className="text-ui-meta text-ui-muted">目标目录</div>
+                  <p className="mt-1 max-w-[260px] truncate font-mono text-[12px] font-medium text-on-surface" title={targetDir}>{targetDir}</p>
                 </div>
                 <Button
                   variant="secondary"
                   size="sm"
                   onClick={onClose}
-                  className="w-11 h-11 p-0 rounded-full"
+                  className="h-10 w-10 rounded-[10px] p-0"
                   title="关闭"
                 >
                   <X className="h-4.5 w-4.5" />
@@ -163,7 +162,7 @@ function StrategyDialog({
               </div>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-8 py-7">
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 lg:px-6">
               <AnimatePresence mode="wait">
                 {step === 1 ? (
                   <motion.div
@@ -171,10 +170,10 @@ function StrategyDialog({
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 10 }}
-                    className="grid gap-8 lg:grid-cols-[320px_minmax(0,1fr)]"
+                    className="grid gap-5 lg:grid-cols-[240px_minmax(0,1fr)]"
                   >
                     <div className="space-y-4">
-                      <div className="text-[11px] font-black text-on-surface-variant/40 uppercase tracking-[0.2em] px-1">可选模板</div>
+                      <div className="px-1 text-[12px] font-medium text-ui-muted">可选模板</div>
                       <div className="space-y-3">
                         {STRATEGY_TEMPLATES.map((template) => {
                           const active = strategy.template_id === template.id;
@@ -187,26 +186,26 @@ function StrategyDialog({
                                 onTemplateSelect(template.id);
                               }}
                               className={cn(
-                                "w-full rounded-[28px] border-2 px-6 py-5 text-left transition-all disabled:opacity-50 group relative overflow-hidden",
+                                "group relative w-full overflow-hidden rounded-[12px] border px-4 py-4 text-left transition-colors disabled:opacity-50",
                                 active
-                                  ? "border-primary bg-primary/5 text-on-surface shadow-xl shadow-primary/10"
-                                  : "border-on-surface/5 bg-white/50 text-on-surface-variant hover:border-primary/20 hover:bg-white",
+                                  ? "border-primary/20 bg-primary/6 text-on-surface"
+                                  : "border-on-surface/8 bg-surface-container-lowest text-on-surface-variant hover:border-primary/16 hover:bg-white",
                               )}
                             >
-                              <div className="flex items-center justify-between mb-2">
-                                <p className={cn("text-[15px] font-black tracking-tight", active ? "text-primary" : "text-on-surface")}>{template.label}</p>
+                              <div className="mb-2 flex items-center justify-between">
+                                <p className={cn("text-[14px] font-semibold tracking-tight", active ? "text-primary" : "text-on-surface")}>{template.label}</p>
                                 {active && (
-                                   <div className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center">
+                                   <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-white">
                                      <CheckCircle2 className="h-3.5 w-3.5" />
                                    </div>
                                 )}
                               </div>
-                              <p className="text-[12px] font-bold leading-relaxed text-on-surface-variant/60 group-hover:text-on-surface-variant/80 transition-colors uppercase tracking-widest">{template.description}</p>
+                              <p className="text-[13px] leading-6 text-ui-muted transition-colors group-hover:text-on-surface-variant">{template.description}</p>
                               
                               {active && (
                                 <motion.div 
                                   layoutId="active-indicator"
-                                  className="absolute left-0 top-0 bottom-0 w-1 bg-primary"
+                                  className="absolute bottom-0 left-0 top-0 w-[3px] bg-primary"
                                 />
                               )}
                             </button>
@@ -215,41 +214,35 @@ function StrategyDialog({
                       </div>
                     </div>
 
-                    <div className="space-y-10">
-                      <div className="rounded-[40px] border border-on-surface/10 bg-white shadow-2xl shadow-on-surface/5 p-10">
-                        <div className="grid gap-12 lg:grid-cols-[1.2fr_0.8fr]">
-                          <div className="space-y-10">
-                            <div className="space-y-4">
-                              <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-1.5 text-[11px] font-black uppercase tracking-[0.2em] text-primary">
-                                <Sparkles className="h-4 w-4" />
-                                整理预览
-                              </div>
-                              <h3 className="text-4xl font-black font-headline tracking-tighter text-on-surface uppercase">{currentTemplate.label}</h3>
-                              <p className="max-w-xl text-[15px] font-bold leading-8 text-on-surface-variant/60">{currentTemplate.description}</p>
+                    <div className="space-y-5">
+                      <div className="rounded-[12px] border border-on-surface/8 bg-surface-container-lowest p-5">
+                        <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+                          <div className="space-y-7">
+                            <div className="space-y-3">
+                              <div className="text-[12px] font-medium text-ui-muted">当前模板</div>
+                              <h3 className="text-[1.32rem] font-black font-headline tracking-tight text-on-surface lg:text-[1.45rem]">{currentTemplate.label}</h3>
+                              <p className="max-w-xl text-[14px] leading-7 text-ui-muted">{currentTemplate.description}</p>
                             </div>
                             
-                            <div className="space-y-4">
-                              <div className="text-[11px] font-black text-on-surface-variant/40 uppercase tracking-[0.3em]">适用场景</div>
-                              <div className="text-[15px] font-bold leading-8 text-on-surface bg-surface-container-low/60 rounded-[28px] p-6 border border-on-surface/5 shadow-inner italic">
-                                "{currentTemplate.applicableScenarios}"
+                            <div className="space-y-3">
+                              <div className="text-[12px] font-medium text-ui-muted">适用场景</div>
+                              <div className="rounded-[10px] border border-on-surface/8 bg-surface-container-low px-5 py-4 text-[14px] leading-7 text-on-surface">
+                                {currentTemplate.applicableScenarios}
                               </div>
                             </div>
 
-                            <div className="flex flex-wrap gap-4">
-                              <div className="rounded-full border border-on-surface/8 bg-white px-5 py-2.5 text-[11px] font-black uppercase tracking-widest text-on-surface-variant/60 flex items-center gap-3 shadow-sm">
-                                <span className="opacity-30">命名风格:</span> {namingLabel}
+                            <div className="flex flex-wrap gap-3">
+                              <div className="flex items-center gap-2 rounded-full border border-on-surface/8 bg-surface-container-lowest px-4 py-2 text-[12px] font-medium text-on-surface-variant">
+                                <span className="text-ui-muted">命名风格</span> {namingLabel}
                               </div>
-                              <div className="rounded-full border border-on-surface/8 bg-white px-5 py-2.5 text-[11px] font-black uppercase tracking-widest text-on-surface-variant/60 flex items-center gap-3 shadow-sm">
-                                <span className="opacity-30">整理方式:</span> {cautionLabel}
+                              <div className="flex items-center gap-2 rounded-full border border-on-surface/8 bg-surface-container-lowest px-4 py-2 text-[12px] font-medium text-on-surface-variant">
+                                <span className="text-ui-muted">整理方式</span> {cautionLabel}
                               </div>
                             </div>
                           </div>
 
-                          <div className="space-y-6 rounded-[32px] bg-surface-container-low/30 p-8 border border-on-surface/5 relative overflow-hidden group">
-                            <div className="absolute top-0 right-0 p-4 opacity-10 rotate-12 group-hover:rotate-0 transition-transform duration-1000">
-                               <FolderOpen className="w-12 h-12" />
-                            </div>
-                            <div className="text-[11px] font-black text-on-surface-variant/40 uppercase tracking-[0.3em] mb-4">可能用到的目录</div>
+                          <div className="rounded-[12px] border border-on-surface/8 bg-surface-container-low p-5">
+                            <div className="mb-4 text-[12px] font-medium text-ui-muted">预计会创建或使用的目录</div>
                             <div className="space-y-3">
                               {previewDirectories.map((directory, index) => (
                                 <motion.div
@@ -257,10 +250,10 @@ function StrategyDialog({
                                   animate={{ opacity: 1, x: 0 }}
                                   transition={{ delay: index * 0.1 }}
                                   key={`${strategy.template_id}-${strategy.naming_style}-${directory}`}
-                                  className="flex items-center gap-4 rounded-[22px] bg-white px-5 py-4 shadow-sm border border-on-surface/5 hover:border-primary/20 transition-colors"
+                                  className="flex items-center gap-3 rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-4 py-3 transition-colors hover:border-primary/16"
                                 >
-                                  <div className="w-2 h-2 rounded-full bg-primary/20" />
-                                  <span className="text-[14px] font-black text-on-surface tracking-tight">{directory}</span>
+                                  <div className="h-2 w-2 rounded-full bg-primary/30" />
+                                  <span className="text-[14px] font-semibold text-on-surface">{directory}</span>
                                 </motion.div>
                               ))}
                             </div>
@@ -268,11 +261,11 @@ function StrategyDialog({
                         </div>
                       </div>
                       
-                      <div className="flex items-center gap-4 rounded-[28px] bg-primary/5 border border-primary/10 p-6 px-8 shadow-sm">
-                        <div className="w-10 h-10 rounded-2xl bg-white flex items-center justify-center text-primary shadow-sm">
+                      <div className="flex items-start gap-4 rounded-[12px] border border-primary/12 bg-primary/6 px-5 py-4">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-surface-container-lowest text-primary">
                           <AlertTriangle className="h-5 w-5" />
                         </div>
-                        <p className="text-[13px] font-bold text-primary/80 leading-relaxed uppercase tracking-widest">
+                        <p className="text-[13px] leading-6 text-primary/85">
                           现在还不会移动文件。你可以先看一下，再决定是否继续。
                         </p>
                       </div>
@@ -284,12 +277,12 @@ function StrategyDialog({
                     initial={{ opacity: 0, x: 10 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -10 }}
-                    className="grid gap-6 lg:grid-cols-2"
+                    className="grid gap-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]"
                   >
                     <div className="space-y-6">
-                      <div className="rounded-[26px] border border-on-surface/6 bg-white/68 p-6">
+                      <div className="rounded-[12px] border border-on-surface/8 bg-surface-container-lowest p-5">
                         <div className="mb-6 flex items-center justify-between">
-                          <span className="text-[11px] font-black text-on-surface-variant/40 uppercase tracking-[0.3em]">目录命名风格</span>
+                          <span className="text-[12px] font-medium text-ui-muted">目录命名风格</span>
                         </div>
                         <div className="grid grid-cols-1 gap-3">
                           {NAMING_STYLE_OPTIONS.map((option) => {
@@ -301,21 +294,21 @@ function StrategyDialog({
                                 disabled={loading}
                                 onClick={() => onChangeNaming(option.id)}
                                 className={cn(
-                                  "w-full rounded-[24px] border-2 px-6 py-5 text-left transition-all disabled:opacity-50",
-                                  active ? "border-primary bg-primary/5 shadow-lg shadow-primary/5" : "border-on-surface/5 bg-surface-container-low/50 hover:border-primary/20",
+                                  "w-full rounded-[10px] border px-4 py-4 text-left transition-colors disabled:opacity-50",
+                                  active ? "border-primary/20 bg-primary/6" : "border-on-surface/8 bg-surface-container-low hover:border-primary/16",
                                 )}
                               >
-                                <p className={cn("text-[14px] font-black uppercase tracking-tight", active ? "text-primary" : "text-on-surface")}>{option.label}</p>
-                                <p className="mt-1 text-[12px] font-bold text-on-surface-variant/50 leading-relaxed uppercase tracking-widest">{option.description}</p>
+                                <p className={cn("text-[14px] font-semibold tracking-tight", active ? "text-primary" : "text-on-surface")}>{option.label}</p>
+                                <p className="mt-1 text-[13px] leading-6 text-ui-muted">{option.description}</p>
                               </button>
                             );
                           })}
                         </div>
                       </div>
 
-                      <div className="rounded-[26px] border border-on-surface/6 bg-white/68 p-6">
+                      <div className="rounded-[12px] border border-on-surface/8 bg-surface-container-lowest p-5">
                         <div className="mb-6 flex items-center justify-between">
-                          <span className="text-[11px] font-black text-on-surface-variant/40 uppercase tracking-[0.3em]">整理保守度</span>
+                          <span className="text-[12px] font-medium text-ui-muted">整理保守度</span>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                           {CAUTION_LEVEL_OPTIONS.map((option) => {
@@ -327,12 +320,12 @@ function StrategyDialog({
                                 disabled={loading}
                                 onClick={() => onChangeCaution(option.id)}
                                 className={cn(
-                                  "flex flex-col h-full rounded-[24px] border-2 px-6 py-6 text-left transition-all disabled:opacity-50",
-                                  active ? "border-primary bg-primary/5 shadow-lg shadow-primary/5" : "border-on-surface/5 bg-surface-container-low/50 hover:border-primary/20",
+                                  "flex h-full flex-col rounded-[10px] border px-4 py-4 text-left transition-colors disabled:opacity-50",
+                                  active ? "border-primary/20 bg-primary/6" : "border-on-surface/8 bg-surface-container-low hover:border-primary/16",
                                 )}
                               >
-                                <p className={cn("text-[14px] font-black mb-2 uppercase tracking-tight", active ? "text-primary" : "text-on-surface")}>{option.label}</p>
-                                <p className="text-[12px] font-bold text-on-surface-variant/50 leading-relaxed uppercase tracking-widest">{option.description}</p>
+                                <p className={cn("mb-2 text-[14px] font-semibold tracking-tight", active ? "text-primary" : "text-on-surface")}>{option.label}</p>
+                                <p className="text-[13px] leading-6 text-ui-muted">{option.description}</p>
                               </button>
                             );
                           })}
@@ -341,23 +334,23 @@ function StrategyDialog({
                     </div>
 
                     <div className="space-y-6">
-                      <div className="rounded-[32px] border border-on-surface/10 bg-white p-8 h-full flex flex-col shadow-xl shadow-on-surface/5">
+                      <div className="flex h-full flex-col rounded-[12px] border border-on-surface/8 bg-surface-container-lowest p-5">
                         <div className="mb-6 flex items-center justify-between px-2">
-                          <span className="text-[11px] font-black text-on-surface-variant/40 uppercase tracking-[0.3em]">补充说明</span>
-                          <span className="text-[11px] font-black text-primary/40 uppercase tracking-widest">OPTIONAL</span>
+                          <span className="text-[12px] font-medium text-ui-muted">补充说明</span>
+                          <span className="text-ui-meta text-ui-muted">可选</span>
                         </div>
                         <textarea
                           value={strategy.note}
                           disabled={loading}
                           onChange={(event) => onChangeNote(event.target.value.slice(0, 200))}
                           placeholder="例如：项目文件尽量放在一起；拿不准的先放 Review。"
-                          className="flex-1 w-full rounded-[28px] border-2 border-on-surface/5 bg-surface-container-low/20 px-6 py-6 text-[15px] font-bold leading-relaxed text-on-surface outline-none transition-all placeholder:text-on-surface-variant/20 focus:border-primary/40 focus:ring-8 focus:ring-primary/5 disabled:opacity-50 resize-none shadow-inner"
+                          className="flex-1 w-full resize-none rounded-[10px] border border-on-surface/8 bg-surface-container-low px-4 py-4 text-[14px] leading-7 text-on-surface outline-none transition-all placeholder:text-on-surface-variant/35 focus:border-primary/40 focus:ring-4 focus:ring-primary/5 disabled:opacity-50"
                         />
-                        <div className="mt-8 flex items-center gap-4 rounded-[24px] bg-primary/5 p-6 border border-primary/10">
-                          <div className="w-10 h-10 rounded-2xl bg-white flex items-center justify-center text-primary shadow-sm">
+                        <div className="mt-5 flex items-start gap-4 rounded-[10px] border border-primary/12 bg-primary/6 p-4">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-surface-container-lowest text-primary">
                              <Sparkles className="h-5 w-5" />
                           </div>
-                          <p className="text-[12px] font-bold text-primary/80 leading-relaxed uppercase tracking-[0.1em]">
+                          <p className="text-[13px] leading-6 text-primary/85">
                             这些说明会作为整理偏好一起参考。
                           </p>
                         </div>
@@ -368,14 +361,14 @@ function StrategyDialog({
               </AnimatePresence>
             </div>
 
-            <div className="shrink-0 border-t border-on-surface/6 bg-white/92 px-8 py-5 backdrop-blur-sm">
-              <div className="flex flex-wrap items-center justify-between gap-4 rounded-[28px] border border-on-surface/6 bg-surface/72 px-6 py-4">
+            <div className="shrink-0 border-t border-on-surface/8 bg-surface-container-low px-5 py-4 lg:px-6">
+              <div className="flex flex-wrap items-center justify-between gap-4 rounded-[12px] border border-on-surface/8 bg-surface-container-lowest px-4 py-3">
                 <div className="flex flex-wrap items-center gap-3">
-                  <div className="text-xs font-bold text-on-surface-variant/60 uppercase tracking-wider">已选配置</div>
+                  <div className="text-[12px] font-medium text-ui-muted">已选配置</div>
                   <div className="flex flex-wrap gap-1.5">
-                    <span className="rounded-full bg-primary/10 px-3 py-1 text-[11px] font-bold text-primary">{currentTemplate.label}</span>
+                    <span className="rounded-full border border-primary/12 bg-primary/8 px-3 py-1 text-[12px] font-semibold text-primary">{currentTemplate.label}</span>
                     {step === 2 && (
-                      <span className="rounded-full bg-white px-3 py-1 text-[11px] font-medium text-on-surface-variant border border-on-surface/8">
+                      <span className="rounded-full border border-on-surface/8 bg-surface-container-lowest px-3 py-1 text-[12px] font-medium text-on-surface-variant">
                         {namingLabel} · {cautionLabel}
                       </span>
                     )}
@@ -388,14 +381,14 @@ function StrategyDialog({
                       <Button
                         variant="secondary"
                         onClick={onClose}
-                        className="px-8 py-3.5"
+                        className="px-6 py-3"
                       >
                         取消
                       </Button>
                       <Button
                         variant="primary"
                         onClick={() => setStep(2)}
-                        className="px-10 py-3.5"
+                        className="px-7 py-3"
                       >
                         下一步
                         <ArrowRight className="ml-2 h-4 w-4" />
@@ -406,7 +399,7 @@ function StrategyDialog({
                       <Button
                         variant="secondary"
                         onClick={() => setStep(1)}
-                        className="px-8 py-3.5"
+                        className="px-6 py-3"
                       >
                         <ArrowLeft className="mr-2 h-4 w-4" />
                         返回上一步
@@ -416,7 +409,7 @@ function StrategyDialog({
                         onClick={onConfirm}
                         disabled={loading}
                         loading={loading}
-                        className="px-10 py-3.5"
+                        className="px-7 py-3"
                       >
                         {loading ? "处理中" : "确认并开始扫描"}
                       </Button>
@@ -445,6 +438,8 @@ export function SessionLauncher() {
   const resumeStrategy = resumePrompt?.snapshot.strategy || DEFAULT_STRATEGY_SUMMARY;
   const resumeStage = resumePrompt?.snapshot.stage;
   const isCompletedResume = resumeStage === "completed";
+  const currentTemplate = getTemplateMeta(strategy.template_id);
+  const currentPreviewDirectories = currentTemplate.previewDirectories[strategy.naming_style] || [];
 
   async function handleSelectDir() {
     setLoading(true);
@@ -566,68 +561,159 @@ export function SessionLauncher() {
 
   return (
     <>
-      <div className="relative mx-auto flex w-full max-w-[66rem] justify-center">
-        <div className="w-full max-w-[56rem] space-y-3 text-center">
-          <div className="inline-flex items-center gap-2 rounded-full border border-outline-variant/15 bg-white/60 px-3 py-1 text-ui-meta font-medium">
-            文件整理
-          </div>
-          <div className="space-y-2">
-            <h2 className="mx-auto max-w-[18ch] text-[2.35rem] font-black font-headline tracking-tight text-on-surface leading-[0.98] md:text-[2.8rem]">
-              从这里开始整理你的文件
-            </h2>
-            <p className="mx-auto max-w-[42rem] text-[14px] leading-6 text-on-surface-variant/90">
-              选择一个你想要整理的本地目录，即刻开始整理。
-            </p>
-          </div>
-
-          <div className="rounded-[28px] border border-on-surface/10 bg-white/80 p-5 shadow-[0_24px_60px_rgba(36,48,42,0.08)] backdrop-blur-xl text-left md:p-6">
-            <div className="mb-4 flex items-center justify-between gap-4">
-              <div className="text-ui-section font-semibold text-ui-muted">整理步骤</div>
-              <div className="hidden md:flex items-center gap-3 text-ui-meta font-semibold text-ui-muted">
-                <span className="flex items-center gap-2 group transition-colors hover:text-primary"><Search className="h-3.5 w-3.5" /> 1. 扫描</span>
-                <div className="w-4 h-px bg-on-surface/10" />
-                <span className="flex items-center gap-2 group transition-colors hover:text-primary"><FileSearch className="h-3.5 w-3.5" /> 2. 调整方案</span>
-                <div className="w-4 h-px bg-on-surface/10" />
-                <span className="flex items-center gap-2 group transition-colors hover:text-primary"><CheckCircle2 className="h-3.5 w-3.5" /> 3. 确认执行</span>
+      <div className="rounded-[12px] border border-on-surface/8 bg-surface-container-lowest shadow-[0_6px_18px_rgba(37,45,40,0.04)]">
+        <div className="border-b border-on-surface/8 bg-surface-container-low px-4 py-4 lg:px-5">
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3">
+              <div className="space-y-2">
+                <div className="inline-flex items-center gap-2 rounded-[8px] border border-primary/12 bg-primary/8 px-2.5 py-1 text-[12px] font-medium text-primary">
+                  文件整理
+                </div>
+                <h2 className="text-[1.35rem] font-black font-headline tracking-tight text-on-surface lg:text-[1.55rem]">
+                  新建整理任务
+                </h2>
+                <p className="max-w-2xl text-[14px] leading-6 text-ui-muted">
+                  先确定目标目录和默认策略，再进入工作区继续调整、预检和执行。
+                </p>
               </div>
             </div>
-            <div className="relative group">
+
+            <div className="flex flex-col gap-2 border-t border-on-surface/6 pt-3">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-[12px]">
+                <div className="inline-flex items-center gap-2 rounded-[8px] bg-surface-container-lowest px-2.5 py-1.5 text-on-surface">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-[6px] bg-primary/10 text-[11px] font-semibold text-primary">1</span>
+                  <span className="font-medium">扫描目录</span>
+                </div>
+                <span className="hidden text-on-surface-variant/25 sm:inline">/</span>
+                <div className="inline-flex items-center gap-2 rounded-[8px] bg-surface-container-lowest px-2.5 py-1.5 text-on-surface">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-[6px] bg-primary/10 text-[11px] font-semibold text-primary">2</span>
+                  <span className="font-medium">调整方案</span>
+                </div>
+                <span className="hidden text-on-surface-variant/25 sm:inline">/</span>
+                <div className="inline-flex items-center gap-2 rounded-[8px] bg-surface-container-lowest px-2.5 py-1.5 text-on-surface">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-[6px] bg-primary/10 text-[11px] font-semibold text-primary">3</span>
+                  <span className="font-medium">预检后执行</span>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[12px] text-ui-muted">
+                <div className="inline-flex items-center gap-2">
+                  <Sparkles className="h-3.5 w-3.5 text-primary" />
+                  先确认设置，再创建会话
+                </div>
+                <div className="inline-flex items-center gap-2">
+                  <AlertTriangle className="h-3.5 w-3.5 text-primary" />
+                  真正移动文件前会再次预检
+                </div>
+                <div className="inline-flex items-center gap-2">
+                  <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+                  支持回退操作，过程更稳妥
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-3 p-4 lg:grid-cols-[minmax(0,1.04fr)_280px] lg:p-5">
+          <div className="rounded-[11px] border border-on-surface/8 bg-surface-container-low p-4">
+            <div className="mb-3">
+              <div>
+                <div className="text-[12px] font-medium text-ui-muted">目标目录</div>
+                <p className="mt-1 text-[13px] leading-6 text-on-surface">输入路径或直接浏览本地文件夹。</p>
+              </div>
+            </div>
+
+            <div className="relative">
               <Button
                 variant="ghost"
                 onClick={handleSelectDir}
                 disabled={loading}
-                className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 p-0 rounded-xl hover:bg-surface-container-low"
+                className="absolute left-3 top-1/2 h-9 w-9 -translate-y-1/2 rounded-[9px] p-0 hover:bg-surface-container"
                 title="浏览文件夹"
               >
-                <FolderOpen className="h-5 w-5" />
+                <FolderOpen className="h-4.5 w-4.5" />
               </Button>
               <input
                 value={targetDir}
                 onChange={(event) => setTargetDir(event.target.value)}
                 disabled={loading}
-                className="w-full rounded-[24px] border-2 border-on-surface/5 bg-surface-container-low/20 py-4 pl-16 pr-36 text-[14px] font-bold text-on-surface outline-none transition-all placeholder:text-on-surface-variant/20 focus:border-primary/40 focus:ring-8 focus:ring-primary/5 disabled:opacity-70 shadow-inner"
+                className="w-full rounded-[11px] border border-on-surface/8 bg-surface-container-lowest py-3.5 pl-[3.25rem] pr-4 text-[14px] font-medium text-on-surface outline-none transition-all placeholder:text-on-surface-variant/35 focus:border-primary/40 focus:ring-4 focus:ring-primary/5 disabled:opacity-70"
                 placeholder="例如: D:\\Downloads\\Incomplete"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") openStrategyDialog();
                 }}
               />
+            </div>
+
+            <div className="mt-3 space-y-2 text-[12px] text-ui-muted">
+              <div className="inline-flex items-center gap-2">
+                <Search className="h-3.5 w-3.5 text-primary/70" />
+                扫描后可以继续调整方案，不需要重新开始
+              </div>
+              <div className="inline-flex items-center gap-2">
+                <FileSearch className="h-3.5 w-3.5 text-primary/70" />
+                有拿不准的内容会先进 `Review`
+              </div>
+              <div className="inline-flex items-center gap-2">
+                <ShieldCheck className="h-3.5 w-3.5 text-primary/70" />
+                支持回退操作，执行更安心
+              </div>
+            </div>
+
+            <div className="mt-3 flex justify-end border-t border-on-surface/6 pt-3">
               <Button
-                variant="primary"
+                variant="secondary"
                 onClick={openStrategyDialog}
                 disabled={loading || !targetDir.trim()}
                 loading={loading}
-                className="absolute right-2 top-1/2 h-[calc(100%-0.8rem)] -translate-y-1/2 rounded-[20px] px-6 py-3"
+                className="px-4 py-2.5"
               >
-                {loading ? "处理中" : "开始整理"}
+                {loading ? "处理中" : "整理设置"}
                 {!loading && <ArrowRight className="ml-2 h-4 w-4" />}
               </Button>
             </div>
-            
-            <div className="mt-4 flex items-center px-1">
-              <div className="flex items-center gap-3 text-ui-section font-semibold text-emerald-700 bg-emerald-500/5 px-4 py-2 rounded-full border border-emerald-500/10">
-                <ShieldCheck className="h-3.5 w-3.5" />
-                <span>可随时回退</span>
+          </div>
+
+          <div className="rounded-[11px] border border-on-surface/8 bg-surface-container-lowest p-4">
+            <div className="text-[12px] font-medium text-ui-muted">当前默认策略</div>
+            <div className="mt-2 space-y-2">
+              <h3 className="text-[1.02rem] font-black font-headline tracking-tight text-on-surface">
+                {currentTemplate.label}
+              </h3>
+              <p className="text-[13px] leading-6 text-ui-muted">
+                {currentTemplate.description}
+              </p>
+            </div>
+            <div className="mt-3">
+              <StrategySummaryChips
+                strategy={{
+                  ...strategy,
+                  template_label: currentTemplate.label,
+                  template_description: currentTemplate.description,
+                  naming_style_label:
+                    NAMING_STYLE_OPTIONS.find((item) => item.id === strategy.naming_style)?.label || "中文目录",
+                  caution_level_label:
+                    CAUTION_LEVEL_OPTIONS.find((item) => item.id === strategy.caution_level)?.label || "平衡",
+                  preview_directories: currentPreviewDirectories,
+                }}
+              />
+            </div>
+            <div className="mt-4 space-y-2.5 border-t border-on-surface/6 pt-3">
+              <div className="text-[12px] font-medium text-ui-muted">预计目录</div>
+              <div className="space-y-2">
+                {currentPreviewDirectories.slice(0, 3).map((directory) => (
+                  <div
+                    key={`${strategy.template_id}-${strategy.naming_style}-${directory}`}
+                    className="flex items-center gap-2 rounded-[8px] bg-surface-container-low px-3 py-2 text-[13px] text-on-surface"
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary/55" />
+                    <span className="truncate">{directory}</span>
+                  </div>
+                ))}
               </div>
+              {currentPreviewDirectories.length > 3 ? (
+                <p className="text-[12px] text-ui-muted">进入整理设置后还可以继续查看完整目录示例。</p>
+              ) : null}
             </div>
           </div>
         </div>
@@ -640,7 +726,7 @@ export function SessionLauncher() {
               exit={{ opacity: 0, height: 0 }}
               className="overflow-hidden"
             >
-              <div className="mt-4 flex items-start gap-3 rounded-[22px] border border-error/10 bg-error-container/20 px-4 py-3 text-sm font-medium text-error">
+              <div className="mx-4 mb-4 flex items-start gap-3 rounded-[12px] border border-error/12 bg-error-container/25 px-4 py-3 text-sm font-medium text-error lg:mx-5 lg:mb-5">
                 <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
                 <p className="leading-relaxed">{error}</p>
               </div>

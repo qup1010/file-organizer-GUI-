@@ -59,42 +59,42 @@ function SettingsSection({
   return (
     <section
       className={cn(
-        "rounded-[28px] border border-on-surface/6 bg-white/88 p-5 shadow-[0_12px_32px_rgba(36,48,42,0.06)] lg:p-6",
+        "rounded-[12px] border border-on-surface/8 bg-surface-container-lowest p-4 shadow-[0_6px_18px_rgba(36,48,42,0.05)] lg:p-5",
         disabled && "opacity-55",
       )}
     >
-      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-on-surface/6 pb-4">
-        <div className="flex min-w-0 items-start gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-on-surface/6 pb-3.5">
+        <div className="flex min-w-0 items-start gap-3.5">
           <div
             className={cn(
-              "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border",
+              "flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border",
               disabled
                 ? "border-on-surface/6 bg-surface-container-low text-on-surface-variant/30"
                 : "border-primary/12 bg-primary/10 text-primary",
             )}
           >
-            <Icon className="h-5 w-5" />
+            <Icon className="h-4.5 w-4.5" />
           </div>
           <div className="min-w-0 space-y-1">
             <h2 className="text-base font-black tracking-tight text-on-surface">{title}</h2>
-            <p className="text-[12px] leading-6 text-on-surface-variant/75">{description}</p>
+            <p className="text-[12px] leading-5 text-on-surface-variant/75">{description}</p>
           </div>
         </div>
         {actions ? <div className="shrink-0">{actions}</div> : null}
       </div>
-      <div className="mt-5 space-y-5">{children}</div>
+      <div className="mt-4 space-y-4">{children}</div>
     </section>
   );
 }
 
 function FieldGroup({ label, hint, className, children }: FieldGroupProps) {
   return (
-    <div className={cn("space-y-2.5", className)}>
-      <label className="flex items-center gap-2 px-1 text-[11px] font-black uppercase tracking-[0.2em] text-on-surface-variant/55">
+    <div className={cn("space-y-2", className)}>
+      <label className="flex items-center gap-2 px-1 text-[12px] font-medium text-on-surface-variant/65">
         {label}
       </label>
       {children}
-      {hint ? <p className="px-1 text-[11px] leading-5 text-on-surface-variant/50">{hint}</p> : null}
+      {hint ? <p className="px-1 text-[12px] leading-5 text-on-surface-variant/55">{hint}</p> : null}
     </div>
   );
 }
@@ -103,11 +103,11 @@ function InputShell({ icon: Icon, children, className }: InputShellProps) {
   return (
     <div
       className={cn(
-        "group flex items-center gap-2 rounded-2xl border border-on-surface/8 bg-white px-3 py-2 shadow-sm transition-all focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/5",
+        "group flex items-center gap-2 rounded-[10px] border border-on-surface/8 bg-white px-3 py-2 transition-all focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/5",
         className,
       )}
     >
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-container-low text-on-surface-variant/45 transition-colors group-focus-within:text-primary">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-surface-container-low text-on-surface-variant/45 transition-colors group-focus-within:text-primary">
         <Icon className="h-4 w-4" />
       </div>
       {children}
@@ -130,13 +130,13 @@ function ToggleSwitch({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "relative inline-flex h-7 w-12 items-center rounded-full p-1 transition-all disabled:cursor-not-allowed disabled:opacity-50",
-        checked ? "bg-primary shadow-lg shadow-primary/20" : "bg-surface-container-highest",
+        "relative inline-flex h-6 w-11 items-center rounded-full p-1 transition-all disabled:cursor-not-allowed disabled:opacity-50",
+        checked ? "bg-primary" : "bg-surface-container-highest",
       )}
     >
       <span
         className={cn(
-          "inline-block h-5 w-5 rounded-full bg-white transition-transform duration-300",
+          "inline-block h-4.5 w-4.5 rounded-full bg-white transition-transform duration-300",
           checked ? "translate-x-5" : "translate-x-0",
         )}
       />
@@ -335,7 +335,7 @@ export default function SettingsPage() {
       <div className="flex flex-1 items-center justify-center bg-surface">
         <div className="flex flex-col items-center gap-5">
           <RefreshCw className="h-9 w-9 animate-spin text-primary/40" />
-          <p className="text-[11px] font-black uppercase tracking-[0.35em] text-on-surface-variant/40">
+          <p className="text-[12px] font-medium text-on-surface-variant/55">
             正在读取设置
           </p>
         </div>
@@ -345,11 +345,11 @@ export default function SettingsPage() {
 
   return (
     <div className="flex min-h-0 flex-1 overflow-hidden bg-surface">
-      <aside className="w-[252px] shrink-0 overflow-y-auto border-r border-on-surface/5 bg-surface-container-low/25 px-5 py-5">
-        <div className="space-y-5">
+      <aside className="w-[236px] shrink-0 overflow-y-auto border-r border-on-surface/6 bg-surface-container-low px-4 py-4">
+        <div className="space-y-4">
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-1">
-              <h2 className="text-[11px] font-black uppercase tracking-[0.28em] text-on-surface-variant/45">
+              <h2 className="text-[13px] font-semibold tracking-tight text-on-surface">
                 配置方案
               </h2>
               <p className="text-[12px] leading-5 text-on-surface-variant/70">
@@ -360,22 +360,22 @@ export default function SettingsPage() {
               variant="secondary"
               size="sm"
               onClick={handleAddProfile}
-              className="h-10 w-10 rounded-xl p-0"
+              className="h-9 w-9 rounded-[10px] p-0"
               title="新建方案"
             >
               <Plus className="h-4 w-4" />
             </Button>
           </div>
 
-          <nav className="space-y-2.5">
+          <nav className="space-y-2">
             {profiles.map((profile) => (
               <div
                 key={profile.id}
                 className={cn(
-                  "group flex cursor-pointer items-center justify-between gap-3 rounded-[20px] border px-4 py-3.5 transition-all",
+                  "group flex cursor-pointer items-center justify-between gap-3 rounded-[10px] border px-3.5 py-3 transition-all",
                   activeId === profile.id
-                    ? "border-on-surface/6 bg-white text-on-surface shadow-sm"
-                    : "border-transparent bg-white/35 text-on-surface-variant/70 hover:border-primary/10 hover:bg-white/60 hover:text-on-surface",
+                    ? "border-on-surface/8 bg-white text-on-surface"
+                    : "border-transparent bg-transparent text-on-surface-variant/70 hover:border-primary/10 hover:bg-white/70 hover:text-on-surface",
                 )}
                 onClick={() => void handleSwitchProfile(profile.id)}
               >
@@ -387,8 +387,8 @@ export default function SettingsPage() {
                     )}
                   />
                   <div className="min-w-0">
-                    <p className="truncate text-[13px] font-black tracking-tight">{profile.name}</p>
-                    <p className="text-[10px] uppercase tracking-[0.18em] text-on-surface-variant/35">
+                    <p className="truncate text-[13px] font-semibold tracking-tight">{profile.name}</p>
+                    <p className="text-[11px] text-on-surface-variant/40">
                       {profile.id}
                     </p>
                   </div>
@@ -401,7 +401,7 @@ export default function SettingsPage() {
                       event.stopPropagation();
                       void handleDeleteProfile(profile.id, profile.name);
                     }}
-                    className="rounded-lg p-1.5 text-on-surface-variant/25 opacity-0 transition-all hover:bg-error/5 hover:text-error hover:opacity-100 group-hover:opacity-70"
+                    className="rounded-[8px] p-1.5 text-on-surface-variant/25 opacity-0 transition-all hover:bg-error/5 hover:text-error hover:opacity-100 group-hover:opacity-70"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -410,16 +410,16 @@ export default function SettingsPage() {
             ))}
           </nav>
 
-          <div className="rounded-[24px] border border-primary/10 bg-primary/6 p-4">
+          <div className="rounded-[12px] border border-primary/10 bg-primary/6 p-3.5">
             <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white text-primary shadow-sm">
+              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-white text-primary">
                 <Info className="h-4 w-4" />
               </div>
               <div className="space-y-1.5">
-                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-primary/85">
+                <p className="text-[12px] font-semibold text-primary/85">
                   桌面版建议
                 </p>
-                <p className="text-[11px] leading-5 text-on-surface-variant/70">
+                <p className="text-[12px] leading-5 text-on-surface-variant/70">
                   为不同目录准备不同方案，后续切换时会更快，也更不容易改错配置。
                 </p>
               </div>
@@ -428,24 +428,24 @@ export default function SettingsPage() {
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1 overflow-y-auto bg-surface/35">
-        <div className="mx-auto flex w-full max-w-[980px] flex-col gap-5 px-5 py-5 lg:px-7 lg:py-6">
-          <div className="sticky top-0 z-20 rounded-[24px] border border-on-surface/6 bg-white/88 px-5 py-4 shadow-[0_10px_28px_rgba(36,48,42,0.08)] backdrop-blur-xl">
+      <main className="min-w-0 flex-1 overflow-y-auto bg-surface">
+        <div className="mx-auto flex w-full max-w-[940px] flex-col gap-4 px-4 py-4 lg:px-5 lg:py-5">
+          <div className="sticky top-0 z-20 rounded-[12px] border border-on-surface/8 bg-surface-container-lowest px-4 py-3.5 shadow-[0_8px_22px_rgba(36,48,42,0.06)]">
             <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="min-w-0 space-y-2">
+              <div className="min-w-0 space-y-1.5">
                 <div className="flex flex-wrap items-center gap-3">
-                  <h1 className="text-2xl font-black tracking-tight text-on-surface">设置与偏好</h1>
-                  <span className="rounded-full border border-on-surface/8 bg-surface-container-low px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant/55">
+                  <h1 className="text-[1.35rem] font-black tracking-tight text-on-surface">设置与偏好</h1>
+                  <span className="rounded-[8px] border border-on-surface/8 bg-surface-container-low px-2.5 py-1 text-[12px] font-medium text-on-surface-variant/65">
                     {activeProfile?.name || "当前方案"}
                   </span>
                   {isDirty ? (
-                    <span className="rounded-full border border-warning/10 bg-warning-container/20 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-warning">
+                    <span className="rounded-[8px] border border-warning/10 bg-warning-container/20 px-2.5 py-1 text-[12px] font-medium text-warning">
                       未保存
                     </span>
                   ) : null}
                 </div>
-                <p className="max-w-[620px] text-[13px] leading-6 text-on-surface-variant/70">
-                  调整文本模型、图片理解和调试选项。当前布局已按桌面窗口收紧，核心操作会保持在更容易看到的位置。
+                <p className="max-w-[620px] text-[13px] leading-5 text-on-surface-variant/70">
+                  调整文本模型、图片理解和调试选项。设置页会和工作区保持同一套更紧凑的桌面风格。
                 </p>
               </div>
 
@@ -456,7 +456,7 @@ export default function SettingsPage() {
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: 8 }}
-                      className="flex items-center gap-2 rounded-full border border-emerald-500/10 bg-emerald-500/5 px-3 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-emerald-700"
+                      className="flex items-center gap-2 rounded-[8px] border border-emerald-500/10 bg-emerald-500/5 px-3 py-2 text-[12px] font-medium text-emerald-700"
                     >
                       <CheckCircle2 className="h-4 w-4" />
                       {success}
@@ -468,7 +468,7 @@ export default function SettingsPage() {
                   disabled={saving || !isDirty}
                   loading={saving}
                   variant={isDirty ? "primary" : "secondary"}
-                  className="px-8 py-3.5 text-sm"
+                  className="px-6 py-3 text-sm"
                 >
                   {saving ? "保存中" : "保存更改"}
                 </Button>
@@ -498,7 +498,7 @@ export default function SettingsPage() {
             {testResult?.type === "text" ? (
               <div
                 className={cn(
-                  "flex items-center gap-3 rounded-2xl border px-4 py-3 text-[12px] font-bold",
+                  "flex items-center gap-3 rounded-[10px] border px-4 py-3 text-[12px] font-medium",
                   testResult.status === "success"
                     ? "border-emerald-500/10 bg-emerald-500/5 text-emerald-700"
                     : "border-error/10 bg-error/5 text-error",
@@ -513,7 +513,7 @@ export default function SettingsPage() {
               </div>
             ) : null}
 
-            <div className="grid gap-5 xl:grid-cols-2">
+            <div className="grid gap-4 xl:grid-cols-2">
               <FieldGroup
                 label="方案名称"
                 hint="这个名字会显示在侧边栏和会话页面中。"
@@ -523,7 +523,7 @@ export default function SettingsPage() {
                   <input
                     value={config.name}
                     onChange={(event) => handleChange("name", event.target.value)}
-                    className="w-full bg-transparent py-2.5 text-[14px] font-black text-on-surface outline-none"
+                    className="w-full bg-transparent py-2 text-[14px] font-semibold text-on-surface outline-none"
                     placeholder="例如：下载目录默认方案"
                   />
                 </InputShell>
@@ -534,7 +534,7 @@ export default function SettingsPage() {
                   <input
                     value={config.OPENAI_BASE_URL}
                     onChange={(event) => handleChange("OPENAI_BASE_URL", event.target.value)}
-                    className="w-full bg-transparent py-2.5 text-sm font-mono font-bold text-on-surface outline-none"
+                    className="w-full bg-transparent py-2 text-sm font-mono font-medium text-on-surface outline-none"
                     placeholder="https://api.openai.com/v1"
                   />
                 </InputShell>
@@ -548,7 +548,7 @@ export default function SettingsPage() {
                   <input
                     value={config.OPENAI_MODEL}
                     onChange={(event) => handleChange("OPENAI_MODEL", event.target.value)}
-                    className="w-full bg-transparent py-2.5 text-sm font-black text-on-surface outline-none"
+                    className="w-full bg-transparent py-2 text-sm font-semibold text-on-surface outline-none"
                     placeholder="gpt-4o"
                   />
                 </InputShell>
@@ -564,13 +564,13 @@ export default function SettingsPage() {
                     type={showKey ? "text" : "password"}
                     value={config.OPENAI_API_KEY}
                     onChange={(event) => handleChange("OPENAI_API_KEY", event.target.value)}
-                    className="w-full bg-transparent py-2.5 pr-2 text-sm font-mono font-bold text-on-surface outline-none"
+                    className="w-full bg-transparent py-2 pr-2 text-sm font-mono font-medium text-on-surface outline-none"
                     placeholder="sk-..."
                   />
                   <button
                     type="button"
                     onClick={() => setShowKey((current) => !current)}
-                    className="rounded-lg p-2 text-on-surface-variant/35 transition-colors hover:bg-surface-container-low hover:text-on-surface"
+                    className="rounded-[8px] p-2 text-on-surface-variant/35 transition-colors hover:bg-surface-container-low hover:text-on-surface"
                   >
                     {showKey ? <EyeOff className="h-4.5 w-4.5" /> : <Eye className="h-4.5 w-4.5" />}
                   </button>
@@ -597,8 +597,8 @@ export default function SettingsPage() {
                     测试图片能力
                   </Button>
                 ) : null}
-                <div className="flex items-center gap-3 rounded-full border border-on-surface/8 bg-surface-container-low px-3 py-2">
-                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-on-surface-variant/55">
+                <div className="flex items-center gap-3 rounded-[10px] border border-on-surface/8 bg-surface-container-low px-3 py-2">
+                  <span className="text-[12px] font-medium text-on-surface-variant/55">
                     开关
                   </span>
                   <ToggleSwitch
@@ -613,7 +613,7 @@ export default function SettingsPage() {
             {testResult?.type === "vision" ? (
               <div
                 className={cn(
-                  "flex items-center gap-3 rounded-2xl border px-4 py-3 text-[12px] font-bold",
+                  "flex items-center gap-3 rounded-[10px] border px-4 py-3 text-[12px] font-medium",
                   testResult.status === "success"
                     ? "border-emerald-500/10 bg-emerald-500/5 text-emerald-700"
                     : "border-error/10 bg-error/5 text-error",
@@ -630,7 +630,7 @@ export default function SettingsPage() {
 
             <div
               className={cn(
-                "grid gap-5 xl:grid-cols-2",
+                "grid gap-4 xl:grid-cols-2",
                 !config.IMAGE_ANALYSIS_ENABLED && "pointer-events-none",
               )}
             >
@@ -642,7 +642,7 @@ export default function SettingsPage() {
                   <input
                     value={config.IMAGE_ANALYSIS_BASE_URL}
                     onChange={(event) => handleChange("IMAGE_ANALYSIS_BASE_URL", event.target.value)}
-                    className="w-full bg-transparent py-2.5 text-sm font-mono font-bold text-on-surface outline-none"
+                    className="w-full bg-transparent py-2 text-sm font-mono font-medium text-on-surface outline-none"
                     placeholder="留空时会沿用文本接口地址"
                   />
                 </InputShell>
@@ -656,7 +656,7 @@ export default function SettingsPage() {
                   <input
                     value={config.IMAGE_ANALYSIS_MODEL}
                     onChange={(event) => handleChange("IMAGE_ANALYSIS_MODEL", event.target.value)}
-                    className="w-full bg-transparent py-2.5 text-sm font-black text-on-surface outline-none"
+                    className="w-full bg-transparent py-2 text-sm font-semibold text-on-surface outline-none"
                     placeholder="例如：gpt-4o"
                   />
                 </InputShell>
@@ -672,13 +672,13 @@ export default function SettingsPage() {
                     type={showVisionKey ? "text" : "password"}
                     value={config.IMAGE_ANALYSIS_API_KEY}
                     onChange={(event) => handleChange("IMAGE_ANALYSIS_API_KEY", event.target.value)}
-                    className="w-full bg-transparent py-2.5 pr-2 text-sm font-mono font-bold text-on-surface outline-none"
+                    className="w-full bg-transparent py-2 pr-2 text-sm font-mono font-medium text-on-surface outline-none"
                     placeholder="留空时会沿用文本 API 密钥"
                   />
                   <button
                     type="button"
                     onClick={() => setShowVisionKey((current) => !current)}
-                    className="rounded-lg p-2 text-on-surface-variant/35 transition-colors hover:bg-surface-container-low hover:text-on-surface"
+                    className="rounded-[8px] p-2 text-on-surface-variant/35 transition-colors hover:bg-surface-container-low hover:text-on-surface"
                   >
                     {showVisionKey ? <EyeOff className="h-4.5 w-4.5" /> : <Eye className="h-4.5 w-4.5" />}
                   </button>
@@ -692,12 +692,12 @@ export default function SettingsPage() {
             title="其他设置"
             description="保留少量调试选项，避免把桌面版设置页做成过长的开发面板。"
           >
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className="rounded-[24px] border border-on-surface/6 bg-surface-container-low/18 px-5 py-4">
+            <div className="grid gap-3 lg:grid-cols-2">
+              <div className="rounded-[12px] border border-on-surface/8 bg-surface-container-low px-4 py-3.5">
                 <div className="flex items-start justify-between gap-4">
                   <div className="space-y-1.5">
-                    <h3 className="text-[13px] font-black tracking-tight text-on-surface">详细日志</h3>
-                    <p className="text-[12px] leading-6 text-on-surface-variant/65">
+                    <h3 className="text-[13px] font-semibold tracking-tight text-on-surface">详细日志</h3>
+                    <p className="text-[12px] leading-5 text-on-surface-variant/65">
                       在 `logs/` 目录保存更完整的排查信息。
                     </p>
                   </div>
@@ -708,14 +708,14 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <div className="rounded-[24px] border border-dashed border-on-surface/10 bg-white/60 px-5 py-4">
+              <div className="rounded-[12px] border border-dashed border-on-surface/10 bg-white px-4 py-3.5">
                 <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-surface-container-low text-on-surface-variant/30">
+                  <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-surface-container-low text-on-surface-variant/30">
                     <SettingsIcon className="h-4.5 w-4.5" />
                   </div>
                   <div className="space-y-1.5">
-                    <h3 className="text-[13px] font-black tracking-tight text-on-surface">补充说明</h3>
-                    <p className="text-[12px] leading-6 text-on-surface-variant/65">
+                    <h3 className="text-[13px] font-semibold tracking-tight text-on-surface">补充说明</h3>
+                    <p className="text-[12px] leading-5 text-on-surface-variant/65">
                       如果还需要更底层的调整，可以再查看项目里的 `config.yaml`。
                     </p>
                   </div>
@@ -725,7 +725,7 @@ export default function SettingsPage() {
           </SettingsSection>
 
           <div className="pb-3 text-center">
-            <p className="text-[11px] font-black uppercase tracking-[0.28em] text-on-surface-variant/25">
+            <p className="text-[12px] font-medium text-on-surface-variant/35">
               Local Settings
             </p>
             <p className="mt-1 text-[11px] leading-5 text-on-surface-variant/35">
@@ -749,12 +749,12 @@ export default function SettingsPage() {
               initial={{ opacity: 0, scale: 0.96, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: 20 }}
-              className="relative w-full max-w-[460px] rounded-[30px] border border-on-surface/6 bg-white p-8 shadow-2xl"
+              className="relative w-full max-w-[440px] rounded-[14px] border border-on-surface/8 bg-white p-6 shadow-[0_20px_48px_rgba(36,48,42,0.14)]"
             >
-              <div className="space-y-5">
-                <div className="space-y-2">
-                  <h3 className="text-xl font-black tracking-tight text-on-surface">{dialog.title}</h3>
-                  <p className="text-[14px] leading-7 text-on-surface-variant/75">{dialog.message}</p>
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <h3 className="text-[1.05rem] font-black tracking-tight text-on-surface">{dialog.title}</h3>
+                  <p className="text-[14px] leading-6 text-on-surface-variant/75">{dialog.message}</p>
                 </div>
 
                 {dialog.type === "prompt" ? (
@@ -768,19 +768,19 @@ export default function SettingsPage() {
                           dialog.onConfirm(dialog.value);
                         }
                       }}
-                      className="w-full bg-transparent py-2.5 text-[14px] font-black text-on-surface outline-none"
+                      className="w-full bg-transparent py-2 text-[14px] font-semibold text-on-surface outline-none"
                     />
                   </InputShell>
                 ) : null}
 
                 <div className="flex items-center gap-3 pt-2">
-                  <Button variant="secondary" onClick={() => setDialog(null)} className="flex-1 py-3.5">
+                  <Button variant="secondary" onClick={() => setDialog(null)} className="flex-1 py-3">
                     取消
                   </Button>
                   <Button
                     variant="primary"
                     onClick={() => dialog.onConfirm(dialog.value)}
-                    className="flex-1 py-3.5"
+                    className="flex-1 py-3"
                   >
                     {dialog.type === "confirm" ? "确定" : "创建"}
                   </Button>

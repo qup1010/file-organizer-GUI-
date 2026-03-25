@@ -289,10 +289,10 @@ function FolderNode({
   }
 
   return (
-    <div className={cn("flex flex-col", level > 0 && "ml-3.5 border-l border-on-surface/5 pl-1.5")}>
+    <div className={cn("flex flex-col", level > 0 && "ml-3 border-l border-on-surface/6 pl-1.5")}>
       <div 
         className={cn(
-          "flex items-center gap-2 py-1.5 px-2 rounded-md transition-all cursor-pointer group",
+          "group flex cursor-pointer items-center gap-2 rounded-[8px] px-2 py-1.5 transition-all",
           isExpanded ? "bg-surface-container-low/30" : "hover:bg-on-surface/2"
         )}
         onClick={() => onToggle(node.path)}
@@ -300,15 +300,15 @@ function FolderNode({
         <div className="flex items-center gap-1.5 shrink-0">
           <ChevronRight 
             className={cn(
-              "w-3 h-3 text-on-surface-variant/30 transition-transform duration-200",
+              "h-3 w-3 text-on-surface-variant/30 transition-transform duration-200",
               isExpanded && "rotate-90 text-primary/50",
               !hasContent && "opacity-0"
             )} 
           />
-          <Folder className={cn("w-3.5 h-3.5 text-on-surface/20", isExpanded && "text-primary/40")} />
+          <Folder className={cn("h-3.5 w-3.5 text-on-surface/25", isExpanded && "text-primary/45")} />
         </div>
         <span className={cn(
-          "text-[11px] font-bold truncate flex-1 tracking-tight text-on-surface/70",
+          "flex-1 truncate text-[12px] font-semibold tracking-tight text-on-surface/75",
           (node.hasUnresolved || node.hasReview) && "text-on-surface"
         )}>
           {node.name}
@@ -316,11 +316,11 @@ function FolderNode({
         
         {/* 文件夹状态指示灯 */}
         <div className="flex items-center gap-1 pr-1">
-          {node.hasUnresolved && <span className="w-1.5 h-1.5 rounded-full bg-warning animate-pulse" title="包含待确认项" />}
-          {node.hasReview && <span className="w-1.5 h-1.5 rounded-full bg-primary/40" title="包含待核对项" />}
+          {node.hasUnresolved && <span className="h-1.5 w-1.5 rounded-full bg-warning" title="包含待确认项" />}
+          {node.hasReview && <span className="h-1.5 w-1.5 rounded-full bg-primary/50" title="包含待核对项" />}
         </div>
         
-        <span className="text-[9px] font-bold text-on-surface-variant/10 tabular-nums">
+        <span className="text-[11px] font-medium text-on-surface-variant/45 tabular-nums">
           {node.items.length + Object.keys(node.children).length}
         </span>
       </div>
@@ -420,59 +420,59 @@ function FileItem({
   return (
     <div 
       className={cn(
-        "group/item relative flex flex-col pr-1 py-1 my-0.5 rounded-md transition-all",
+        "group/item relative my-0.5 flex flex-col rounded-[8px] py-1 pr-1 transition-all",
         isUnresolved ? "bg-warning/5 hover:bg-warning/10" : isReview ? "bg-primary/5 hover:bg-primary/10" : "hover:bg-on-surface/2"
       )}
       style={{ paddingLeft: `${level * 12 + 20}px` }}
       title={tooltipText || undefined}
     >
-      <div className="flex items-center gap-2 text-[11px] text-on-surface-variant/70 hover:text-on-surface transition-colors">
-        <Icon className={cn("w-3 h-3 shrink-0", !isFile && "text-on-surface/40")} />
+      <div className="flex items-center gap-2 text-[13px] text-on-surface-variant/75 transition-colors hover:text-on-surface">
+        <Icon className={cn("h-3.5 w-3.5 shrink-0", !isFile && "text-on-surface/45")} />
         <div className="flex-1 min-w-0 flex flex-col gap-0.5">
           <div className="flex items-center gap-2">
-            <span className={cn("truncate tracking-tight", !isFile && "font-bold text-on-surface/80")}>
+            <span className={cn("truncate tracking-tight", !isFile && "font-semibold text-on-surface/80")}>
               {item.display_name}
             </span>
             {isUnresolved && (
-              <span className="px-1 py-0.5 rounded-[2px] bg-warning text-white text-[8px] font-black uppercase leading-none">待确认</span>
+              <span className="rounded-[5px] bg-warning px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white">待确认</span>
             )}
             {isReview && (
-              <span className="px-1 py-0.5 rounded-[2px] bg-primary text-white text-[8px] font-black uppercase leading-none">待核对</span>
+              <span className="rounded-[5px] bg-primary px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white">待核对</span>
             )}
           </div>
           {item.suggested_purpose && (
-            <div className="text-[9px] text-on-surface-variant/40 leading-tight line-clamp-1 italic">
+            <div className="line-clamp-1 text-[12px] leading-5 text-on-surface-variant/60">
               {item.suggested_purpose}
             </div>
           )}
         </div>
 
         {!readOnly && (
-          <div className="opacity-0 group-hover/item:opacity-100 flex items-center gap-0.5 pr-1">
+          <div className="flex items-center gap-0.5 pr-1 opacity-0 group-hover/item:opacity-100">
             <button
               onClick={(e) => { e.stopPropagation(); onEdit(item.item_id, item.target_relpath || ""); }}
-              className="p-1 hover:bg-primary/10 rounded text-on-surface-variant/50 hover:text-primary transition-colors"
+              className="rounded p-1 text-on-surface-variant/50 transition-colors hover:bg-primary/10 hover:text-primary"
             >
-              <Edit2 className="w-2.5 h-2.5" />
+              <Edit2 className="h-3 w-3" />
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); onMoveToReview(item.item_id); }}
-              className="p-1 hover:bg-warning/10 rounded text-on-surface-variant/50 hover:text-warning transition-colors"
+              className="rounded p-1 text-on-surface-variant/50 transition-colors hover:bg-warning/10 hover:text-warning"
             >
-              <ArrowRight className="w-2.5 h-2.5" />
+              <ArrowRight className="h-3 w-3" />
             </button>
           </div>
         )}
       </div>
       {hoverDetails.length > 0 && (
-        <div className="pointer-events-none absolute left-6 right-3 top-full z-20 mt-1 hidden rounded-lg border border-on-surface/10 bg-surface-container px-3 py-2 text-[11px] leading-5 text-on-surface shadow-lg group-hover/item:block">
+        <div className="pointer-events-none absolute left-6 right-3 top-full z-20 mt-1 hidden rounded-[8px] border border-on-surface/10 bg-surface-container px-3 py-2 text-[11px] leading-5 text-on-surface shadow-lg group-hover/item:block">
           {hoverDetails.map((line) => (
             <div key={line}>{line}</div>
           ))}
         </div>
       )}
       {isEditing && (
-        <div className="flex gap-2 py-1 mt-1 ml-4 border-l border-primary/20 pl-2" onClick={(e) => e.stopPropagation()}>
+        <div className="mt-1 ml-4 flex gap-2 border-l border-primary/20 py-1 pl-2" onClick={(e) => e.stopPropagation()}>
           <input
             autoFocus
             value={editValue}
@@ -481,9 +481,9 @@ function FileItem({
               if (e.key === "Enter") handleEditSubmit(item.item_id);
               if (e.key === "Escape") setEditingId(null);
             }}
-            className="flex-1 bg-surface-container-low border-b border-primary text-[10px] py-0.5 outline-none font-mono"
+            className="flex-1 border-b border-primary bg-surface-container-low py-1 text-[12px] font-mono outline-none"
           />
-          <button onClick={() => handleEditSubmit(item.item_id)} className="text-[9px] font-black text-primary uppercase">OK</button>
+          <button onClick={() => handleEditSubmit(item.item_id)} className="text-[12px] font-semibold text-primary">确认</button>
         </div>
       )}
     </div>
@@ -528,72 +528,77 @@ export function PreviewPanel({
 
   return (
     <div className="flex flex-col h-full bg-surface overflow-hidden">
-      <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin">
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-black text-on-surface uppercase tracking-widest flex items-center gap-2">
-              <Activity className="w-4 h-4 text-primary" /> 当前方案
-            </h2>
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-container-high text-[9px] font-bold text-on-surface-variant uppercase tracking-widest">
-              {stage === "completed" ? "已完成" : "整理中"}
+      <div className="flex-1 overflow-y-auto p-4 scrollbar-thin lg:p-5">
+        <div className="space-y-4">
+          <div className="rounded-[10px] border border-on-surface/8 bg-surface-container-low px-4 py-3.5">
+            <div className="flex items-center justify-between gap-4">
+              <div className="space-y-1">
+                <h2 className="flex items-center gap-2 text-[15px] font-black text-on-surface">
+                  <Activity className="h-4 w-4 text-primary" /> 当前整理方案
+                </h2>
+                <p className="text-[13px] leading-6 text-ui-muted">
+                  先确认这轮目录变化和待处理项，再决定是否开始预检。
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 rounded-[8px] bg-surface-container-lowest px-2.5 py-1 text-[12px] font-medium text-on-surface-variant">
+                {stage === "completed" ? "已完成" : "整理中"}
+              </div>
             </div>
           </div>
 
-          {/* 核心指标数值展示 */}
-          <div className="grid grid-cols-4 border-y border-on-surface/[0.04] py-8">
-            <div className="flex flex-col items-center gap-2 border-r border-on-surface/[0.04] px-4">
-              <span className="text-[9px] font-black text-on-surface-variant/30 uppercase tracking-[0.2em] whitespace-nowrap">移动文件</span>
-              <p className="text-[28px] font-black text-on-surface leading-none tracking-tighter tabular-nums">
+          <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-4 py-3.5">
+              <span className="text-[12px] font-medium text-ui-muted">移动文件</span>
+              <p className="mt-2 text-[1.35rem] font-black leading-none tracking-tight tabular-nums text-on-surface">
                 {plan.stats.move_count}
               </p>
             </div>
-            <div className="flex flex-col items-center gap-2 border-r border-on-surface/[0.04] px-4">
-              <span className="text-[9px] font-black text-on-surface-variant/30 uppercase tracking-[0.2em] whitespace-nowrap">新建目录</span>
-              <p className="text-[28px] font-black text-on-surface leading-none tracking-tighter tabular-nums">
+            <div className="rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-4 py-3.5">
+              <span className="text-[12px] font-medium text-ui-muted">新建目录</span>
+              <p className="mt-2 text-[1.35rem] font-black leading-none tracking-tight tabular-nums text-on-surface">
                 {plan.stats.directory_count}
               </p>
             </div>
-            <div className="flex flex-col items-center gap-2 border-r border-on-surface/[0.04] px-4">
+            <div className="rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-4 py-3.5">
               <span className={cn(
-                "text-[9px] font-black uppercase tracking-[0.2em] whitespace-nowrap",
-                plan.unresolved_items.length > 0 ? "text-warning/60" : "text-on-surface-variant/30"
+                "text-[12px] font-medium",
+                plan.unresolved_items.length > 0 ? "text-warning" : "text-ui-muted"
               )}>待确认项</span>
               <p className={cn(
-                "text-[28px] font-black leading-none tracking-tighter tabular-nums",
+                "mt-2 text-[1.35rem] font-black leading-none tracking-tight tabular-nums",
                 plan.unresolved_items.length > 0 ? "text-warning" : "text-on-surface"
               )}>
                 {plan.unresolved_items.length}
               </p>
             </div>
-            <div className="flex flex-col items-center gap-2 px-4">
-              <span className="text-[9px] font-black text-on-surface-variant/30 uppercase tracking-[0.2em] whitespace-nowrap">Review</span>
-              <p className="text-[28px] font-black text-on-surface leading-none tracking-tighter tabular-nums">
+            <div className="rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-4 py-3.5">
+              <span className="text-[12px] font-medium text-ui-muted">Review</span>
+              <p className="mt-2 text-[1.35rem] font-black leading-none tracking-tight tabular-nums text-on-surface">
                 {plan.review_items.length}
               </p>
             </div>
           </div>
 
-          {/* 方案总结与亮点 */}
           {(plan.summary || (plan.change_highlights && plan.change_highlights.length > 0)) && (
-            <div className="py-2">
+            <div className="space-y-3">
               {plan.summary && (
-                <div className="px-6 py-4 rounded-lg bg-on-surface/[0.02] border border-on-surface/[0.04]">
-                  <p className="text-[14px] leading-7 text-on-surface/70 font-medium italic">
-                    “ {plan.summary} ”
+                <div className="rounded-[10px] border border-on-surface/8 bg-surface-container-low px-4 py-3.5">
+                  <p className="text-[13px] leading-6 text-on-surface/80">
+                    {plan.summary}
                   </p>
                 </div>
               )}
 
               {plan.change_highlights && plan.change_highlights.length > 0 && (
                 <div className="space-y-2.5">
-                  <h4 className="text-[10px] font-black text-on-surface-variant/40 uppercase tracking-[0.2em] flex items-center gap-2">
-                    <Sparkles className="w-3 h-3" /> 本轮重点变化
+                  <h4 className="flex items-center gap-2 text-[13px] font-medium text-ui-muted">
+                    <Sparkles className="h-3.5 w-3.5 text-primary" /> 本轮重点变化
                   </h4>
                   <div className="grid grid-cols-1 gap-1.5">
                     {plan.change_highlights.slice(0, 5).map((highlight, idx) => (
-                      <div key={idx} className="flex items-center gap-2.5 px-3 py-2 rounded-md bg-surface-container-low/30 text-[11px] text-on-surface/70 border border-on-surface/5">
-                        <Check className="w-3 h-3 text-primary/40" />
-                        {highlight}
+                      <div key={idx} className="flex items-start gap-2.5 rounded-[9px] border border-on-surface/8 bg-surface-container-lowest px-3 py-2.5 text-[13px] leading-6 text-on-surface/75">
+                        <Check className="mt-1 h-3.5 w-3.5 shrink-0 text-primary/45" />
+                        <span>{highlight}</span>
                       </div>
                     ))}
                   </div>
@@ -603,22 +608,19 @@ export function PreviewPanel({
           )}
 
           <div className="space-y-3">
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-[9px] font-black text-on-surface-variant/30 flex items-center gap-1 uppercase tracking-[0.15em]">
-                  <Layers className="w-3 h-3" /> 目录结构
-                </h3>
-              </div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <h3 className="flex items-center gap-1.5 text-[13px] font-medium text-ui-muted">
+                <Layers className="h-3.5 w-3.5 text-primary/70" /> 目录结构
+              </h3>
 
-              {/* 视图切换分段选择器 */}
-              <div className="flex p-0.5 bg-surface-container-low/50 rounded-md border border-on-surface/5">
+              <div className="flex rounded-[10px] border border-on-surface/8 bg-surface-container p-1 sm:w-[220px]">
                 <button
                   onClick={() => setViewMode("before")}
                   className={cn(
-                    "flex-1 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all rounded-[calc(0.375rem-2px)]",
+                    "flex-1 rounded-[8px] px-4 py-2 text-[13px] font-semibold transition-colors",
                     viewMode === "before" 
-                      ? "bg-surface-container-lowest text-on-surface shadow-sm" 
-                      : "text-on-surface-variant/40 hover:text-on-surface-variant/60"
+                      ? "border border-on-surface/8 bg-surface-container-lowest text-on-surface" 
+                      : "text-on-surface-variant/60 hover:text-on-surface"
                   )}
                 >
                   整理前
@@ -626,10 +628,10 @@ export function PreviewPanel({
                 <button
                   onClick={() => setViewMode("after")}
                   className={cn(
-                    "flex-1 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all rounded-[calc(0.375rem-2px)]",
+                    "flex-1 rounded-[8px] px-4 py-2 text-[13px] font-semibold transition-colors",
                     viewMode === "after" 
-                      ? "bg-surface-container-lowest text-on-surface shadow-sm" 
-                      : "text-on-surface-variant/40 hover:text-on-surface-variant/60"
+                      ? "border border-on-surface/8 bg-surface-container-lowest text-on-surface" 
+                      : "text-on-surface-variant/60 hover:text-on-surface"
                   )}
                 >
                   整理后
@@ -637,10 +639,10 @@ export function PreviewPanel({
               </div>
             </div>
 
-            <div className="bg-surface-container-lowest/20 rounded-lg p-2 border border-on-surface/[0.04] min-h-[200px] shadow-xs">
+            <div className="min-h-[220px] rounded-[10px] border border-on-surface/8 bg-surface-container-lowest p-2">
               {!hasTreeContent ? (
-                <div className="flex flex-col items-center justify-center h-40 text-[10px] font-bold text-on-surface-variant/10 italic gap-2">
-                  <Archive className="w-6 h-6 opacity-5" />
+                <div className="flex h-36 flex-col items-center justify-center gap-2 text-[12px] font-medium text-on-surface-variant/45">
+                  <Archive className="h-6 w-6 opacity-30" />
                   还没有可显示的内容
                 </div>
               ) : (
@@ -669,16 +671,15 @@ export function PreviewPanel({
       </div>
 
       {!readOnly && (
-        <div className="shrink-0 p-8 bg-surface-container-lowest/60 backdrop-blur-xl border-t border-on-surface/5">
-          {/* 决策引导说明 */}
-          <div className="mb-4 flex items-start gap-2.5 px-1">
+        <div className="shrink-0 border-t border-on-surface/8 bg-surface-container-low px-4 py-3.5 lg:px-5">
+          <div className="mb-2.5 flex items-start gap-2.5 px-1">
             {plan.unresolved_items.length > 0 ? (
-              <div className="flex items-center gap-2 text-[11px] font-bold text-warning leading-relaxed">
+              <div className="flex items-center gap-2 text-[13px] font-medium leading-relaxed text-warning">
                 <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                 <span>仍有 {plan.unresolved_items.length} 项冲突待处理，请先在左侧对话区完成确认</span>
               </div>
             ) : plan.readiness.can_precheck || plan.items.length > 0 ? (
-              <div className="flex items-center gap-2 text-[11px] font-bold text-primary leading-relaxed">
+              <div className="flex items-center gap-2 text-[13px] font-medium leading-relaxed text-primary">
                 <Check className="w-3.5 h-3.5 shrink-0" />
                 <span>方案已经准备好了，如果你满意，可以直接开始预检。</span>
               </div>
@@ -689,21 +690,21 @@ export function PreviewPanel({
             onClick={onRunPrecheck}
             disabled={isBusy || (!plan.readiness.can_precheck && plan.unresolved_items.length > 0)}
             className={cn(
-              "w-full flex items-center justify-center gap-3 py-4.5 rounded-md text-[11px] font-black uppercase tracking-[0.3em] transition-all",
+              "flex w-full items-center justify-center gap-3 rounded-[10px] py-3.5 text-[14px] font-semibold transition-colors",
               (plan.readiness.can_precheck || plan.unresolved_items.length === 0) && !isBusy
-                ? "bg-primary text-white shadow-[0_12px_40px_rgba(76,98,88,0.1)] hover:bg-primary-dim hover:shadow-[0_15px_45px_rgba(76,98,88,0.18)] active:scale-[0.98] cursor-pointer" 
-                : "bg-on-surface/5 text-on-surface-variant/20 cursor-not-allowed opacity-60"
+                ? "cursor-pointer border border-primary/20 bg-primary text-white hover:bg-primary-dim active:scale-[0.98]" 
+                : "cursor-not-allowed border border-on-surface/8 bg-on-surface/5 text-on-surface-variant/35 opacity-60"
             )}
           >
             {isBusy ? (
               <RefreshCw className="w-4 h-4 animate-spin-slow" />
             ) : (
-              <Layers className="w-4 h-4 opacity-50" />
+              <Layers className="w-4 h-4 opacity-70" />
             )}
             {isBusy ? "正在更新中" : "开始预检"}
           </button>
           
-          <p className="mt-4 text-[9px] text-center font-bold text-on-surface-variant/30 uppercase tracking-[0.2em]">
+          <p className="mt-2.5 text-center text-[12px] text-ui-muted">
             预检只检查真实文件冲突与目录写入权限，不会立刻执行移动
           </p>
         </div>

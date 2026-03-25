@@ -21,31 +21,43 @@ export function RuntimeStatus() {
   }, []);
 
   return (
-    <details className="group mt-2">
-      <summary className="list-none cursor-pointer flex justify-center items-center gap-2 text-xs font-medium text-on-surface-variant/70 hover:text-primary transition-colors select-none">
-        <Server className="w-3.5 h-3.5" />
-        <span className="flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          本地服务已连接
-        </span>
-        <ChevronRight className="w-3.5 h-3.5 group-open:rotate-90 transition-transform ml-1" />
+    <details className="group rounded-[12px] border border-on-surface/8 bg-surface-container-lowest shadow-[0_4px_14px_rgba(37,45,40,0.03)]">
+      <summary className="flex list-none cursor-pointer items-center justify-between gap-3 px-4 py-3 select-none">
+        <div className="flex items-center gap-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-[9px] border border-on-surface/8 bg-surface-container text-primary">
+            <Server className="h-4 w-4" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 text-[14px] font-semibold text-on-surface">
+              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              本地服务已连接
+            </div>
+            <p className="text-[12px] text-ui-muted">{baseUrl}</p>
+          </div>
+        </div>
+        <ChevronRight className="h-4 w-4 text-ui-muted transition-transform group-open:rotate-90" />
       </summary>
-      <div className="mt-4 bg-white/60 border border-outline-variant/10 rounded-2xl p-4 flex flex-col gap-2 font-mono text-xs text-on-surface-variant">
-        <div className="flex justify-between items-center pb-2 border-b border-outline-variant/5">
-           <span className="font-sans font-medium flex items-center gap-2"><Terminal className="w-3 h-3"/> 当前连接信息</span>
-           <span className="text-on-surface-variant/50">v1.0</span>
+      <div className="border-t border-on-surface/6 px-4 py-3">
+        <div className="flex items-center justify-between border-b border-on-surface/6 pb-2">
+          <span className="flex items-center gap-2 text-[13px] font-medium text-on-surface">
+            <Terminal className="h-3.5 w-3.5 text-primary" />
+            当前连接信息
+          </span>
+          <span className="text-ui-meta text-ui-muted">v1.0</span>
         </div>
-        <div className="flex justify-between pt-1">
-          <span>服务地址:</span>
-          <span className="text-on-surface">{baseUrl}</span>
-        </div>
-        <div className="flex justify-between">
-          <span>来源:</span>
-          <span className="text-primary">{source}</span>
-        </div>
-        <div className="flex justify-between">
-          <span>环境:</span>
-          <span>{process.env.NODE_ENV || 'development'}</span>
+        <div className="mt-3 grid gap-2 font-mono text-[12px] text-on-surface-variant">
+          <div className="grid gap-1 rounded-[8px] bg-surface-container-low px-3 py-2">
+            <span>服务地址</span>
+            <span className="break-all text-on-surface">{baseUrl}</span>
+          </div>
+          <div className="flex items-center justify-between gap-4 rounded-[8px] bg-surface-container-low px-3 py-2">
+            <span>来源</span>
+            <span className="text-primary">{source}</span>
+          </div>
+          <div className="flex items-center justify-between gap-4 rounded-[8px] bg-surface-container-low px-3 py-2">
+            <span>环境</span>
+            <span>{process.env.NODE_ENV || "development"}</span>
+          </div>
         </div>
       </div>
     </details>

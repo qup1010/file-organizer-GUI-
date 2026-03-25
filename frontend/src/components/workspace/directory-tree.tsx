@@ -154,9 +154,9 @@ function FolderNode({
   }
 
   return (
-    <div className={cn("flex flex-col", level > 0 && "ml-4 border-l border-on-surface/5 pl-2")}>
+    <div className={cn("flex flex-col", level > 0 && "ml-4 border-l border-on-surface/6 pl-2")}>
       <div
-        className="group/header flex items-center justify-between py-1 px-2 rounded hover:bg-surface-container-low/50 cursor-pointer transition-colors"
+        className="group/header flex cursor-pointer items-center justify-between rounded-[8px] px-2 py-1.5 transition-colors hover:bg-surface-container-low/50"
         onClick={() => onToggle(node.path)}
       >
         <div className="flex items-center gap-2 min-w-0">
@@ -168,11 +168,11 @@ function FolderNode({
             )}
           />
           <Folder className={cn("w-3 h-3 text-on-surface/40", isExpanded && "text-primary/60")} />
-          <span className="text-[12px] font-bold text-on-surface truncate tracking-tight">
+          <span className="truncate text-[13px] font-semibold tracking-tight text-on-surface">
             {node.name}
           </span>
           {node.items.length > 0 && (
-            <span className="text-[9px] font-mono text-on-surface-variant/30 text-nowrap">
+            <span className="text-nowrap font-mono text-[11px] text-on-surface-variant/45">
               ({node.items.length})
             </span>
           )}
@@ -211,8 +211,8 @@ function FolderNode({
                 const isEditing = editingId === item.item_id;
                 return (
                   <div key={item.item_id} className="group/item flex flex-col pl-5 pr-1">
-                    <div className="flex items-center gap-2 py-0.5 text-[11px] text-on-surface-variant hover:text-on-surface transition-colors">
-                      <Icon className="w-2.5 h-2.5 opacity-40 group-hover/item:opacity-90" />
+                    <div className="flex items-center gap-2 py-1 text-[12px] text-on-surface-variant transition-colors hover:text-on-surface">
+                      <Icon className="h-3 w-3 opacity-50 group-hover/item:opacity-90" />
                       <span className="truncate flex-1 tracking-tight">{item.display_name}</span>
 
                       {!readOnly && onEdit && onMoveToReview && (
@@ -249,13 +249,13 @@ function FolderNode({
                             if (e.key === "Enter") handleEditSubmit(item.item_id);
                             if (e.key === "Escape") setEditingId(null);
                           }}
-                          className="flex-1 bg-surface-container-low border-b border-primary text-[10px] py-0.5 outline-none font-mono"
+                          className="flex-1 border-b border-primary bg-surface-container-low py-1 text-[12px] outline-none font-mono"
                         />
                         <button
                           onClick={() => handleEditSubmit(item.item_id)}
-                          className="text-[9px] font-black text-primary uppercase"
+                          className="text-[12px] font-semibold text-primary"
                         >
-                          OK
+                          确认
                         </button>
                       </div>
                     )}

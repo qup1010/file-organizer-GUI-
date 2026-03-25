@@ -309,7 +309,7 @@ export default function WorkspaceClient() {
 
     if (stage === "completed") {
       return (
-        <div className="h-full overflow-y-auto p-5 max-w-[1040px] mx-auto lg:p-6 scrollbar-thin">
+        <div className="mx-auto h-full max-w-[980px] overflow-y-auto p-4 lg:p-5 scrollbar-thin">
           <CompletionView
             journal={journal}
             summary={snapshot?.summary || ""}
@@ -335,7 +335,7 @@ export default function WorkspaceClient() {
 
     if (stage === "ready_to_execute") {
       return (
-        <div className="h-full overflow-y-auto p-4 lg:p-6 scrollbar-thin">
+        <div className="h-full overflow-y-auto p-4 lg:p-5 scrollbar-thin">
           <PrecheckView
             summary={precheck}
             isBusy={isBusy}
@@ -365,7 +365,7 @@ export default function WorkspaceClient() {
             className="h-[70vh]"
           />
         ) : stage === "stale" || stage === "interrupted" ? (
-          <div className="h-full overflow-y-auto p-5 lg:p-6 scrollbar-thin">
+          <div className="h-full overflow-y-auto p-4 lg:p-5 scrollbar-thin">
             <div className="rounded-lg border border-warning/20 bg-warning-container/15 p-6 shadow-sm">
               <div className="flex items-start gap-4">
                 <div className="mt-1 rounded-lg bg-warning/15 p-3 text-warning">
@@ -448,26 +448,26 @@ export default function WorkspaceClient() {
   );
 
   const conversationHeader = (
-    <div className="shrink-0 px-5 py-4 flex items-center justify-between border-b border-on-surface/5 bg-surface/55 backdrop-blur-xl z-20 gap-4 lg:px-10 lg:py-5 lg:h-[88px]">
-      <div className="flex items-center gap-4 min-w-0">
-        <div className="hidden sm:flex w-10 h-10 rounded-lg bg-white/50 items-center justify-center text-primary/70 border border-on-surface/[0.03] shadow-xs shrink-0">
-          <Bot className="w-5 h-5" />
+    <div className="z-20 flex shrink-0 items-center justify-between gap-3 border-b border-on-surface/8 bg-surface-container-lowest px-4 py-3 lg:h-[68px] lg:px-5 lg:py-3.5">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-[9px] border border-on-surface/8 bg-surface-container text-primary/70 sm:flex">
+          <Bot className="h-4.5 w-4.5" />
         </div>
-        <div className="flex flex-col gap-1 min-w-0">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <h2 className="text-ui-title font-black text-on-surface truncate">
+        <div className="flex min-w-0 flex-col gap-1">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <h2 className="truncate text-[15px] font-black text-on-surface lg:text-[1rem]">
               {getFriendlyStage(stage)}
             </h2>
-            <span className="rounded-md bg-primary/8 border border-primary/10 px-2 py-0.5 text-ui-meta font-semibold text-primary/80 whitespace-nowrap">
-              文件整理工作台
+            <span className="whitespace-nowrap rounded-[8px] border border-primary/12 bg-primary/8 px-2 py-0.5 text-[12px] font-semibold text-primary/85">
+              当前阶段
             </span>
           </div>
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-ui-meta">
-            <p className="truncate max-w-[36rem] text-ui-muted">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px]">
+            <p className="max-w-[32rem] truncate text-ui-muted">
               {snapshot?.target_dir || dirParam || "..."}
             </p>
             {assistantRuntime ? (
-              <span className="flex items-center gap-1.5 text-primary/70">
+              <span className="inline-flex items-center gap-1.5 rounded-[7px] bg-primary/6 px-2 py-0.5 text-primary/75">
                 <Loader2 className="h-3 w-3 animate-spin-slow" />
                 {assistantRuntime.label}
               </span>
@@ -475,7 +475,7 @@ export default function WorkspaceClient() {
             {streamStatus !== "connected" ? (
               <span
                 className={cn(
-                  "rounded-md px-2 py-0.5 font-medium border",
+                  "rounded-[7px] border px-2 py-0.5 font-medium",
                   streamStatus === "connecting"
                     ? "border-warning/20 bg-warning-container/20 text-warning"
                     : "border-on-surface/10 bg-surface-container-low text-ui-muted",
@@ -491,7 +491,7 @@ export default function WorkspaceClient() {
       <div className="flex items-center gap-3 shrink-0">
         <button
           onClick={handleExitWorkbench}
-          className="text-[12px] font-medium text-ui-muted px-3 py-2 rounded-lg transition-all hover:text-error hover:bg-error-container/10"
+          className="rounded-[8px] px-3 py-1.5 text-[12px] font-medium text-ui-muted transition-colors hover:bg-error-container/35 hover:text-error"
         >
           结束会话
         </button>
@@ -519,7 +519,7 @@ export default function WorkspaceClient() {
               onMouseDown={handleStartResizing}
               className={cn(
                 "absolute top-0 bottom-0 w-2.5 z-40 transition-colors cursor-col-resize flex items-center justify-center select-none group",
-                isResizingState ? "bg-transparent" : "hover:bg-primary/[0.03]",
+                isResizingState ? "bg-transparent" : "hover:bg-primary/[0.025]",
               )}
               style={{ left: dividerLeft !== null ? `${dividerLeft - 1.25}px` : `calc(${leftWidth}% - 1.25px)` }}
             >
@@ -527,15 +527,15 @@ export default function WorkspaceClient() {
                 className={cn(
                   "w-[1px] h-full transition-all duration-300",
                   isResizingState
-                    ? "bg-primary/40 shadow-[0_0_15px_rgba(76,98,88,0.4)] scale-x-[1.5]"
-                    : "bg-on-surface/[0.04] group-hover:bg-primary/20",
+                    ? "bg-primary/35 shadow-[0_0_12px_rgba(77,99,87,0.2)] scale-x-[1.5]"
+                    : "bg-on-surface/[0.06] group-hover:bg-primary/18",
                 )}
               />
               <div
                 className={cn(
-                  "absolute top-1/2 -translate-y-1/2 w-5 h-9 rounded-md bg-white border border-on-surface/5 shadow-[0_2px_8px_rgba(0,0,0,0.04)] flex flex-col items-center justify-center gap-0.5 transition-all duration-200",
+                  "absolute top-1/2 flex h-9 w-5 -translate-y-1/2 flex-col items-center justify-center gap-0.5 rounded-[8px] border border-on-surface/8 bg-surface-container-lowest transition-all duration-200",
                   isResizingState
-                    ? "opacity-100 scale-110 shadow-[0_4px_12px_rgba(0,0,0,0.08)] border-primary/20"
+                    ? "scale-110 border-primary/20 opacity-100 shadow-[0_4px_10px_rgba(37,45,40,0.08)]"
                     : "opacity-0 group-hover:opacity-100 scale-100",
                 )}
               >
@@ -557,8 +557,8 @@ export default function WorkspaceClient() {
           {showConversationPane ? (
             <>
               {conversationHeader}
-              <div className="shrink-0 border-b border-on-surface/5 bg-surface/80 px-4 py-3 backdrop-blur-sm">
-                <div className="grid grid-cols-2 gap-2 rounded-lg bg-surface-container-low/70 p-1 border border-on-surface/5">
+              <div className="shrink-0 border-b border-on-surface/8 bg-surface-container-low px-4 py-2.5">
+                <div className="grid grid-cols-2 gap-2 rounded-[10px] border border-on-surface/8 bg-surface-container p-1">
                   {[
                     { id: "conversation", label: "对话" },
                     { id: "preview", label: "预览" },
@@ -568,9 +568,9 @@ export default function WorkspaceClient() {
                       type="button"
                       onClick={() => setMobileTab(tab.id as "conversation" | "preview")}
                       className={cn(
-                        "rounded-md px-4 py-2.5 text-[13px] font-semibold transition-all",
+                        "rounded-[8px] px-4 py-2.5 text-[13px] font-semibold transition-colors",
                         mobileTab === tab.id
-                          ? "bg-white text-on-surface shadow-sm border border-on-surface/5"
+                          ? "border border-on-surface/8 bg-surface-container-lowest text-on-surface"
                           : "text-ui-muted",
                       )}
                     >

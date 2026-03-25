@@ -110,18 +110,18 @@ function CodeBlock({ children, className }: { children: React.ReactNode; classNa
   };
 
   return (
-    <div className="group relative my-2 rounded-lg bg-on-surface/[0.03] overflow-hidden transition-colors hover:bg-on-surface/[0.05]">
-      <div className="flex items-center justify-between px-3 py-1.5 bg-on-surface/2 border-b border-on-surface/[0.02]">
-        <span className="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant/20">Code Snippet</span>
+    <div className="group relative my-3 overflow-hidden rounded-[10px] border border-on-surface/8 bg-surface-container-lowest transition-colors">
+      <div className="flex items-center justify-between border-b border-on-surface/8 bg-surface-container-low px-3 py-2">
+        <span className="text-[12px] font-medium text-ui-muted">代码片段</span>
         <button
           onClick={handleCopy}
-          className="flex items-center gap-1.5 px-1.5 py-0.5 rounded hover:bg-on-surface/5 text-[9px] font-bold transition-all text-on-surface-variant/40 hover:text-on-surface"
+          className="flex items-center gap-1.5 rounded-[8px] px-2 py-1 text-[12px] font-medium text-on-surface-variant/55 transition-colors hover:bg-on-surface/5 hover:text-on-surface"
         >
-          {copied ? <Check className="w-2.5 h-2.5 text-emerald-500/60" /> : <Copy className="w-2.5 h-2.5" />}
+          {copied ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
           {copied ? "已复制" : "复制"}
         </button>
       </div>
-      <pre className={cn("p-3 font-mono text-[12px] leading-relaxed overflow-x-auto scrollbar-none", className)}>
+      <pre className={cn("overflow-x-auto scrollbar-none p-3 font-mono text-[12px] leading-6", className)}>
         {children}
       </pre>
     </div>
@@ -133,7 +133,7 @@ function MarkdownProse({ content }: { content: string }) {
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       components={{
-        p: ({ node, ...props }) => <div className="mb-3 last:mb-0 leading-8 text-[14px]" {...props} />,
+        p: ({ node, ...props }) => <div className="mb-3 last:mb-0 text-[14px] leading-7" {...props} />,
         strong: ({ node, ...props }) => <strong className="font-black text-on-surface" {...props} />,
         em: ({ node, ...props }) => <em className="italic text-on-surface/80" {...props} />,
         ul: ({ node, ...props }) => <ul className="mb-4 ml-4 list-disc space-y-2 text-[14px]" {...props} />,
@@ -153,21 +153,21 @@ function MarkdownProse({ content }: { content: string }) {
           </a>
         ),
         table: ({ node, ...props }) => (
-          <div className="my-6 overflow-x-auto rounded-xl border border-on-surface/5 bg-on-surface/[0.02]">
+          <div className="my-6 overflow-x-auto rounded-[10px] border border-on-surface/8 bg-surface-container-low">
             <table className="w-full text-left border-collapse text-[13px]" {...props} />
           </div>
         ),
-        thead: ({ node, ...props }) => <thead className="bg-on-surface/[0.03] text-on-surface/40 font-black uppercase tracking-widest text-[10px]" {...props} />,
+        thead: ({ node, ...props }) => <thead className="bg-surface-container text-[12px] font-semibold text-on-surface-variant/80" {...props} />,
         th: ({ node, ...props }) => <th className="px-4 py-3 border-b border-on-surface/5" {...props} />,
         td: ({ node, ...props }) => <td className="px-4 py-3 border-b border-on-surface/[0.03] leading-relaxed" {...props} />,
         hr: ({ node, ...props }) => <hr className="my-8 border-t border-on-surface/5" {...props} />,
         h1: ({ node, ...props }) => <h1 className="mb-5 mt-8 text-xl font-black font-headline tracking-tighter text-on-surface" {...props} />,
         h2: ({ node, ...props }) => <h2 className="mb-4 mt-7 text-lg font-black tracking-tight text-on-surface/90 flex items-center gap-2" {...props} />,
         h3: ({ node, ...props }) => (
-          <h3 className="mb-3 mt-6 text-sm font-black uppercase tracking-[0.2em] text-on-surface/60 flex items-center gap-2" {...props} />
+          <h3 className="mb-3 mt-6 flex items-center gap-2 text-[14px] font-semibold text-on-surface/70" {...props} />
         ),
         blockquote: ({ node, ...props }) => (
-          <blockquote className="border-l-4 border-primary/20 bg-primary/[0.03] rounded-r-lg px-6 py-4 my-6 italic text-on-surface/70 leading-8" {...props} />
+          <blockquote className="my-6 rounded-r-[10px] border-l-4 border-primary/20 bg-primary/[0.03] px-5 py-4 text-on-surface/75 leading-7" {...props} />
         ),
         code: ({ node, inline, className, children, ...props }: any) => {
           if (inline) {
@@ -212,11 +212,11 @@ function UnresolvedChoicesBubble({
   );
 
   return (
-    <div className="mt-3 rounded-lg border border-warning/20 bg-warning-container/10 p-4 font-sans text-ui-body">
+    <div className="mt-3 rounded-[10px] border border-warning/18 bg-warning-container/18 p-4 font-sans text-ui-body">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h4 className="text-sm font-bold text-on-surface">请帮我确认这几项</h4>
-          <p className="mt-1 text-ui-meta text-on-surface-variant">
+          <h4 className="text-[14px] font-semibold text-on-surface">待你确认的项目</h4>
+          <p className="mt-1 text-[13px] leading-6 text-ui-muted">
             {block.summary || "你可以直接选一个目录，或者补充一点想法。"}
           </p>
         </div>
@@ -224,7 +224,7 @@ function UnresolvedChoicesBubble({
           <button
             type="button"
             onClick={onSetAllReview}
-            className="rounded-lg border border-on-surface/10 px-3 py-1.5 text-[11px] font-bold text-on-surface-variant transition-colors hover:bg-white hover:text-on-surface"
+            className="rounded-[8px] border border-on-surface/8 bg-surface-container-lowest px-3 py-1.5 text-[12px] font-medium text-on-surface-variant transition-colors hover:bg-white hover:text-on-surface"
           >
             全部放入 Review
           </button>
@@ -239,10 +239,10 @@ function UnresolvedChoicesBubble({
           const currentNote = isSubmitted ? (submitted?.note || "") : draft.note;
           const customSelected = isSubmitted ? Boolean(submitted?.note) && !submitted?.selected_folder : draft.custom_selected;
           return (
-            <div key={item.item_id} className="rounded-lg border border-on-surface/8 bg-white/80 p-4">
+            <div key={item.item_id} className="rounded-[10px] border border-on-surface/8 bg-surface-container-lowest p-4">
               <div className="space-y-1">
-                <p className="text-[13px] font-bold text-on-surface">{item.display_name}</p>
-                <p className="text-[13px] leading-relaxed text-on-surface-variant/80">{item.question}</p>
+                <p className="text-[14px] font-semibold text-on-surface">{item.display_name}</p>
+                <p className="text-[13px] leading-6 text-ui-muted">{item.question}</p>
               </div>
 
               <div className="mt-3 flex flex-wrap gap-2">
@@ -253,10 +253,10 @@ function UnresolvedChoicesBubble({
                     disabled={isSubmitted}
                     onClick={() => onPickFolder(item.item_id, folder)}
                     className={cn(
-                      "rounded-full border px-3 py-2 text-xs font-bold transition-colors",
+                      "rounded-full border px-3 py-2 text-[12px] font-medium transition-colors",
                       selectedFolder === folder
                         ? "border-primary bg-primary text-white"
-                        : "border-on-surface/10 bg-surface text-on-surface-variant hover:text-on-surface",
+                        : "border-on-surface/8 bg-surface text-on-surface-variant hover:text-on-surface",
                       isSubmitted && "cursor-default",
                     )}
                   >
@@ -268,7 +268,7 @@ function UnresolvedChoicesBubble({
                   disabled={isSubmitted}
                   onClick={() => onPickFolder(item.item_id, "Review")}
                   className={cn(
-                    "rounded-full border px-3 py-2 text-xs font-bold transition-colors",
+                    "rounded-full border px-3 py-2 text-[12px] font-medium transition-colors",
                     selectedFolder === "Review"
                       ? "border-warning bg-warning text-white"
                       : "border-warning/20 bg-warning-container/10 text-warning hover:bg-warning/15",
@@ -282,10 +282,10 @@ function UnresolvedChoicesBubble({
                   disabled={isSubmitted}
                   onClick={() => onPickCustom(item.item_id)}
                   className={cn(
-                    "rounded-full border px-3 py-2 text-xs font-bold transition-colors",
+                    "rounded-full border px-3 py-2 text-[12px] font-medium transition-colors",
                     customSelected
                       ? "border-on-surface bg-on-surface text-white"
-                      : "border-on-surface/10 bg-surface text-on-surface-variant hover:text-on-surface",
+                      : "border-on-surface/8 bg-surface text-on-surface-variant hover:text-on-surface",
                     isSubmitted && "cursor-default",
                   )}
                 >
@@ -299,7 +299,7 @@ function UnresolvedChoicesBubble({
                   disabled={isSubmitted}
                   onChange={(event) => onChangeNote(item.item_id, event.target.value)}
                   placeholder="请输入你的自定义分类想法。"
-                  className="mt-3 min-h-[84px] w-full rounded-lg border border-on-surface/8 bg-surface px-4 py-3 text-sm leading-6 text-on-surface outline-none transition-all placeholder:text-on-surface-variant/45 focus:border-primary/25 disabled:opacity-70"
+                  className="mt-3 min-h-[88px] w-full rounded-[10px] border border-on-surface/8 bg-surface px-4 py-3 text-[13px] leading-6 text-on-surface outline-none transition-all placeholder:text-on-surface-variant/45 focus:border-primary/25 disabled:opacity-70"
                 />
               ) : null}
             </div>
@@ -308,13 +308,13 @@ function UnresolvedChoicesBubble({
       </div>
 
       {warning ? (
-        <div className="mt-4 rounded-xl border border-warning/20 bg-white/80 px-4 py-3 text-sm text-warning">
+        <div className="mt-4 rounded-[10px] border border-warning/20 bg-surface-container-lowest px-4 py-3 text-[13px] text-warning">
           {warning}
         </div>
       ) : null}
 
       {isSubmitted ? (
-        <div className="mt-4 inline-flex items-center gap-2 rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-bold text-white">
+        <div className="mt-4 inline-flex items-center gap-2 rounded-[8px] bg-emerald-600 px-3 py-2 text-[12px] font-medium text-white">
           <ArrowRight className="h-3.5 w-3.5" />
           已提交本批选择
         </div>
@@ -323,7 +323,7 @@ function UnresolvedChoicesBubble({
           type="button"
           onClick={onSubmit}
           disabled={isSubmitting}
-          className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+          className="mt-4 inline-flex items-center gap-2 rounded-[10px] border border-primary/20 bg-primary px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-primary-dim disabled:opacity-40"
         >
           {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           提交这些选择
@@ -477,16 +477,16 @@ export function ConversationPanel({
   const renderNotice = notice ? (
     <div
       className={cn(
-        "rounded-lg border p-4",
+        "rounded-[10px] border p-4",
         notice.tone === "danger" && "border-error/20 bg-error-container/10",
         notice.tone === "warning" && "border-warning/20 bg-warning-container/20",
-        notice.tone === "info" && "border-primary/10 bg-white/78",
+        notice.tone === "info" && "border-primary/12 bg-surface-container-lowest",
       )}
     >
       <div className="space-y-3">
         <div>
-          <h3 className="text-sm font-bold text-on-surface">{notice.title}</h3>
-          <p className="mt-1 text-sm leading-6 text-on-surface-variant">{notice.description}</p>
+          <h3 className="text-[14px] font-semibold text-on-surface">{notice.title}</h3>
+          <p className="mt-1 text-[13px] leading-6 text-ui-muted">{notice.description}</p>
         </div>
         {(notice.primaryAction || notice.secondaryAction) && (
           <div className="flex flex-wrap gap-3">
@@ -494,7 +494,7 @@ export function ConversationPanel({
               <button
                 type="button"
                 onClick={notice.primaryAction.onClick}
-                className="rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-white transition-opacity hover:opacity-90"
+                className="rounded-[10px] border border-primary/20 bg-primary px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-primary-dim"
               >
                 {notice.primaryAction.label}
               </button>
@@ -503,7 +503,7 @@ export function ConversationPanel({
               <button
                 type="button"
                 onClick={notice.secondaryAction.onClick}
-                className="rounded-lg border border-on-surface/10 px-4 py-2.5 text-sm font-bold text-on-surface-variant transition-colors hover:bg-surface-container-low hover:text-on-surface"
+                className="rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-4 py-2.5 text-[13px] font-medium text-on-surface-variant transition-colors hover:bg-surface-container-low hover:text-on-surface"
               >
                 {notice.secondaryAction.label}
               </button>
@@ -515,27 +515,27 @@ export function ConversationPanel({
   ) : null;
 
   return (
-    <div className="flex min-h-0 flex-col h-full bg-surface">
-      <div ref={scrollContainerRef} onScroll={handleScroll} className="relative min-h-0 flex-1 overflow-y-auto px-8 py-8 space-y-6 scroll-smooth">
+    <div className="flex h-full min-h-0 flex-col bg-surface">
+      <div ref={scrollContainerRef} onScroll={handleScroll} className="relative min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5 scroll-smooth lg:px-6 lg:py-6">
         {(stage === "idle" || stage === "draft") && messages.length === 0 && activityFeed.length === 0 && !notice && (
           <motion.div 
             initial={{ opacity: 0, scale: 0.98 }} 
             animate={{ opacity: 1, scale: 1 }} 
-            className="flex flex-col items-center justify-center py-20 text-center space-y-6"
+            className="flex flex-col items-center justify-center space-y-5 py-18 text-center"
           >
-            <div className="w-14 h-14 rounded-xl bg-primary/[0.03] border border-primary/10 flex items-center justify-center text-primary/40 shadow-sm transition-transform hover:scale-105 duration-500">
+            <div className="flex h-14 w-14 items-center justify-center rounded-[10px] border border-primary/12 bg-primary/6 text-primary/55">
               <Cpu className="w-7 h-7" />
             </div>
-            <div className="space-y-3 max-w-[320px]">
-              <h3 className="text-lg font-black font-headline text-on-surface tracking-tight leading-tight">准备好开始扫描了吗？</h3>
-              <p className="text-ui-body text-ui-muted leading-relaxed font-medium">
+            <div className="max-w-[360px] space-y-3">
+              <h3 className="text-[1.1rem] font-black font-headline leading-tight text-on-surface tracking-tight">准备好开始扫描了吗？</h3>
+              <p className="text-ui-body font-medium leading-relaxed text-ui-muted">
                 我会先扫描你的目录，分析现有文件结构，然后再为你提供整理方案。
               </p>
               <div className="pt-2">
                 <button
                   onClick={onStartScan}
                   disabled={isBusy}
-                  className="inline-flex items-center gap-2.5 bg-primary hover:bg-primary-dim text-white px-6 py-2.5 rounded-lg text-[13px] font-bold transition-all active:scale-[0.96] shadow-[0_4px_12px_rgba(76,98,88,0.1)] hover:shadow-[0_6px_16px_rgba(76,98,88,0.2)] disabled:opacity-50"
+                  className="inline-flex items-center gap-2.5 rounded-[10px] border border-primary/20 bg-primary px-6 py-3 text-[13px] font-semibold text-white transition-colors hover:bg-primary-dim active:scale-[0.96] disabled:opacity-50"
                 >
                   <Sparkles className="w-4 h-4" /> 开启智能扫描
                 </button>
@@ -550,22 +550,22 @@ export function ConversationPanel({
           <div className="group/activity relative">
             <div 
               className={cn(
-                "flex items-center gap-3 px-4 py-2 rounded-lg transition-all cursor-pointer group-hover/activity:bg-on-surface/2",
-                activityOpen ? "bg-on-surface/2 mb-4" : "bg-transparent"
+                "mb-3 flex cursor-pointer items-center gap-3 rounded-[10px] border px-4 py-3 transition-colors",
+                activityOpen ? "border-on-surface/8 bg-surface-container-low" : "border-transparent bg-transparent group-hover/activity:bg-surface-container-low/55"
               )}
               onClick={() => setActivityOpen((prev) => !prev)}
             >
               <div className={cn(
-                "flex h-6 w-6 items-center justify-center rounded-md text-on-surface-variant/30 transition-colors",
-                activityOpen ? "bg-primary/10 text-primary" : "bg-on-surface/5"
+                "flex h-7 w-7 items-center justify-center rounded-[8px] transition-colors",
+                activityOpen ? "bg-primary/10 text-primary" : "bg-surface-container text-on-surface-variant/40"
               )}>
                 {BUSY_STAGES.has(stage) ? <Loader2 className="h-3 w-3 animate-spin" /> : <Activity className="h-3 w-3" />}
               </div>
               
               <div className="flex-1 min-w-0 flex items-center gap-3">
-                <span className="text-ui-meta font-semibold text-ui-muted shrink-0">运行轨迹</span>
+                <span className="shrink-0 text-[12px] font-medium text-ui-muted">运行轨迹</span>
                 {!activityOpen && activityFeed.length > 0 && (
-                  <p className="text-ui-meta truncate italic flex-1 border-l border-on-surface/5 pl-3">
+                  <p className="flex-1 truncate border-l border-on-surface/6 pl-3 text-[12px] text-on-surface-variant/70">
                     {activityFeed[activityFeed.length - 1].message}
                   </p>
                 )}
@@ -578,14 +578,14 @@ export function ConversationPanel({
               {activityOpen ? (
                 <motion.div
                   initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: "auto", opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  className="overflow-hidden mb-6"
-                >
-                  <div className="space-y-1.5 px-4 pb-2 border-l-2 border-on-surface/5 ml-3 mt-2">
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="mb-5 overflow-hidden"
+              >
+                  <div className="ml-3 mt-2 space-y-1.5 border-l-2 border-on-surface/6 px-4 pb-2">
                     {activityFeed.map((entry) => (
-                      <div key={entry.id} className="flex items-center gap-3 py-1 text-[12px] group/item text-ui-muted hover:text-on-surface transition-colors">
-                        <span className="text-[11px] font-mono opacity-50 tabular-nums shrink-0">{entry.time}</span>
+                      <div key={entry.id} className="group/item flex items-center gap-3 py-1 text-[12px] text-ui-muted transition-colors hover:text-on-surface">
+                        <span className="shrink-0 font-mono text-[11px] tabular-nums opacity-55">{entry.time}</span>
                         <div className={cn("h-1 w-1 rounded-full shrink-0", entry.important ? "bg-primary" : "bg-on-surface/20")} />
                         <p className="flex-1 truncate tracking-tight">{entry.message}</p>
                       </div>
@@ -614,10 +614,9 @@ export function ConversationPanel({
                   isGrouped ? "mt-1" : "mt-8"
                 )}
               >
-                {/* 头像仅在组的第一条显示 */}
                 <div className={cn(
-                  "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border border-on-surface/5 transition-opacity",
-                  isAssistant ? "bg-white/90 text-primary" : "bg-primary/90 text-white shadow-sm",
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border border-on-surface/8 transition-opacity",
+                  isAssistant ? "bg-surface-container-lowest text-primary" : "bg-primary text-white",
                   isGrouped ? "opacity-0" : "opacity-100"
                 )}>
                   {isAssistant ? <Bot className="w-3.5 h-3.5" /> : <User className="w-3.5 h-3.5" />}
@@ -625,12 +624,12 @@ export function ConversationPanel({
                 
                 <div
                   className={cn(
-                    "p-4 rounded-lg text-ui-body leading-relaxed max-w-[82%] transition-all",
+                    "max-w-[80%] rounded-[10px] p-4 text-ui-body leading-relaxed transition-all",
                     isAssistant
-                      ? "bg-white/88 text-on-surface border border-on-surface/5 shadow-sm"
+                      ? "border border-on-surface/8 bg-surface-container-lowest text-on-surface"
                       : "bg-surface-container-high text-on-surface font-medium whitespace-pre-wrap",
-                    isGrouped && isAssistant && "rounded-tl-sm",
-                    isGrouped && !isAssistant && "rounded-tr-sm"
+                    isGrouped && isAssistant && "rounded-tl-[4px]",
+                    isGrouped && !isAssistant && "rounded-tr-[4px]"
                   )}
                 >
                   {message.content ? <MarkdownProse content={message.content} /> : null}
@@ -697,13 +696,13 @@ export function ConversationPanel({
               key="assistant-streaming-bubble"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex gap-4 mt-8"
-            >
-              <div className="w-8 h-8 rounded-lg bg-white/90 border border-on-surface/5 flex items-center justify-center text-primary shrink-0">
+            className="flex gap-4 mt-8"
+          >
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border border-on-surface/8 bg-surface-container-lowest text-primary">
                 <Bot className="w-3.5 h-3.5" />
               </div>
-              <div className="p-4 flex-1 bg-white/88 border border-on-surface/8 rounded-lg text-ui-body leading-relaxed text-on-surface shadow-[0_4px_20px_rgba(0,0,0,0.03)] ring-1 ring-on-surface/[0.01]">
-                <div className="mb-3 flex gap-2 items-center text-primary/60">
+              <div className="flex-1 rounded-[10px] border border-on-surface/8 bg-surface-container-lowest p-4 text-ui-body leading-relaxed text-on-surface">
+                <div className="mb-3 flex items-center gap-2 text-primary/70">
                   <div className="flex gap-0.5">
                     <motion.span 
                       animate={{ scale: [1, 1.2, 1], opacity: [0.4, 1, 0.4] }} 
@@ -721,7 +720,7 @@ export function ConversationPanel({
                       className="w-1.5 h-1.5 bg-current rounded-full" 
                     />
                   </div>
-                  <span className="text-ui-meta font-semibold ml-1">AI 正在整理回复...</span>
+                  <span className="ml-1 text-[12px] font-medium">AI 正在整理回复...</span>
                 </div>
                 <div className="relative">
                   <MarkdownProse content={assistantDraft} />
@@ -741,12 +740,12 @@ export function ConversationPanel({
               key="assistant-status-bubble"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex gap-4 mt-8"
-            >
-              <div className="w-8 h-8 rounded-lg bg-white/90 border border-on-surface/5 flex items-center justify-center text-primary shrink-0">
+            className="flex gap-4 mt-8"
+          >
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border border-on-surface/8 bg-surface-container-lowest text-primary">
                 <Bot className="w-3.5 h-3.5" />
               </div>
-              <div className="p-4 flex-1 bg-white/88 border border-on-surface/8 rounded-lg text-ui-body leading-relaxed text-on-surface shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
+              <div className="flex-1 rounded-[10px] border border-on-surface/8 bg-surface-container-lowest p-4 text-ui-body leading-relaxed text-on-surface">
                 <div className="flex flex-col gap-3">
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-1.5">
@@ -782,7 +781,7 @@ export function ConversationPanel({
           <button
             type="button"
             onClick={handleJumpToBottom}
-            className="sticky bottom-4 ml-auto flex items-center gap-2 rounded-full bg-on-surface px-4 py-2 text-xs font-bold text-white shadow-lg"
+            className="sticky bottom-4 ml-auto flex items-center gap-2 rounded-full bg-on-surface px-4 py-2 text-[12px] font-medium text-white shadow-lg"
           >
             回到底部
             <ChevronDown className="h-3.5 w-3.5" />
@@ -791,14 +790,14 @@ export function ConversationPanel({
       </div>
 
       {composerMode !== "hidden" && (
-        <div className="shrink-0 px-8 py-5 flex flex-col justify-center bg-surface/92 backdrop-blur-sm border-t border-on-surface/5">
+        <div className="flex shrink-0 flex-col justify-center border-t border-on-surface/8 bg-surface-container-low px-5 py-4 lg:px-6">
           <AnimatePresence>
             {error && (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 10 }}
-                className="mb-4 rounded-xl border border-error/10 bg-error-container/20 px-4 py-3 text-sm text-error"
+                className="mb-4 rounded-[10px] border border-error/12 bg-error-container/22 px-4 py-3 text-[13px] text-error"
               >
                 <div className="flex items-start gap-3">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -815,11 +814,11 @@ export function ConversationPanel({
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 10 }}
-                className="mb-4 flex items-start gap-3 rounded-2xl border border-primary/10 bg-primary/[0.05] px-4 py-3 text-sm text-primary"
+                className="mb-4 flex items-start gap-3 rounded-[10px] border border-primary/12 bg-primary/[0.05] px-4 py-3 text-[13px] text-primary"
               >
                 <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
                 <div className="space-y-1">
-                  <p className="font-bold">{composerStatus.label}</p>
+                  <p className="font-semibold">{composerStatus.label}</p>
                   {composerStatus.detail ? (
                     <p className="leading-6 text-primary/80">{composerStatus.detail}</p>
                   ) : null}
@@ -833,7 +832,7 @@ export function ConversationPanel({
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 10 }}
-                className="mb-4 px-4 py-2.5 bg-warning-container/10 rounded-2xl text-xs font-medium text-warning flex items-center gap-2 border border-warning/10"
+                className="mb-4 flex items-center gap-2 rounded-[10px] border border-warning/12 bg-warning-container/16 px-4 py-2.5 text-[12px] font-medium text-warning"
               >
                 <AlertTriangle className="w-3.5 h-3.5" />
                 还有 {unresolvedCount} 项待确认
@@ -843,7 +842,7 @@ export function ConversationPanel({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="mb-3 px-5 flex items-center gap-2.5 text-ui-meta font-medium text-ui-muted"
+                className="mb-3 flex items-center gap-2.5 px-1 text-[12px] font-medium text-ui-muted"
               >
                 <span className="w-1 h-1 rounded-full bg-primary/20 shrink-0" />
                 <p>
@@ -856,16 +855,16 @@ export function ConversationPanel({
 
           {composerMode === "editable" ? (
             <div className={cn(
-              "relative flex items-end rounded-[28px] border transition-all duration-300 px-3 pt-1.5 pb-1.5",
+              "relative flex items-end rounded-[12px] border px-3 pb-1.5 pt-1.5 transition-all duration-300",
               isComposerLocked 
-                ? "border-on-surface/[0.04] bg-on-surface/[0.02] cursor-not-allowed grayscale-[0.2]" 
-                : "border-on-surface/[0.06] bg-surface-container-low/50 focus-within:border-primary/30 focus-within:bg-white focus-within:shadow-[0_8px_40px_rgba(0,0,0,0.05)] focus-within:ring-4 focus-within:ring-primary/[0.015]"
+                ? "cursor-not-allowed border-on-surface/[0.06] bg-on-surface/[0.02] grayscale-[0.2]" 
+                : "border-on-surface/[0.08] bg-surface-container-lowest focus-within:border-primary/30 focus-within:ring-4 focus-within:ring-primary/[0.015]"
             )}>
               <textarea
                 ref={inputRef}
                 rows={1}
                 className={cn(
-                  "w-full bg-transparent border-none py-3 px-4 text-[14px] text-on-surface placeholder:text-on-surface-variant/30 outline-none resize-none scrollbar-none min-h-[44px] transition-opacity",
+                  "min-h-[44px] w-full resize-none border-none bg-transparent px-4 py-3 text-[14px] text-on-surface outline-none scrollbar-none transition-opacity placeholder:text-on-surface-variant/35",
                   isComposerLocked && "opacity-40 select-none overflow-hidden"
                 )}
                 placeholder={isComposerLocked ? (composerStatus?.label || "AI 正在思考中...") : "说说你的整理想法，或告诉我哪里想调整..."}
@@ -883,9 +882,9 @@ export function ConversationPanel({
                 onClick={onSendMessage}
                 disabled={isComposerLocked || !messageInput.trim()}
                 className={cn(
-                  "mb-1.5 mr-1.5 w-10 h-10 rounded-full transition-all flex items-center justify-center active:scale-90 shrink-0",
+                  "mb-1.5 mr-1.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] transition-all active:scale-90",
                   messageInput.trim() && !isComposerLocked
-                    ? "bg-primary text-white shadow-[0_4px_12px_rgba(76,98,88,0.2)]"
+                    ? "bg-primary text-white shadow-[0_4px_12px_rgba(76,98,88,0.16)]"
                     : "text-on-surface-variant/20 bg-on-surface/[0.03]"
                 )}
               >
@@ -904,7 +903,7 @@ export function ConversationPanel({
               </button>
             </div>
           ) : (
-            <div className="rounded-2xl border border-on-surface/5 bg-white/78 px-5 py-4 text-sm text-on-surface-variant">
+            <div className="rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-5 py-4 text-[13px] text-on-surface-variant">
               正在扫描目录，暂时还不能继续输入。
             </div>
           )}

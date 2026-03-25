@@ -20,9 +20,9 @@ export function Button({
   ...props 
 }: ButtonProps) {
   const variants = {
-    primary: "bg-primary text-white shadow-lg shadow-primary/20 hover:opacity-90 active:scale-95",
-    secondary: "bg-surface-container-low border border-on-surface/5 text-on-surface hover:bg-white hover:shadow-sm active:scale-95",
-    danger: "bg-error-container/10 border border-error/10 text-error hover:bg-error hover:text-white active:scale-95",
+    primary: "border border-primary/20 bg-primary text-white shadow-[0_1px_2px_rgba(37,45,40,0.14)] hover:bg-primary-dim active:scale-95",
+    secondary: "border border-on-surface/8 bg-surface-container-lowest text-on-surface hover:bg-surface-container-low active:scale-95",
+    danger: "border border-error/15 bg-error-container/45 text-error hover:bg-error hover:text-white active:scale-95",
     ghost: "bg-transparent text-on-surface hover:bg-on-surface/5 active:scale-95"
   };
 
@@ -37,7 +37,7 @@ export function Button({
       whileTap={{ scale: 0.97 }}
       disabled={disabled || loading}
       className={cn(
-        "font-semibold tracking-[0.01em] transition-all inline-flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none disabled:grayscale",
+        "inline-flex items-center justify-center gap-2 font-semibold tracking-[0.01em] transition-colors disabled:pointer-events-none disabled:opacity-50 disabled:grayscale",
         variants[variant],
         sizes[size],
         className

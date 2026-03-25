@@ -236,52 +236,51 @@ export default function HistoryPage() {
   const activeCount = history.filter((item) => isSessionEntry(item)).length;
   const completedCount = history.filter((item) => !isSessionEntry(item) && item.status !== "rolled_back").length;
   const rollbackCount = history.filter((item) => item.status === "rolled_back").length;
+  const historyStats = [
+    { label: "进行中", value: activeCount },
+    { label: "完成", value: completedCount },
+    { label: "回退", value: rollbackCount },
+  ];
 
   return (
-    <div className="flex-1 min-h-0 overflow-hidden bg-surface-container-low">
-      <div className="flex h-full min-h-0 flex-col gap-2 p-2 lg:flex-row lg:gap-0 lg:p-0">
-        <section className="flex min-h-0 w-full flex-col border border-on-surface/6 bg-surface-container lg:w-[340px] lg:min-w-[340px] lg:border-y-0 lg:border-l-0 lg:border-r">
-          <div className="border-b border-on-surface/6 px-4 py-3">
-            <div className="flex items-start justify-between gap-3">
+    <div className="flex-1 min-h-0 overflow-hidden bg-surface">
+      <div className="flex h-full min-h-0 flex-col gap-3 p-3 lg:flex-row">
+        <section className="flex min-h-0 w-full flex-col overflow-hidden rounded-[12px] border border-on-surface/6 bg-surface-container lg:w-[396px] lg:min-w-[396px]">
+          <div className="border-b border-on-surface/6 px-4 py-4">
+            <div className="space-y-3">
               <div className="space-y-1.5">
                 <div className="inline-flex items-center gap-2 text-ui-meta font-medium text-ui-muted">
                   <PanelLeft className="h-3.5 w-3.5" />
                   历史列表
                 </div>
-                <h1 className="text-[1.1rem] font-black font-headline tracking-tight text-on-surface">
+                <h1 className="text-[1.2rem] font-black font-headline tracking-tight text-on-surface">
                   整理记录
                 </h1>
-                <p className="max-w-[16rem] text-[12px] leading-5 text-ui-muted">
+                <p className="max-w-[18rem] text-[12px] leading-5 text-ui-muted">
                   搜索、筛选并继续处理之前的会话与执行结果。
                 </p>
               </div>
 
-              <div className="grid grid-cols-3 gap-1.5 text-right">
-                <div className="rounded-[8px] bg-white px-2 py-1.5">
-                  <div className="text-ui-meta">进行中</div>
-                  <div className="mt-1 text-[0.95rem] font-black tabular-nums text-on-surface">{activeCount}</div>
-                </div>
-                <div className="rounded-[8px] bg-white px-2 py-1.5">
-                  <div className="text-ui-meta">完成</div>
-                  <div className="mt-1 text-[0.95rem] font-black tabular-nums text-on-surface">{completedCount}</div>
-                </div>
-                <div className="rounded-[8px] bg-white px-2 py-1.5">
-                  <div className="text-ui-meta">回退</div>
-                  <div className="mt-1 text-[0.95rem] font-black tabular-nums text-on-surface">{rollbackCount}</div>
-                </div>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {historyStats.map((item) => (
+                  <div key={item.label} className="rounded-[9px] border border-on-surface/6 bg-white px-3 py-2.5">
+                    <div className="text-[12px] text-ui-muted">{item.label}</div>
+                    <div className="mt-1 text-[1rem] font-black tabular-nums text-on-surface">{item.value}</div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
 
           <div className="border-b border-on-surface/6 px-4 py-3">
-            <div className="space-y-3 rounded-[10px] bg-surface-container-low p-3">
+            <div className="space-y-2.5 rounded-[10px] bg-surface-container-low p-3">
               <div className="relative">
-                <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-ui-muted" />
+                <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ui-muted" />
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="搜索目录、状态或记录 ID"
-                  className="w-full rounded-[10px] border border-on-surface/8 bg-white py-2.5 pl-11 pr-4 text-[14px] text-on-surface outline-none transition-all placeholder:text-ui-muted focus:border-primary/30 focus:ring-4 focus:ring-primary/5"
+                  className="w-full rounded-[9px] border border-on-surface/8 bg-white py-2.5 pl-[2.625rem] pr-4 text-[14px] text-on-surface outline-none transition-all placeholder:text-ui-muted focus:border-primary/30 focus:ring-4 focus:ring-primary/5"
                 />
               </div>
 
@@ -297,7 +296,7 @@ export default function HistoryPage() {
                     type="button"
                     onClick={() => setFilter(item.id as HistoryFilter)}
                     className={cn(
-                      "rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-all",
+                      "rounded-[8px] border px-3 py-1.5 text-[12px] font-semibold transition-all",
                       filter === item.id
                         ? "border-primary bg-primary text-white"
                         : "border-on-surface/8 bg-white text-ui-muted hover:border-primary/15 hover:text-on-surface",
@@ -325,7 +324,7 @@ export default function HistoryPage() {
                 <p className="text-ui-body font-medium text-ui-muted">正在载入历史记录...</p>
               </div>
             ) : filteredHistory.length > 0 ? (
-              <div className="space-y-3">
+              <div className="space-y-2.5">
                 {filteredHistory.map((entry, idx) => {
                   const active = selectedSessionId === entry.execution_id;
                   const sessionLike = isSessionEntry(entry);
@@ -336,29 +335,35 @@ export default function HistoryPage() {
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: idx * 0.03 }}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setSelectedSessionId(entry.execution_id)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          setSelectedSessionId(entry.execution_id);
+                        }
+                      }}
                       className={cn(
-                        "group relative overflow-hidden rounded-[10px] border bg-white transition-all",
+                        "group relative overflow-hidden rounded-[10px] border transition-all cursor-pointer",
                         active
-                          ? "border-primary/20 shadow-[inset_0_0_0_1px_rgba(76,98,88,0.06)]"
-                          : "border-on-surface/6 hover:border-primary/15",
+                          ? "border-primary/22 bg-primary/[0.045] shadow-[inset_0_0_0_1px_rgba(76,98,88,0.08),0_6px_16px_rgba(37,45,40,0.05)]"
+                          : "border-on-surface/6 bg-white hover:border-primary/15 hover:bg-surface-container-lowest",
                       )}
                     >
-                      <button
-                        type="button"
-                        onClick={() => setSelectedSessionId(entry.execution_id)}
-                        className="absolute inset-0 z-0"
-                        aria-label={`查看 ${getEntryName(entry)} 的详情`}
-                      />
-                      <div className={cn("absolute inset-y-3 left-0 w-[2px] rounded-full", active ? "bg-primary" : "bg-transparent")} />
+                      <div className={cn("absolute inset-y-3 left-0 w-[2px] rounded-full transition-colors", active ? "bg-primary/80" : "bg-transparent")} />
+                      <div className={cn("pointer-events-none absolute inset-x-0 top-0 h-12 transition-opacity", active ? "bg-primary/[0.035] opacity-100" : "opacity-0")} />
 
-                      <div className="relative z-10 space-y-3.5 p-3.5">
+                      <div className="relative space-y-2.5 p-3">
                         <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0 space-y-2">
+                          <div className="min-w-0 space-y-1">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className={cn(
-                                "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] font-semibold",
+                                "inline-flex items-center gap-1.5 rounded-[8px] border px-2.5 py-0.5 text-[12px] font-semibold",
                                 sessionLike
-                                  ? "border-primary/15 bg-primary/10 text-primary"
+                                  ? active
+                                    ? "border-primary/20 bg-white/80 text-primary"
+                                    : "border-primary/15 bg-primary/10 text-primary"
                                   : entry.status === "rolled_back"
                                     ? "border-on-surface/8 bg-surface-container-high text-on-surface/70"
                                     : "border-emerald-500/15 bg-emerald-500/10 text-emerald-700",
@@ -371,7 +376,7 @@ export default function HistoryPage() {
                               </span>
                               <span className="text-ui-meta text-ui-muted">{formatDisplayDate(entry.created_at)}</span>
                             </div>
-                            <h3 className="line-clamp-1 text-[1.1rem] font-black tracking-tight text-on-surface">
+                            <h3 className="line-clamp-1 text-[14px] font-semibold tracking-tight text-on-surface">
                               {getEntryName(entry)}
                             </h3>
                             <p className="line-clamp-1 text-ui-meta text-ui-muted" title={entry.target_dir}>
@@ -385,19 +390,25 @@ export default function HistoryPage() {
                               event.stopPropagation();
                               setPendingDeleteId(entry.execution_id);
                             }}
-                            className="rounded-[8px] border border-on-surface/8 bg-white p-2 text-ui-muted transition-colors hover:border-error/20 hover:text-error"
+                            className={cn(
+                              "rounded-[8px] border p-1.5 text-ui-muted transition-colors hover:border-error/20 hover:text-error",
+                              active ? "border-on-surface/8 bg-white/85" : "border-on-surface/8 bg-white",
+                            )}
                             title="删除记录"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         </div>
 
-                        <div className="flex items-end justify-between gap-3">
-                          <div>
-                            <p className="text-ui-meta text-ui-muted">当前状态</p>
-                            <p className="mt-1 text-[13px] font-semibold text-on-surface">{getEntrySummary(entry)}</p>
+                        <div className="flex items-center justify-between gap-3 text-[12px]">
+                          <div className="min-w-0">
+                            <span className="text-ui-muted">当前状态</span>
+                            <span className="ml-2 font-semibold text-on-surface">{getEntrySummary(entry)}</span>
                           </div>
-                          <div className="rounded-full bg-on-surface/4 px-3 py-1.5 text-[12px] font-semibold text-ui-muted">
+                          <div className={cn(
+                            "rounded-[8px] px-2.5 py-1 font-semibold",
+                            active ? "bg-white/80 text-on-surface-variant" : "bg-on-surface/4 text-ui-muted",
+                          )}>
                             {entry.item_count || 0} 项
                           </div>
                         </div>
@@ -424,7 +435,7 @@ export default function HistoryPage() {
           </div>
         </section>
 
-        <section className="relative flex min-h-0 flex-1 flex-col border border-on-surface/6 bg-surface-container-lowest lg:border-y-0 lg:border-l-0">
+        <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[12px] border border-on-surface/6 bg-surface-container-lowest">
           <AnimatePresence mode="wait">
             {selectedSessionId && selectedEntry && (isSelectedSession ? sessionDetail : journal) ? (
               <motion.div
@@ -441,7 +452,7 @@ export default function HistoryPage() {
                         <FileClock className="h-3.5 w-3.5" />
                         {isSelectedSession ? "会话详情" : "执行详情"}
                       </div>
-                      <h2 className="text-[1.35rem] lg:text-[1.75rem] font-black font-headline tracking-tight text-on-surface">
+                      <h2 className="text-[1.25rem] font-black font-headline tracking-tight text-on-surface lg:text-[1.45rem]">
                         {getEntryName(selectedEntry)}
                       </h2>
                       <p className="max-w-3xl text-[14px] leading-6 text-ui-muted">
@@ -451,7 +462,7 @@ export default function HistoryPage() {
 
                     <div className="flex flex-wrap items-center gap-3">
                       <div className={cn(
-                        "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-[13px] font-semibold",
+                        "inline-flex items-center gap-2 rounded-[9px] border px-3.5 py-2 text-[13px] font-semibold",
                         isSelectedSession
                           ? "border-primary/15 bg-primary/10 text-primary"
                           : journal?.status === "rolled_back"
@@ -466,7 +477,7 @@ export default function HistoryPage() {
                       </div>
 
                       {!isSelectedSession && journal?.status === "completed" ? (
-                        <div className="inline-flex items-center gap-2 rounded-full border border-warning/15 bg-warning-container/25 px-4 py-2 text-[13px] font-semibold text-warning">
+                        <div className="inline-flex items-center gap-2 rounded-[9px] border border-warning/15 bg-warning-container/25 px-3.5 py-2 text-[13px] font-semibold text-warning">
                           <ShieldCheck className="h-4 w-4" />
                           可以回退
                         </div>
@@ -475,7 +486,7 @@ export default function HistoryPage() {
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto bg-surface-container-low px-5 py-5 scrollbar-thin lg:px-6 lg:py-6">
+                <div className="flex-1 overflow-y-auto bg-surface-container-low px-4 py-4 scrollbar-thin lg:px-5 lg:py-5">
                   {journalLoading ? (
                     <div className="flex min-h-[20rem] flex-col items-center justify-center gap-4">
                       <div className="flex h-14 w-14 items-center justify-center rounded-[12px] border border-on-surface/6 bg-white text-primary">
@@ -484,62 +495,62 @@ export default function HistoryPage() {
                       <p className="text-ui-body text-ui-muted">正在载入详细内容...</p>
                     </div>
                   ) : isSelectedSession ? (
-                    <div className="space-y-4">
-                      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-                        <div className="rounded-[10px] border border-on-surface/6 bg-white p-5">
+                    <div className="space-y-3">
+                      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(260px,0.85fr)]">
+                        <div className="rounded-[10px] border border-on-surface/6 bg-white p-4">
                           <div className="flex items-start justify-between gap-4">
                             <div>
                               <p className="text-ui-meta text-ui-muted">当前阶段</p>
-                              <h3 className="mt-3 text-[2rem] font-black font-headline tracking-tight text-on-surface">
+                              <h3 className="mt-2.5 text-[1.55rem] font-black font-headline tracking-tight text-on-surface">
                                 {getFriendlyStage(sessionDetail?.stage)}
                               </h3>
                             </div>
-                            <div className="rounded-[8px] bg-surface-container-low p-3 text-primary">
-                              <FolderOpen className="h-7 w-7" />
+                            <div className="rounded-[8px] bg-surface-container-low p-2.5 text-primary">
+                              <FolderOpen className="h-6 w-6" />
                             </div>
                           </div>
-                          <p className="mt-5 max-w-2xl text-ui-body text-ui-muted">
+                          <p className="mt-4 max-w-2xl text-ui-body text-ui-muted">
                             {sessionDetail?.summary || "这是一条未完成的整理记录，你可以重新进入工作台继续调整。"}
                           </p>
                         </div>
 
-                        <div className="grid gap-4">
-                          <div className="rounded-[10px] border border-on-surface/6 bg-white p-5">
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                          <div className="rounded-[10px] border border-on-surface/6 bg-white p-4">
                             <p className="text-ui-meta text-ui-muted">最近更新时间</p>
-                            <p className="mt-3 text-[1.55rem] font-black tracking-tight text-on-surface">
+                            <p className="mt-2.5 text-[1.25rem] font-black tracking-tight text-on-surface">
                               {formatDisplayDate(sessionDetail?.updated_at || selectedEntry.created_at)}
                             </p>
                           </div>
-                          <div className="rounded-[10px] border border-on-surface/6 bg-white p-5">
+                          <div className="rounded-[10px] border border-on-surface/6 bg-white p-4">
                             <p className="text-ui-meta text-ui-muted">计划条目</p>
-                            <p className="mt-3 text-[1.55rem] font-black tracking-tight text-on-surface">
+                            <p className="mt-2.5 text-[1.25rem] font-black tracking-tight text-on-surface">
                               {sessionDetail?.plan_snapshot?.stats?.move_count || 0}
                             </p>
                           </div>
                         </div>
                       </div>
 
-                      <div className="rounded-[10px] border border-on-surface/6 bg-white p-5">
+                      <div className="rounded-[10px] border border-on-surface/6 bg-white p-4">
                         <div className="space-y-4">
                           <div>
                             <p className="text-ui-meta text-ui-muted">状态说明</p>
-                            <p className="mt-3 text-ui-body text-on-surface">
+                            <p className="mt-2.5 text-ui-body text-on-surface">
                               {sessionDetail?.summary || "这是一条未完成的整理记录，可以重新进入工作台继续处理。"}
                             </p>
                           </div>
 
                           {sessionDetail?.last_error ? (
-                            <div className="rounded-[10px] border border-warning/15 bg-warning-container/15 px-5 py-4 text-[13px] font-semibold leading-relaxed text-warning">
+                            <div className="rounded-[9px] border border-warning/15 bg-warning-container/15 px-4 py-3 text-[13px] font-semibold leading-relaxed text-warning">
                               最近错误：{sessionDetail.last_error}
                             </div>
                           ) : null}
 
                           <div className="flex flex-wrap gap-3">
-                            <Button variant="primary" onClick={() => handleOpenSession(false)} className="px-8 py-3.5">
+                            <Button variant="primary" onClick={() => handleOpenSession(false)} className="px-7 py-3">
                               <PlayCircle className="h-4 w-4" />
                               继续整理
                             </Button>
-                            <Button variant="secondary" onClick={() => handleOpenSession(true)} className="px-8 py-3.5">
+                            <Button variant="secondary" onClick={() => handleOpenSession(true)} className="px-7 py-3">
                               <Eye className="h-4 w-4" />
                               只读查看
                             </Button>
@@ -548,19 +559,19 @@ export default function HistoryPage() {
                       </div>
                     </div>
                   ) : (
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                       {rollbackSuccess ? (
                         <motion.div
                           initial={{ opacity: 0, scale: 0.98 }}
                           animate={{ opacity: 1, scale: 1 }}
-                          className="rounded-[10px] border border-emerald-500/12 bg-white p-5"
+                          className="rounded-[10px] border border-emerald-500/12 bg-white p-4"
                         >
                           <div className="flex items-start gap-4">
-                            <div className="flex h-12 w-12 items-center justify-center rounded-[10px] bg-emerald-500/12 text-emerald-700">
-                              <Undo2 className="h-6 w-6" />
+                            <div className="flex h-10 w-10 items-center justify-center rounded-[9px] bg-emerald-500/12 text-emerald-700">
+                              <Undo2 className="h-5 w-5" />
                             </div>
                             <div>
-                              <h3 className="text-[1.2rem] font-black tracking-tight text-on-surface">回退完成</h3>
+                              <h3 className="text-[1.05rem] font-black tracking-tight text-on-surface">回退完成</h3>
                               <p className="mt-2 text-ui-body text-ui-muted">
                                 这次移动过的内容已经按原路径放回，受影响的 {journal?.item_count || 0} 项内容已完成恢复。
                               </p>
@@ -569,35 +580,35 @@ export default function HistoryPage() {
                         </motion.div>
                       ) : null}
 
-                      <div className="grid gap-4 xl:grid-cols-3">
-                        <div className="rounded-[10px] border border-on-surface/6 bg-white p-5">
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <div className="rounded-[10px] border border-on-surface/6 bg-white p-4">
                           <p className="text-ui-meta text-ui-muted">处理条目</p>
-                          <p className="mt-3 text-[1.8rem] font-black tracking-tight text-on-surface tabular-nums">
+                          <p className="mt-2.5 text-[1.35rem] font-black tracking-tight text-on-surface tabular-nums">
                             {journal?.item_count || 0}
                           </p>
                         </div>
-                        <div className="rounded-[10px] border border-on-surface/6 bg-white p-5">
+                        <div className="rounded-[10px] border border-on-surface/6 bg-white p-4">
                           <p className="text-ui-meta text-ui-muted">成功项目</p>
-                          <p className="mt-3 text-[1.8rem] font-black tracking-tight text-on-surface tabular-nums">
+                          <p className="mt-2.5 text-[1.35rem] font-black tracking-tight text-on-surface tabular-nums">
                             {journal?.success_count || 0}
                           </p>
                         </div>
-                        <div className="rounded-[10px] border border-on-surface/6 bg-white p-5">
+                        <div className="rounded-[10px] border border-on-surface/6 bg-white p-4">
                           <p className="text-ui-meta text-ui-muted">失败项目</p>
-                          <p className="mt-3 text-[1.8rem] font-black tracking-tight text-on-surface tabular-nums">
+                          <p className="mt-2.5 text-[1.35rem] font-black tracking-tight text-on-surface tabular-nums">
                             {journal?.failure_count || 0}
                           </p>
                         </div>
                       </div>
 
-                      <div className="rounded-[10px] border border-on-surface/6 bg-white p-5">
+                      <div className="rounded-[10px] border border-on-surface/6 bg-white p-4">
                         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
                           <div>
                             <p className="text-ui-meta text-ui-muted">路径变化记录</p>
-                            <h3 className="mt-2 text-[1.45rem] font-black font-headline tracking-tight text-on-surface">
+                            <h3 className="mt-2 text-[1.2rem] font-black font-headline tracking-tight text-on-surface">
                               这次整理具体改了什么
                             </h3>
-                            <p className="mt-2 text-ui-body text-ui-muted">
+                            <p className="mt-1.5 text-ui-body text-ui-muted">
                               左侧是当前路径，右侧是原始位置。回退后则显示恢复关系。
                             </p>
                           </div>
@@ -608,7 +619,7 @@ export default function HistoryPage() {
                               onClick={() => setRollbackConfirmOpen(true)}
                               disabled={actionLoading}
                               loading={actionLoading}
-                              className="px-8 py-3.5"
+                              className="px-7 py-3"
                             >
                               <Undo2 className="h-4 w-4" />
                               回退这次整理
@@ -616,24 +627,24 @@ export default function HistoryPage() {
                           ) : null}
                         </div>
 
-                        <div className="mt-6 overflow-hidden rounded-[10px] border border-on-surface/6">
+                        <div className="mt-5 overflow-hidden rounded-[10px] border border-on-surface/6">
                           <table className="w-full border-collapse text-left">
                             <thead className="bg-surface-container-low/55">
                               <tr className="text-ui-meta font-semibold text-ui-muted">
-                                <th className="px-5 py-4">文件</th>
-                                <th className="px-5 py-4">路径变化</th>
+                                <th className="px-4 py-3.5">文件</th>
+                                <th className="px-4 py-3.5">路径变化</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-on-surface/6 bg-white">
                               {moveRows.length ? (
                                 moveRows.map((item, index) => (
                                   <tr key={index} className="transition-colors hover:bg-surface-container-low/28">
-                                    <td className="px-5 py-4 align-top">
+                                    <td className="px-4 py-3.5 align-top">
                                       <p className="max-w-[18rem] truncate text-[14px] font-semibold text-on-surface" title={item.display_name}>
                                         {item.display_name}
                                       </p>
                                     </td>
-                                    <td className="px-5 py-4">
+                                    <td className="px-4 py-3.5">
                                       <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 text-[13px]">
                                         <span className="truncate text-right font-mono text-ui-muted" title={item.target || ""}>
                                           {formatMovePath(item.target, journal?.target_dir || "")}
@@ -648,7 +659,7 @@ export default function HistoryPage() {
                                 ))
                               ) : (
                                 <tr>
-                                  <td colSpan={2} className="px-5 py-14 text-center text-ui-body text-ui-muted">
+                                  <td colSpan={2} className="px-4 py-12 text-center text-ui-body text-ui-muted">
                                     暂时没有可显示的路径变化记录。
                                   </td>
                                 </tr>
@@ -666,7 +677,7 @@ export default function HistoryPage() {
                 <div className="flex h-16 w-16 items-center justify-center rounded-[10px] bg-white text-primary/45 border border-on-surface/6">
                   <HistoryIcon className="h-8 w-8" />
                 </div>
-                <h3 className="mt-6 text-[1.6rem] font-black font-headline tracking-tight text-on-surface">
+                <h3 className="mt-6 text-[1.35rem] font-black font-headline tracking-tight text-on-surface">
                   选择一条记录开始查看
                 </h3>
                 <p className="mt-3 max-w-lg text-ui-body text-ui-muted">
