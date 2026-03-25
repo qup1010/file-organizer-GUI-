@@ -38,8 +38,8 @@ export function SessionHistory() {
   if (history.length === 0) return null;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between px-2">
+    <div className="space-y-4 rounded-[28px] border border-on-surface/8 bg-white/62 p-4 shadow-[0_18px_50px_rgba(36,48,42,0.06)] backdrop-blur-xl lg:p-5">
+      <div className="flex items-center justify-between gap-4 px-1">
         <div className="flex flex-col gap-1.5">
           <h3 className="text-base font-black text-on-surface flex items-center gap-2.5">
             <div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -53,14 +53,14 @@ export function SessionHistory() {
         </div>
         <button 
           onClick={() => router.push('/history')}
-          className="group flex items-center gap-2 px-4 py-2 rounded-xl bg-surface-container-low border border-on-surface/5 text-[11px] font-black uppercase tracking-wider text-primary hover:bg-white hover:shadow-sm transition-all"
+          className="group flex items-center gap-2 px-3.5 py-2 rounded-xl bg-surface-container-low border border-on-surface/5 text-[11px] font-black uppercase tracking-wider text-primary hover:bg-white hover:shadow-sm transition-all shrink-0"
         >
           查看全部记录
           <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         {history.slice(0, 6).map((item, idx) => {
           const isRolledBack = item.status === 'rolled_back';
           const isCompleted = item.status === 'success' || item.status === 'completed';
@@ -78,12 +78,12 @@ export function SessionHistory() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: idx * 0.05 }}
               onClick={() => handleContinue(item)}
-              className="group bg-white/60 backdrop-blur-md border border-on-surface/5 rounded-[28px] p-6 hover:border-primary/30 hover:bg-white transition-all cursor-pointer relative overflow-hidden active:scale-[0.98] shadow-sm hover:shadow-xl hover:shadow-primary/5"
+              className="group bg-white/72 backdrop-blur-md border border-on-surface/5 rounded-[24px] p-4 hover:border-primary/30 hover:bg-white transition-all cursor-pointer relative overflow-hidden active:scale-[0.98] shadow-sm hover:shadow-xl hover:shadow-primary/5"
             >
-              <div className="flex items-start justify-between mb-5">
-                <div className="flex items-center gap-4">
+              <div className="flex items-start justify-between mb-4 gap-3">
+                <div className="flex items-center gap-3 min-w-0">
                   <div className={cn(
-                    "w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-500",
+                    "w-10 h-10 rounded-2xl flex items-center justify-center transition-all duration-500 shrink-0",
                     isRolledBack 
                       ? "bg-surface-container-highest text-on-surface-variant/30" 
                       : isCompleted
@@ -92,11 +92,11 @@ export function SessionHistory() {
                   )}>
                     {isRolledBack ? <Undo2 className="w-5 h-5" /> : isCompleted ? <CheckCircle2 className="w-5 h-5" /> : <Activity className="w-5 h-5 animate-pulse" />}
                   </div>
-                  <div className="space-y-1">
-                    <h4 className="text-[15px] font-black text-on-surface tracking-tight truncate max-w-[160px] group-hover:text-primary transition-colors">
+                  <div className="space-y-1 min-w-0">
+                    <h4 className="text-[14px] font-black text-on-surface tracking-tight truncate max-w-[180px] group-hover:text-primary transition-colors">
                       {dirName}
                     </h4>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2.5 flex-wrap">
                       <span className={cn(
                         "text-[11px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded",
                         isRolledBack ? "bg-on-surface/5 text-on-surface-variant/40" : "bg-primary/5 text-primary/60"
@@ -125,7 +125,7 @@ export function SessionHistory() {
                 </div>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-2.5">
                 <div className="flex items-center gap-2 text-[11px] text-on-surface-variant/60 font-bold tracking-tight bg-surface-container-low/40 rounded-xl px-3 py-2 border border-on-surface/5 transition-colors group-hover:bg-surface-container-low/60 group-hover:text-on-surface">
                    <FolderOpen className="w-3.5 h-3.5 text-primary/30 shrink-0 group-hover:text-primary/60" />
                    <span className="truncate opacity-80">{item.target_dir}</span>

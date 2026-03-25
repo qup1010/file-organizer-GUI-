@@ -2,12 +2,14 @@
 
 import React, { useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { AlertTriangle, Bot, Layers, RefreshCw } from "lucide-react";
+import { AlertTriangle, Bot, ChevronDown, Layers, Loader2, RefreshCw } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 import { useSession } from "@/lib/use-session";
 import { getFriendlyStage } from "@/lib/utils";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ScanningOverlay } from "./workspace/scanning-overlay";
 import { MinimalScanningView } from "./workspace/minimal-scanning-view";
 import { PrecheckView } from "./workspace/precheck-view";
@@ -31,9 +33,12 @@ export default function WorkspaceClient() {
     chatMessages,
     assistantDraft,
     activityFeed,
+    assistantRuntime,
+    composerStatus,
     chatError,
     streamStatus,
     composerMode,
+    isComposerLocked,
     sendMessage,
     resolveUnresolvedChoices,
     scan,
@@ -51,6 +56,11 @@ export default function WorkspaceClient() {
 
   const [messageInput, setMessageInput] = useState("");
   const [leftWidth, setLeftWidth] = useState(62);
+  const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
+  const [dividerLeft, setDividerLeft] = useState<number | null>(null);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const leftPaneRef = React.useRef<HTMLElement>(null);
+  const [isResizingState, setIsResizingState] = useState(false);
   const isResizing = React.useRef(false);
 
   // Persistence for sidebar width
@@ -107,33 +117,53 @@ export default function WorkspaceClient() {
   const showConversationPane = !["ready_to_execute", "completed"].includes(stage);
   const effectiveComposerMode = isReadOnly ? "hidden" : composerMode;
 
-  const handleStartResizing = () => {
+  const handleStartResizing = (event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
     isResizing.current = true;
+    setIsResizingState(true);
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", stopResizing);
     document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.body.style.webkitUserSelect = "none";
   };
 
   const handleMouseMove = (event: MouseEvent) => {
     if (!isResizing.current) {
       return;
     }
-    const newWidth = (event.clientX / window.innerWidth) * 100;
-    if (newWidth > 35 && newWidth < 75) {
-      setLeftWidth(newWidth);
+
+    const container = containerRef.current;
+    if (!container) {
+      return;
     }
+
+    const rect = container.getBoundingClientRect();
+    if (rect.width <= 0) {
+      return;
+    }
+
+    const minLeftPx = 400;
+    const minRightPx = 340;
+    const maxLeftPx = Math.max(minLeftPx, rect.width - minRightPx);
+    const boundedX = Math.min(Math.max(event.clientX - rect.left, minLeftPx), maxLeftPx);
+    const newWidth = (boundedX / rect.width) * 100;
+    setLeftWidth(newWidth);
   };
 
   const stopResizing = () => {
     isResizing.current = false;
+    setIsResizingState(false);
     document.removeEventListener("mousemove", handleMouseMove);
     document.removeEventListener("mouseup", stopResizing);
     document.body.style.cursor = "default";
+    document.body.style.userSelect = "";
+    document.body.style.webkitUserSelect = "";
     saveWidth(leftWidth);
   };
 
   const handleSendMessage = async () => {
-    if (isReadOnly || !messageInput.trim() || isBusy) {
+    if (isReadOnly || !messageInput.trim() || isBusy || isComposerLocked) {
       return;
     }
     const content = messageInput;
@@ -146,12 +176,15 @@ export default function WorkspaceClient() {
       router.push("/");
       return;
     }
-    if (window.confirm("确定要放弃当前会话并返回首页吗？")) {
-      abandonSession().then((success) => {
-        if (success) {
-          router.push("/");
-        }
-      });
+
+    setExitConfirmOpen(true);
+  };
+
+  const handleConfirmExitWorkbench = async () => {
+    const success = await abandonSession();
+    if (success) {
+      setExitConfirmOpen(false);
+      router.push("/");
     }
   };
 
@@ -231,70 +264,88 @@ export default function WorkspaceClient() {
     }
   }, [stage, journal, journalLoading, isBusy, loadJournal]);
 
+  React.useEffect(() => {
+    if (!showConversationPane) {
+      setDividerLeft(null);
+      return;
+    }
+
+    const container = containerRef.current;
+    const leftPane = leftPaneRef.current;
+    if (!container || !leftPane) {
+      return;
+    }
+
+    const updateDivider = () => {
+      setDividerLeft(leftPane.getBoundingClientRect().width);
+    };
+
+    updateDivider();
+
+    const observer = new ResizeObserver(() => {
+      updateDivider();
+    });
+    observer.observe(container);
+    observer.observe(leftPane);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [showConversationPane, leftWidth]);
+
   return (
-    <div className="flex-1 flex min-h-0 overflow-hidden relative bg-surface">
+    <div ref={containerRef} className="flex-1 flex min-h-0 overflow-hidden relative bg-surface">
       <ErrorBoundary fallbackTitle="页面加载出错了" className="flex-1">
         {showConversationPane ? (
-        <section style={{ width: `${leftWidth}%` }} className="relative flex min-h-0 h-full min-w-[400px] flex-col">
-          <div className="shrink-0 px-8 py-5 min-h-[104px] flex items-start justify-between border-b border-on-surface/5 bg-surface/88 backdrop-blur-sm z-10 gap-4">
-            <div className="flex items-start gap-4">
-              <div className="w-10 h-10 rounded-2xl bg-white/80 flex items-center justify-center text-primary border border-on-surface/5">
-                <Bot className="w-4.5 h-4.5" />
+        <section ref={leftPaneRef} style={{ width: `${leftWidth}%` }} className="relative flex min-h-0 h-full min-w-[400px] flex-col">
+          <div className="shrink-0 px-8 py-5 flex items-center justify-between border-b border-on-surface/5 bg-surface/40 backdrop-blur-xl z-20 gap-6 lg:px-10 h-[88px]">
+            <div className="flex items-center gap-5 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-white/40 flex items-center justify-center text-primary/60 border border-on-surface/[0.03] shadow-xs shrink-0">
+                <Bot className="w-5 h-5" />
               </div>
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center gap-3">
-                  <h2 className="text-base font-bold font-headline text-on-surface tracking-tight">
-                    文件整理助手
+              <div className="flex flex-col gap-1 min-w-0">
+                <div className="flex items-center gap-2.5">
+                  <h2 className="text-[15px] font-black text-on-surface tracking-tight truncate">
+                    文件整理工作台
                   </h2>
-                  {streamStatus === "connecting" && (
-                    <span className="flex items-center gap-1.5 text-[10px] font-bold text-warning/80 uppercase tracking-wider animate-pulse">
-                      <div className="w-1.5 h-1.5 rounded-full bg-warning" />
-                      连接波动
-                    </span>
-                  )}
-                  {streamStatus === "disconnected" && (
-                    <span className="flex items-center gap-1.5 text-[10px] font-bold text-error/60 uppercase tracking-wider">
-                      <div className="w-1.5 h-1.5 rounded-full bg-error/40" />
-                      停止连接
-                    </span>
-                  )}
-                  <span className="rounded-full bg-surface-container px-2.5 py-1 text-xs font-medium text-on-surface-variant">
+                  <div className="h-1 w-1 rounded-full bg-on-surface/10 md:block hidden" />
+                  <span className="rounded-full bg-primary/5 border border-primary/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-primary/70 whitespace-nowrap">
                     {getFriendlyStage(stage)}
                   </span>
-                  {snapshot?.strategy ? (
-                    <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
-                      {snapshot.strategy.template_label}
-                    </span>
+                </div>
+                <div className="flex items-center gap-2 text-[11px] font-medium text-on-surface-variant/40">
+                  <p className="truncate hover:text-on-surface-variant/60 cursor-default transition-colors">
+                    {snapshot?.target_dir || dirParam || "..."}
+                  </p>
+                  {assistantRuntime ? (
+                    <>
+                      <div className="w-1 h-1 rounded-full bg-on-surface/10" />
+                      <span className="flex items-center gap-1.5 transition-colors text-primary/60 uppercase tracking-widest font-black">
+                        <Loader2 className="h-2.5 w-2.5 animate-spin-slow" />
+                        {assistantRuntime.label}
+                      </span>
+                    </>
                   ) : null}
                 </div>
-                <p className="text-xs text-on-surface-variant truncate max-w-[320px]">
-                  {snapshot?.target_dir || dirParam || "..."}
-                </p>
-                {snapshot?.strategy ? (
-                  <div className="space-y-1.5">
-                    <div className="flex flex-wrap gap-2">
-                      <span className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-on-surface-variant border border-on-surface/8">
-                        {snapshot.strategy.naming_style_label}
-                      </span>
-                      <span className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-on-surface-variant border border-on-surface/8">
-                        {snapshot.strategy.caution_level_label}
-                      </span>
-                    </div>
-                    {snapshot.strategy.note ? (
-                      <p className="max-w-[340px] truncate text-xs leading-5 text-on-surface-variant/75">
-                        偏好：{snapshot.strategy.note}
-                      </p>
-                    ) : null}
-                  </div>
-                ) : null}
               </div>
             </div>
-            <button
-              onClick={handleExitWorkbench}
-              className="text-xs font-medium text-on-surface-variant hover:text-error px-3 py-2 rounded-full transition-colors hover:bg-error-container/10"
-            >
-              结束这次整理
-            </button>
+
+            <div className="flex items-center gap-3 shrink-0">
+              {streamStatus !== "connected" && (
+                <div className={cn(
+                  "flex items-center gap-1.5 px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest",
+                  streamStatus === "connecting" ? "text-warning animate-pulse" : "text-on-surface-variant/20"
+                )}>
+                  {streamStatus === "connecting" ? "正在连接" : "离线"}
+                </div>
+              )}
+              <button
+                onClick={handleExitWorkbench}
+                className="text-[11px] font-black text-on-surface-variant/30 hover:text-error/60 px-4 py-2 rounded-lg transition-all hover:bg-error-container/5 uppercase tracking-widest"
+              >
+                结束会话
+              </button>
+            </div>
           </div>
 
           <ConversationPanel
@@ -304,6 +355,8 @@ export default function WorkspaceClient() {
             error={chatError}
             composerMode={effectiveComposerMode}
             isBusy={isBusy}
+            isComposerLocked={isComposerLocked}
+            composerStatus={composerStatus}
             stage={stage}
             messageInput={messageInput}
             setMessageInput={setMessageInput}
@@ -323,22 +376,42 @@ export default function WorkspaceClient() {
         {showConversationPane ? (
           <div
             onMouseDown={handleStartResizing}
-            className="absolute top-0 bottom-0 w-1 hover:bg-primary/20 cursor-col-resize z-20 transition-all flex items-center justify-center group"
-            style={{ left: `calc(${leftWidth}% - 0.5px)` }}
+            className={cn(
+              "absolute top-0 bottom-0 w-2.5 z-40 transition-colors cursor-col-resize flex items-center justify-center select-none group",
+              isResizingState ? "bg-transparent" : "hover:bg-primary/[0.03]"
+            )}
+            style={{ left: dividerLeft !== null ? `${dividerLeft - 1.25}px` : `calc(${leftWidth}% - 1.25px)` }}
           >
-            <div className="w-[1px] h-full bg-on-surface/5 transition-colors group-hover:bg-primary/40" />
+            {/* 视觉分界线 */}
+            <div className={cn(
+              "w-[1px] h-full transition-all duration-300",
+              isResizingState 
+                ? "bg-primary/40 shadow-[0_0_15px_rgba(76,98,88,0.4)] scale-x-[1.5]" 
+                : "bg-on-surface/[0.04] group-hover:bg-primary/20"
+            )} />
+            
+            {/* 磁吸手柄 */}
+            <div className={cn(
+              "absolute top-1/2 -translate-y-1/2 w-5 h-9 rounded-full bg-white border border-on-surface/5 shadow-[0_2px_8px_rgba(0,0,0,0.04)] flex flex-col items-center justify-center gap-0.5 transition-all duration-200",
+              isResizingState 
+                ? "opacity-100 scale-110 shadow-[0_4px_12px_rgba(0,0,0,0.08)] border-primary/20" 
+                : "opacity-0 group-hover:opacity-100 scale-100"
+            )}>
+              <div className={cn("w-[1.5px] h-3 rounded-full transition-colors", isResizingState ? "bg-primary/40" : "bg-on-surface/15")} />
+              <div className={cn("w-[1.5px] h-3 rounded-full transition-colors", isResizingState ? "bg-primary/40" : "bg-on-surface/15")} />
+            </div>
           </div>
         ) : null}
 
         <section
           style={{ width: showConversationPane ? `${100 - leftWidth}%` : "100%" }}
-          className="flex min-h-0 h-full min-w-[340px] flex-col bg-surface overflow-y-auto"
+          className="flex min-h-0 h-full min-w-[340px] flex-col bg-surface overflow-hidden"
         >
-          <div className="flex-1">
+          <div className="flex-1 min-h-0">
             {stage === "scanning" ? (
               <MinimalScanningView scanner={scanner} progressPercent={progressPercent} />
             ) : stage === "completed" ? (
-              <div className="p-10 max-w-4xl mx-auto">
+              <div className="h-full overflow-y-auto p-5 max-w-[1040px] mx-auto lg:p-6 scrollbar-thin">
                 <CompletionView
                   journal={journal}
                   summary={snapshot?.summary || ""}
@@ -360,7 +433,7 @@ export default function WorkspaceClient() {
                 />
               </div>
             ) : stage === "ready_to_execute" ? (
-              <div className="p-10">
+              <div className="h-full overflow-y-auto p-5 lg:p-6 scrollbar-thin">
                 <PrecheckView
                   summary={precheck}
                   isBusy={isBusy}
@@ -387,7 +460,7 @@ export default function WorkspaceClient() {
                     className="h-[70vh]"
                   />
                 ) : stage === "stale" || stage === "interrupted" ? (
-                  <div className="p-10">
+                  <div className="h-full overflow-y-auto p-5 lg:p-6 scrollbar-thin">
                     <div className="rounded-2xl border border-warning/20 bg-warning-container/15 p-6 shadow-sm">
                       <div className="flex items-start gap-4">
                         <div className="mt-1 rounded-full bg-warning/15 p-3 text-warning">
@@ -445,6 +518,17 @@ export default function WorkspaceClient() {
           </div>
         </section>
       </ErrorBoundary>
+      <ConfirmDialog
+        open={exitConfirmOpen}
+        title="结束当前整理？"
+        description="确认后会放弃当前会话并返回首页。未完成的整理记录仍会保留在历史档案中。"
+        confirmLabel="结束整理"
+        cancelLabel="继续整理"
+        tone="danger"
+        loading={loading}
+        onConfirm={handleConfirmExitWorkbench}
+        onCancel={() => setExitConfirmOpen(false)}
+      />
     </div>
   );
 }

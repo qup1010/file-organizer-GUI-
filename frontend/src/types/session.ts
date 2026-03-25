@@ -13,6 +13,8 @@ export type SessionStage =
   | "interrupted";
 
 export type StreamStatus = "connected" | "connecting" | "disconnected";
+export type AssistantRuntimePhase = "scan" | "plan";
+export type AssistantRuntimeMode = "waiting" | "tool" | "streaming";
 
 export type StrategyTemplateId =
   | "general_downloads"
@@ -163,6 +165,13 @@ export interface ActivityFeedEntry {
   message: string;
   time: string;
   important?: boolean;
+}
+
+export interface AssistantRuntimeStatus {
+  phase: AssistantRuntimePhase;
+  mode: AssistantRuntimeMode;
+  label: string;
+  detail?: string;
 }
 
 export type ComposerMode = "hidden" | "readonly" | "editable";

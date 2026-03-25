@@ -88,14 +88,16 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
         message = SimpleNamespace(content="", tool_calls=[diff_call])
 
         with mock.patch.object(organizer_service, "chat_one_round", return_value=message):
-            _, result = organizer_service.run_organizer_cycle(
+            content, result = organizer_service.run_organizer_cycle(
                 messages=[],
                 scan_lines="合同.pdf | 财务/合同 | 付款协议\n截图1.png | 截图记录 | 报错界面",
                 pending_plan=PendingPlan(),
             )
 
+        self.assertEqual(content, organizer_service.SYNTHETIC_PLAN_REPLY)
         self.assertFalse(result["is_valid"])
         self.assertEqual(result["display_plan"], {"focus": "summary", "summary": "先按用途归类", "reason": ""})
+        self.assertEqual(result["assistant_message"]["content"], organizer_service.SYNTHETIC_PLAN_REPLY)
         self.assertEqual(result["pending_plan"].directories, ["Review", "Study"])
         self.assertEqual(
             {move.source: move.target for move in result["pending_plan"].moves},

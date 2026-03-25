@@ -32,6 +32,7 @@ import { twMerge } from "tailwind-merge";
 
 import type {
   ActivityFeedEntry,
+  AssistantRuntimeStatus,
   AssistantMessage,
   ComposerMode,
   SessionStage,
@@ -64,6 +65,8 @@ interface ConversationPanelProps {
   error: string | null;
   composerMode: ComposerMode;
   isBusy: boolean;
+  isComposerLocked: boolean;
+  composerStatus?: AssistantRuntimeStatus | null;
   stage: SessionStage;
   messageInput: string;
   setMessageInput: (val: string) => void;
@@ -337,6 +340,8 @@ export function ConversationPanel({
   error,
   composerMode,
   isBusy,
+  isComposerLocked,
+  composerStatus,
   stage,
   messageInput,
   setMessageInput,
@@ -681,7 +686,12 @@ export function ConversationPanel({
           })}
 
           {assistantDraft && (
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex gap-4 mt-8">
+            <motion.div
+              key="assistant-streaming-bubble"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex gap-4 mt-8"
+            >
               <div className="w-8 h-8 rounded-lg bg-white/90 border border-on-surface/5 flex items-center justify-center text-primary shrink-0">
                 <Bot className="w-3.5 h-3.5" />
               </div>
@@ -699,6 +709,31 @@ export function ConversationPanel({
                     className="inline-block w-1.5 h-4 bg-primary/40 ml-1 translate-y-0.5"
                   />
                 </div>
+              </div>
+            </motion.div>
+          )}
+
+          {!assistantDraft && composerStatus && composerMode === "editable" && (
+            <motion.div
+              key="assistant-status-bubble"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex gap-4 mt-8"
+            >
+              <div className="w-8 h-8 rounded-lg bg-white/90 border border-on-surface/5 flex items-center justify-center text-primary shrink-0">
+                <Bot className="w-3.5 h-3.5" />
+              </div>
+              <div className="p-4 flex-1 bg-white/88 border border-on-surface/5 rounded-2xl text-[14px] leading-7 text-on-surface shadow-sm">
+                <div className="mb-3 flex items-center gap-2 opacity-50">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span className="text-[10px] font-black uppercase tracking-widest">
+                    {composerStatus.mode === "tool" ? "正在调用工具" : "AI 正在处理中"}
+                  </span>
+                </div>
+                <p className="text-sm font-bold text-on-surface">{composerStatus.label}</p>
+                {composerStatus.detail ? (
+                  <p className="mt-1 text-sm leading-6 text-on-surface-variant">{composerStatus.detail}</p>
+                ) : null}
               </div>
             </motion.div>
           )}
@@ -735,8 +770,27 @@ export function ConversationPanel({
           </AnimatePresence>
 
           <AnimatePresence>
+            {composerStatus && composerMode === "editable" ? (
+              <motion.div
+                key="composer-status-bubble"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="mb-4 flex items-start gap-3 rounded-2xl border border-primary/10 bg-primary/[0.05] px-4 py-3 text-sm text-primary"
+              >
+                <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
+                <div className="space-y-1">
+                  <p className="font-bold">{composerStatus.label}</p>
+                  {composerStatus.detail ? (
+                    <p className="leading-6 text-primary/80">{composerStatus.detail}</p>
+                  ) : null}
+                </div>
+              </motion.div>
+            ) : null}
+
             {unresolvedCount > 0 && composerMode === "editable" ? (
               <motion.div
+                key="unresolved-count-bubble"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 10 }}
@@ -762,14 +816,14 @@ export function ConversationPanel({
           </AnimatePresence>
 
           {composerMode === "editable" ? (
-            <div className="relative flex items-end rounded-[22px] border border-on-surface/8 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.04)] transition-all focus-within:border-primary/30 focus-within:shadow-[0_12px_40px_rgba(0,0,0,0.06)] px-2 pt-1 pb-1">
+            <div className="relative flex items-end rounded-[32px] border border-on-surface/[0.06] bg-surface-container-low/50 transition-all focus-within:border-primary/20 focus-within:bg-white focus-within:shadow-[0_8px_30px_rgba(0,0,0,0.04)] px-3 pt-1.5 pb-1.5">
               <textarea
                 ref={inputRef}
                 rows={1}
                 className="w-full bg-transparent border-none py-3 px-4 text-[14px] text-on-surface placeholder:text-on-surface-variant/30 outline-none resize-none scrollbar-none min-h-[44px]"
-                placeholder={isBusy ? "正在处理..." : "说说你的整理想法，或告诉我哪里想调整..."}
+                placeholder={isComposerLocked ? (composerStatus?.label || "AI 正在处理中...") : "说说你的整理想法，或告诉我哪里想调整..."}
                 value={messageInput}
-                disabled={isBusy}
+                disabled={isComposerLocked}
                 onChange={(event) => setMessageInput(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey) {
@@ -780,10 +834,15 @@ export function ConversationPanel({
               />
               <button
                 onClick={onSendMessage}
-                disabled={isBusy || !messageInput.trim()}
-                className="mb-1.5 mr-1.5 p-2 rounded-xl text-on-surface-variant/40 hover:text-primary hover:bg-primary/5 transition-all disabled:opacity-10 flex items-center justify-center active:scale-95"
+                disabled={isComposerLocked || !messageInput.trim()}
+                className={cn(
+                  "mb-1.5 mr-1.5 p-2.5 rounded-full transition-all flex items-center justify-center active:scale-90 shrink-0",
+                  messageInput.trim() && !isComposerLocked
+                    ? "bg-primary text-white shadow-sm"
+                    : "text-on-surface-variant/20"
+                )}
               >
-                {isBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                {isComposerLocked ? <Loader2 className="w-4 h-4 animate-spin-slow" /> : <Send className="w-4 h-4" />}
               </button>
             </div>
           ) : (

@@ -26,6 +26,9 @@ pub fn build_backend_command(project_root: &Path, api_token: &str) -> Command {
         .arg("-m")
         .arg("file_organizer.api")
         .env("PYTHONUTF8", "1")
+        // Tauri dev 自己已经负责桌面侧热重载；这里禁用 uvicorn reload，
+        // 避免额外的 reloader 进程导致 runtime 文件 owner 与实际服务实例不一致。
+        .env("FILE_ORGANIZER_API_RELOAD", "false")
         .env("FILE_ORGANIZER_API_HOST", &host)
         .env("FILE_ORGANIZER_API_PORT", &port)
         .env("FILE_ORGANIZER_API_BASE_URL", &base_url)
@@ -88,6 +91,7 @@ mod tests {
         assert_eq!(command.get_current_dir(), Some(Path::new("D:/repo")));
         assert!(envs.iter().any(|(key, value)| key == "FILE_ORGANIZER_API_HOST" && value.as_deref() == Some("127.0.0.1")));
         assert!(envs.iter().any(|(key, value)| key == "FILE_ORGANIZER_API_PORT" && value.as_deref() == Some("8765")));
+        assert!(envs.iter().any(|(key, value)| key == "FILE_ORGANIZER_API_RELOAD" && value.as_deref() == Some("false")));
         assert!(envs.iter().any(|(key, value)| {
             key == "FILE_ORGANIZER_API_BASE_URL" && value.as_deref() == Some("http://127.0.0.1:8765")
         }));

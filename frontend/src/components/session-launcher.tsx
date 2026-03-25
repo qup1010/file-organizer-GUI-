@@ -566,24 +566,24 @@ export function SessionLauncher() {
 
   return (
     <>
-      <div className="relative mx-auto flex w-full max-w-4xl justify-center">
-        <div className="w-full max-w-3xl space-y-6 text-center">
-          <div className="inline-flex items-center gap-2 rounded-full border border-outline-variant/15 bg-white/60 px-3 py-1 text-xs font-medium text-on-surface-variant/75">
+      <div className="relative mx-auto flex w-full max-w-[66rem] justify-center">
+        <div className="w-full max-w-[56rem] space-y-3 text-center">
+          <div className="inline-flex items-center gap-2 rounded-full border border-outline-variant/15 bg-white/60 px-3 py-1 text-[11px] font-medium text-on-surface-variant/75">
             文件整理
           </div>
-          <div className="space-y-4">
-            <h2 className="mx-auto max-w-3xl text-4xl font-black font-headline tracking-tight text-on-surface md:text-[4.25rem] md:leading-[1.02]">
-              为目录建立更清楚的结构
+          <div className="space-y-2">
+            <h2 className="mx-auto max-w-[18ch] text-[2.35rem] font-black font-headline tracking-tight text-on-surface leading-[0.98] md:text-[2.8rem]">
+              从这里开始整理你的文件
             </h2>
-            <p className="mx-auto max-w-2xl text-[16px] leading-8 text-on-surface-variant">
-              先选一个本地目录，再按你的习惯开始整理。整个过程会尽量清楚、稳妥，也方便你随时调整。
+            <p className="mx-auto max-w-[42rem] text-[14px] leading-6 text-on-surface-variant/90">
+              选择一个你想要整理的本地目录，即刻开始整理。
             </p>
           </div>
 
-          <div className="rounded-[34px] border border-on-surface/10 bg-white/80 p-10 shadow-[0_32px_80px_rgba(36,48,42,0.08)] backdrop-blur-xl text-left">
-            <div className="mb-6 flex items-center justify-between">
+          <div className="rounded-[28px] border border-on-surface/10 bg-white/80 p-5 shadow-[0_24px_60px_rgba(36,48,42,0.08)] backdrop-blur-xl text-left md:p-6">
+            <div className="mb-4 flex items-center justify-between gap-4">
               <div className="text-[11px] font-black text-on-surface-variant/40 uppercase tracking-[0.3em]">整理步骤</div>
-              <div className="flex items-center gap-6 text-[11px] font-black text-on-surface-variant/30 uppercase tracking-[0.2em]">
+              <div className="hidden md:flex items-center gap-3 text-[10px] font-black text-on-surface-variant/30 uppercase tracking-[0.16em] md:text-[11px]">
                 <span className="flex items-center gap-2 group transition-colors hover:text-primary"><Search className="h-3.5 w-3.5" /> 1. 扫描</span>
                 <div className="w-4 h-px bg-on-surface/10" />
                 <span className="flex items-center gap-2 group transition-colors hover:text-primary"><FileSearch className="h-3.5 w-3.5" /> 2. 调整方案</span>
@@ -605,7 +605,7 @@ export function SessionLauncher() {
                 value={targetDir}
                 onChange={(event) => setTargetDir(event.target.value)}
                 disabled={loading}
-                className="w-full rounded-[28px] border-2 border-on-surface/5 bg-surface-container-low/20 py-6 pl-16 pr-44 text-[15px] font-bold text-on-surface outline-none transition-all placeholder:text-on-surface-variant/20 focus:border-primary/40 focus:ring-8 focus:ring-primary/5 disabled:opacity-70 shadow-inner"
+                className="w-full rounded-[24px] border-2 border-on-surface/5 bg-surface-container-low/20 py-4 pl-16 pr-36 text-[14px] font-bold text-on-surface outline-none transition-all placeholder:text-on-surface-variant/20 focus:border-primary/40 focus:ring-8 focus:ring-primary/5 disabled:opacity-70 shadow-inner"
                 placeholder="例如: D:\\Downloads\\Incomplete"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") openStrategyDialog();
@@ -616,17 +616,17 @@ export function SessionLauncher() {
                 onClick={openStrategyDialog}
                 disabled={loading || !targetDir.trim()}
                 loading={loading}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 px-8 py-4 h-[calc(100%-1.25rem)] rounded-[22px]"
+                className="absolute right-2 top-1/2 h-[calc(100%-0.8rem)] -translate-y-1/2 rounded-[20px] px-6 py-3"
               >
                 {loading ? "处理中" : "开始整理"}
                 {!loading && <ArrowRight className="ml-2 h-4 w-4" />}
               </Button>
             </div>
             
-            <div className="mt-8 flex items-center px-2">
+            <div className="mt-4 flex items-center px-1">
               <div className="flex items-center gap-3 text-[11px] font-black text-emerald-600 uppercase tracking-widest bg-emerald-500/5 px-4 py-2 rounded-full border border-emerald-500/10">
                 <ShieldCheck className="h-3.5 w-3.5" />
-                <span>操作安全且可随时回退</span>
+                <span>可随时回退</span>
               </div>
             </div>
           </div>
@@ -640,7 +640,7 @@ export function SessionLauncher() {
               exit={{ opacity: 0, height: 0 }}
               className="overflow-hidden"
             >
-              <div className="mt-6 flex items-start gap-3 rounded-[22px] border border-error/10 bg-error-container/20 px-4 py-3 text-sm font-medium text-error">
+              <div className="mt-4 flex items-start gap-3 rounded-[22px] border border-error/10 bg-error-container/20 px-4 py-3 text-sm font-medium text-error">
                 <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
                 <p className="leading-relaxed">{error}</p>
               </div>

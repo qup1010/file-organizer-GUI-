@@ -43,6 +43,7 @@ export function createSessionEventStream(
     "session.abandoned",
     "session.interrupted",
     "scan.started",
+    "scan.progress",
     "scan.completed",
     "plan.updated",
     "precheck.ready",

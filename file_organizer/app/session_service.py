@@ -144,35 +144,31 @@ class OrganizerSessionService:
         if session.stage not in {"draft", "stale", "interrupted", "planning"}:
             raise RuntimeError("SESSION_STAGE_CONFLICT")
 
+        target_dir = Path(session.target_dir).resolve()
         session.stage = "scanning"
-        session.scanner_progress = {
-            "status": "running",
-            "processed_count": 0,
-            "total_count": self._count_visible_entries(Path(session.target_dir)),
-            "current_item": None,
-            "recent_analysis_items": [],
-            "completed_batches": 0,
-        }
+        session.scanner_progress = self._initial_scan_progress(target_dir)
         self.store.save(session)
         self._record_event("scan.started", session)
+        seen_entries: set[str] = set()
+        parallel_state = {"enabled": False}
+
         def on_scan_event(event_type: str, data: dict):
-            # Mirror specific low-level events to the frontend via SSE
-            if event_type in {"tool_start", "model_wait_start"}:
-                self._record_event("scan.action", session_id=session.session_id, action=data)
-            elif event_type == "ai_chunk":
-                self._record_event("scan.ai_typing", session_id=session.session_id, content=data.get("content"))
-            elif event_type == "batch_split":
+            self._forward_runtime_event("scan", session.session_id, event_type, data)
+            if event_type == "batch_split":
+                parallel_state["enabled"] = True
                 batch_count = max(1, int(data.get("batch_count") or 1))
+                worker_count = max(1, int(data.get("worker_count") or batch_count))
                 session.scanner_progress["batch_count"] = batch_count
                 session.scanner_progress["completed_batches"] = 0
                 session.scanner_progress["message"] = f"文件较多，已拆分为 {batch_count} 个批次并行分析"
-                session.scanner_progress["current_item"] = f"批次 0/{batch_count}"
+                session.scanner_progress["current_item"] = f"已启动 {worker_count} 个并行分析线程"
                 self.store.save(session)
                 self._record_event("scan.progress", session)
             elif event_type == "batch_progress":
                 total_batches = max(1, int(data.get("total_batches") or session.scanner_progress.get("batch_count") or 1))
                 completed_batches = max(0, int(data.get("completed_batches") or 0))
                 batch_index = max(0, int(data.get("batch_index") or 0))
+                batch_size = max(0, int(data.get("batch_size") or 0))
                 status = data.get("status") or "completed"
                 total_count = max(0, int(session.scanner_progress.get("total_count") or 0))
                 session.scanner_progress["batch_count"] = total_batches
@@ -181,17 +177,29 @@ class OrganizerSessionService:
                     total_count,
                     int((completed_batches / total_batches) * total_count) if total_count else 0,
                 )
-                session.scanner_progress["current_item"] = f"批次 {min(batch_index + 1, total_batches)}/{total_batches}"
+                if batch_size:
+                    session.scanner_progress["current_item"] = f"第 {min(batch_index + 1, total_batches)}/{total_batches} 批（{batch_size} 项）"
+                else:
+                    session.scanner_progress["current_item"] = f"第 {min(batch_index + 1, total_batches)}/{total_batches} 批"
                 if status == "failed":
                     session.scanner_progress["message"] = f"第 {batch_index + 1}/{total_batches} 批失败，正在继续汇总其余批次"
                 else:
                     session.scanner_progress["message"] = f"已完成 {completed_batches}/{total_batches} 批并行分析"
                 self.store.save(session)
                 self._record_event("scan.progress", session)
+            elif not parallel_state["enabled"] and self._update_single_scan_progress(
+                session,
+                target_dir,
+                seen_entries,
+                event_type,
+                data,
+            ):
+                self.store.save(session)
+                self._record_event("scan.progress", session)
 
         self.async_scanner.start(
             session_id=session.session_id,
-            target_dir=Path(session.target_dir),
+            target_dir=target_dir,
             run_scan=lambda d: self._default_scan_runner(d, event_handler=on_scan_event),
             on_complete=self._finish_async_scan,
             on_error=self._fail_async_scan,
@@ -325,10 +333,7 @@ class OrganizerSessionService:
         session.messages.append(self._ensure_message_id({"role": "user", "content": content}))
         pending_plan = self._pending_plan_from_session(session)
         def on_plan_event(event_type: str, data: dict):
-            if event_type in {"model_wait_start", "tool_start"}:
-                self._record_event("plan.action", session_id=session.session_id, action=data)
-            elif event_type == "ai_chunk":
-                self._record_event("plan.ai_typing", session_id=session.session_id, content=data.get("content"))
+            self._forward_runtime_event("plan", session.session_id, event_type, data)
 
         assistant_message, cycle_result = organize_service.run_organizer_cycle(
             messages=list(session.messages),
@@ -471,10 +476,7 @@ class OrganizerSessionService:
 
         if has_note:
             def on_plan_event(event_type: str, data: dict):
-                if event_type in {"model_wait_start", "tool_start"}:
-                    self._record_event("plan.action", session_id=session.session_id, action=data)
-                elif event_type == "ai_chunk":
-                    self._record_event("plan.ai_typing", session_id=session.session_id, content=data.get("content"))
+                self._forward_runtime_event("plan", session.session_id, event_type, data)
 
             assistant_message, cycle_result = organize_service.run_organizer_cycle(
                 messages=list(session.messages),
@@ -720,34 +722,22 @@ class OrganizerSessionService:
                     continue
 
         # 2. 加载活跃会话 (Active Sessions)
-        # 即使没有执行，也可以从 session store 中找那些还没完成/放弃的
-        for path in self.store.root_dir.glob("*.json"):
-            if path.name in {"latest_by_directory.json"}:
+        # 即使应用在扫描/执行中被关闭，也要能在历史里看到这条会话
+        for session in self.store.list_sessions():
+            self._recover_orphaned_locked_session(session)
+            stage = session.stage
+            if stage in {"abandoned", "completed"}:
                 continue
-            if not path.is_file() or path.suffix != ".json":
-                continue
-            try:
-                data = json.loads(path.read_text(encoding="utf-8"))
-                s_id = data.get("session_id")
-                if not s_id:
-                    continue
-                stage = data.get("stage")
-                if stage in {"abandoned", "completed"}:
-                     continue
-                
-                # 如果同一个 ID 已经在执行记录里了，以执行记录为准（或合并）
-                # 这里我们优先显示 Session，因为它是“可继续”的
-                history_map[s_id] = {
-                    "execution_id": s_id,
-                    "target_dir": data["target_dir"],
-                    "status": stage,
-                    "created_at": data.get("updated_at") or data.get("created_at"),
-                    "item_count": data.get("plan_snapshot", {}).get("stats", {}).get("move_count", 0),
-                    "failure_count": 0,
-                    "is_session": True
-                }
-            except (json.JSONDecodeError, KeyError):
-                continue
+
+            history_map[session.session_id] = {
+                "execution_id": session.session_id,
+                "target_dir": session.target_dir,
+                "status": stage,
+                "created_at": session.updated_at or session.created_at,
+                "item_count": session.plan_snapshot.get("stats", {}).get("move_count", 0),
+                "failure_count": 0,
+                "is_session": True,
+            }
                 
         history = list(history_map.values())
         # Sort by creation/update time descending
@@ -830,6 +820,106 @@ class OrganizerSessionService:
             "session_snapshot": self._build_snapshot(session),
         }
 
+    def _forward_runtime_event(self, phase: str, session_id: str, event_type: str, data: dict) -> None:
+        if event_type in {"model_wait_start", "tool_start"}:
+            self._record_event(f"{phase}.action", session_id=session_id, action=data)
+        elif event_type == "ai_chunk":
+            self._record_event(f"{phase}.ai_typing", session_id=session_id, content=data.get("content"))
+
+    def _initial_scan_progress(self, target_dir: Path) -> dict:
+        return {
+            "status": "running",
+            "processed_count": 0,
+            "total_count": self._count_visible_entries(target_dir),
+            "current_item": "正在准备扫描",
+            "recent_analysis_items": [],
+            "completed_batches": 0,
+            "message": "正在读取目录结构",
+        }
+
+    def _top_level_scan_entry(self, target_dir: Path, raw_path: str | None) -> str | None:
+        if not raw_path:
+            return None
+        candidate = Path(raw_path)
+        if not candidate.is_absolute():
+            candidate = (target_dir / candidate).resolve()
+        else:
+            candidate = candidate.resolve()
+        try:
+            relative = candidate.relative_to(target_dir.resolve())
+        except ValueError:
+            return None
+        if not relative.parts:
+            return None
+        return relative.parts[0]
+
+    def _update_single_scan_progress(
+        self,
+        session: OrganizerSession,
+        target_dir: Path,
+        seen_entries: set[str],
+        event_type: str,
+        data: dict,
+    ) -> bool:
+        progress = dict(session.scanner_progress or {})
+        total_count = max(0, int(progress.get("total_count") or 0))
+        changed = False
+
+        def set_field(key: str, value) -> None:
+            nonlocal changed
+            if progress.get(key) != value:
+                progress[key] = value
+                changed = True
+
+        if event_type == "model_wait_start":
+            set_field("message", data.get("message") or "正在分析目录内容")
+            if not progress.get("current_item"):
+                set_field("current_item", "正在等待模型回复")
+        elif event_type == "tool_start":
+            args = data.get("args") or {}
+            tool_name = data.get("name") or ""
+            target_name = None
+            message = "正在补充扫描证据"
+
+            if tool_name == "read_local_file":
+                raw_filename = args.get("filename")
+                target_name = self._top_level_scan_entry(target_dir, raw_filename) or Path(str(raw_filename or "文件")).name
+                message = f"正在读取 {target_name}"
+            elif tool_name == "list_local_files":
+                raw_directory = args.get("directory")
+                target_name = self._top_level_scan_entry(target_dir, raw_directory)
+                if target_name:
+                    message = f"正在查看 {target_name} 的目录内容"
+                else:
+                    target_name = "当前目录"
+                    message = "正在读取目录结构"
+
+            if target_name:
+                set_field("current_item", target_name)
+            set_field("message", message)
+
+            if target_name and target_name not in {"当前目录", "正在准备扫描"} and target_name not in seen_entries:
+                seen_entries.add(target_name)
+                set_field("processed_count", min(total_count, len(seen_entries)) if total_count else len(seen_entries))
+        elif event_type == "ai_streaming_start":
+            set_field("message", "模型已返回，正在整理扫描结果")
+        elif event_type == "ai_chunk":
+            set_field("message", "正在输出扫描分析结论")
+        elif event_type == "validation_fail":
+            set_field("message", "扫描结果需要修正，正在重新校验")
+        elif event_type == "validation_pass":
+            set_field("message", "扫描结果已通过校验，正在完成收尾")
+            if total_count > 1:
+                set_field("processed_count", max(int(progress.get("processed_count") or 0), total_count - 1))
+        elif event_type == "cycle_start" and int(data.get("attempt") or 1) > 1:
+            attempt = int(data.get("attempt") or 1)
+            max_attempts = int(data.get("max_attempts") or attempt)
+            set_field("message", f"正在进行第 {attempt}/{max_attempts} 轮校验修正")
+
+        if changed:
+            session.scanner_progress = progress
+        return changed
+
     def _default_scan_runner(self, target_dir: Path, event_handler=None) -> str:
         return analysis_service.run_analysis_cycle(target_dir, event_handler=event_handler)
 
@@ -852,6 +942,8 @@ class OrganizerSessionService:
         if existing_progress.get("batch_count"):
             session.scanner_progress["completed_batches"] = existing_progress.get("batch_count")
             session.scanner_progress["message"] = f"已完成 {existing_progress.get('batch_count')}/{existing_progress.get('batch_count')} 批并行分析"
+        else:
+            session.scanner_progress["message"] = "已完成单线程扫描分析"
         session.stage = "planning"
         
         # Initialize messages if empty
@@ -869,10 +961,7 @@ class OrganizerSessionService:
         # Trigger initial organization cycle automatically if no plan suggestion yet
         if not session.assistant_message and not (session.plan_snapshot or {}).get("moves"):
             def on_plan_event(event_type: str, data: dict):
-                if event_type in {"model_wait_start", "tool_start"}:
-                    self._record_event("plan.action", session_id=session.session_id, action=data)
-                elif event_type == "ai_chunk":
-                    self._record_event("plan.ai_typing", session_id=session.session_id, content=data.get("content"))
+                self._forward_runtime_event("plan", session.session_id, event_type, data)
 
             try:
                 assistant_message, cycle_result = organize_service.run_organizer_cycle(
@@ -921,14 +1010,7 @@ class OrganizerSessionService:
 
     def _run_scan_sync(self, session: OrganizerSession, scan_runner) -> str:
         session.stage = "scanning"
-        session.scanner_progress = {
-            "status": "running",
-            "processed_count": 0,
-            "total_count": self._count_visible_entries(Path(session.target_dir)),
-            "current_item": None,
-            "recent_analysis_items": [],
-            "completed_batches": 0,
-        }
+        session.scanner_progress = self._initial_scan_progress(Path(session.target_dir))
         self.store.save(session)
         self._record_event("scan.started", session)
         result = scan_runner(Path(session.target_dir))
@@ -943,6 +1025,7 @@ class OrganizerSessionService:
             "total_count": self._count_visible_entries(Path(session.target_dir)),
             "current_item": recent_items[-1]["display_name"] if recent_items else None,
             "recent_analysis_items": recent_items,
+            "message": "已完成单线程扫描分析",
         }
         self.store.save(session)
         self._record_event("scan.completed", session)
@@ -1217,10 +1300,17 @@ class OrganizerSessionService:
         return build_strategy_prompt_fragment(self._strategy_selection(session))
 
     def _recover_orphaned_locked_session(self, session: OrganizerSession):
-        """If a session is in a locked stage but no scanner/executor is active, move it to interrupted."""
-        if session.stage == "scanning" and not self.async_scanner.is_running(session.session_id):
-            session.stage = "interrupted"
-            session.integrity_flags["interrupted_during"] = "scanning"
-            session.last_error = "scanning_interrupted"
-            self.store.save(session)
-            self._record_event("session.interrupted", session)
+        """If a persisted session was left in a locked stage after app shutdown, mark it interrupted."""
+        if session.stage not in self._LOCKED_STAGES:
+            return
+
+        interrupted_during = session.stage
+        if interrupted_during == "scanning" and self.async_scanner.is_running(session.session_id):
+            return
+
+        session.stage = "interrupted"
+        session.integrity_flags["interrupted_during"] = interrupted_during
+        session.last_error = session.last_error or f"{interrupted_during}_interrupted"
+        session.last_journal_id = session.last_journal_id or self._latest_execution_id(Path(session.target_dir))
+        self.store.save(session)
+        self._record_event("session.interrupted", session)

@@ -539,44 +539,35 @@ export function PreviewPanel({
             </div>
           </div>
 
-          {/* 核心指标 4 宫格 */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <div className="bg-surface-container-lowest/40 rounded-md p-3 border border-on-surface/5 flex flex-col gap-1.5">
-              <div className="flex items-center gap-1.5 opacity-40">
-                <ArrowRight className="w-3 h-3 text-primary" />
-                <span className="text-[9px] font-bold text-on-surface uppercase tracking-wider">移动文件</span>
-              </div>
-              <p className="text-xl font-headline font-black text-on-surface tabular-nums leading-none">
+          {/* 核心指标数值展示 */}
+          <div className="grid grid-cols-4 border-y border-on-surface/[0.04] py-8">
+            <div className="flex flex-col items-center gap-2 border-r border-on-surface/[0.04] px-4">
+              <span className="text-[9px] font-black text-on-surface-variant/30 uppercase tracking-[0.2em] whitespace-nowrap">移动文件</span>
+              <p className="text-[28px] font-black text-on-surface leading-none tracking-tighter tabular-nums">
                 {plan.stats.move_count}
               </p>
             </div>
-            <div className="bg-surface-container-lowest/40 rounded-md p-3 border border-on-surface/5 flex flex-col gap-1.5">
-              <div className="flex items-center gap-1.5 opacity-40">
-                <FolderPlus className="w-3 h-3 text-emerald-500" />
-                <span className="text-[9px] font-bold text-on-surface uppercase tracking-wider">新建目录</span>
-              </div>
-              <p className="text-xl font-headline font-black text-on-surface tabular-nums leading-none">
+            <div className="flex flex-col items-center gap-2 border-r border-on-surface/[0.04] px-4">
+              <span className="text-[9px] font-black text-on-surface-variant/30 uppercase tracking-[0.2em] whitespace-nowrap">新建目录</span>
+              <p className="text-[28px] font-black text-on-surface leading-none tracking-tighter tabular-nums">
                 {plan.stats.directory_count}
               </p>
             </div>
-            <div className="bg-surface-container-lowest/40 rounded-md p-3 border border-on-surface/5 flex flex-col gap-1.5">
-              <div className="flex items-center gap-1.5 opacity-40">
-                <AlertTriangle className="w-3 h-3 text-warning" />
-                <span className="text-[9px] font-bold text-on-surface uppercase tracking-wider">待确认</span>
-              </div>
+            <div className="flex flex-col items-center gap-2 border-r border-on-surface/[0.04] px-4">
+              <span className={cn(
+                "text-[9px] font-black uppercase tracking-[0.2em] whitespace-nowrap",
+                plan.unresolved_items.length > 0 ? "text-warning/60" : "text-on-surface-variant/30"
+              )}>待确认项</span>
               <p className={cn(
-                "text-xl font-headline font-black tabular-nums leading-none",
-                plan.unresolved_items.length > 0 ? "text-warning" : "text-on-surface/20"
+                "text-[28px] font-black leading-none tracking-tighter tabular-nums",
+                plan.unresolved_items.length > 0 ? "text-warning" : "text-on-surface"
               )}>
                 {plan.unresolved_items.length}
               </p>
             </div>
-            <div className="bg-surface-container-lowest/40 rounded-md p-3 border border-on-surface/5 flex flex-col gap-1.5">
-              <div className="flex items-center gap-1.5 opacity-40">
-                <Archive className="w-3 h-3 text-on-surface-variant" />
-                <span className="text-[9px] font-bold text-on-surface uppercase tracking-wider">Review</span>
-              </div>
-              <p className="text-xl font-headline font-black text-on-surface tabular-nums leading-none">
+            <div className="flex flex-col items-center gap-2 px-4">
+              <span className="text-[9px] font-black text-on-surface-variant/30 uppercase tracking-[0.2em] whitespace-nowrap">Review</span>
+              <p className="text-[28px] font-black text-on-surface leading-none tracking-tighter tabular-nums">
                 {plan.review_items.length}
               </p>
             </div>
@@ -584,10 +575,10 @@ export function PreviewPanel({
 
           {/* 方案总结与亮点 */}
           {(plan.summary || (plan.change_highlights && plan.change_highlights.length > 0)) && (
-            <div className="space-y-4 pt-2">
+            <div className="py-2">
               {plan.summary && (
-                <div className="p-4 bg-primary/5 rounded-md border-l-2 border-primary/20">
-                  <p className="text-[13px] leading-6 text-on-surface/80 font-medium italic">
+                <div className="px-6 py-4 rounded-xl bg-on-surface/[0.02] border border-on-surface/[0.04]">
+                  <p className="text-[14px] leading-7 text-on-surface/70 font-medium italic">
                     “ {plan.summary} ”
                   </p>
                 </div>
@@ -646,7 +637,7 @@ export function PreviewPanel({
               </div>
             </div>
 
-            <div className="bg-surface-container-lowest/40 rounded-md p-2 border border-on-surface/5 min-h-[150px]">
+            <div className="bg-surface-container-lowest/20 rounded-xl p-2 border border-on-surface/[0.04] min-h-[200px] shadow-xs">
               {!hasTreeContent ? (
                 <div className="flex flex-col items-center justify-center h-40 text-[10px] font-bold text-on-surface-variant/10 italic gap-2">
                   <Archive className="w-6 h-6 opacity-5" />
@@ -698,16 +689,16 @@ export function PreviewPanel({
             onClick={onRunPrecheck}
             disabled={isBusy || (!plan.readiness.can_precheck && plan.unresolved_items.length > 0)}
             className={cn(
-              "w-full flex items-center justify-center gap-3 py-4 rounded-md text-[11px] font-headline font-black uppercase tracking-[0.25em] transition-all",
+              "w-full flex items-center justify-center gap-3 py-4.5 rounded-xl text-[11px] font-black uppercase tracking-[0.3em] transition-all",
               (plan.readiness.can_precheck || plan.unresolved_items.length === 0) && !isBusy
-                ? "bg-linear-to-b from-primary to-primary-dim text-white shadow-[0_8px_30px_rgb(76,98,88,0.15)] hover:shadow-[0_12px_40px_rgb(76,98,88,0.25)] active:scale-[0.98] cursor-pointer" 
-                : "bg-surface-container-highest text-on-surface-variant/30 cursor-not-allowed grayscale-[0.5] opacity-50"
+                ? "bg-primary text-white shadow-[0_12px_40px_rgba(76,98,88,0.1)] hover:bg-primary-dim hover:shadow-[0_15px_45px_rgba(76,98,88,0.18)] active:scale-[0.98] cursor-pointer" 
+                : "bg-on-surface/5 text-on-surface-variant/20 cursor-not-allowed opacity-60"
             )}
           >
             {isBusy ? (
-              <RefreshCw className="w-4 h-4 animate-spin" />
+              <RefreshCw className="w-4 h-4 animate-spin-slow" />
             ) : (
-              <Activity className="w-4 h-4 ml-1 opacity-60" />
+              <Layers className="w-4 h-4 opacity-50" />
             )}
             {isBusy ? "正在更新中" : "开始预检"}
           </button>

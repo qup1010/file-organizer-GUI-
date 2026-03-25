@@ -249,6 +249,41 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         self.assertEqual(scanned.stage, "planning")
         self.assertTrue(any(event["event_type"] == "scan.progress" for event in service.read_events(session.session_id)))
 
+    def test_start_scan_tracks_single_thread_runtime_progress_in_events(self):
+        service = OrganizerSessionService(self.store, scanner=ImmediateScanner())
+        (self.target_dir / "report.pdf").write_text("hello", encoding="utf-8")
+        created = service.create_session(str(self.target_dir), resume_if_exists=False)
+        session = created.session
+        assert session is not None
+
+        def fake_run_analysis_cycle(_target_dir, event_handler=None):
+            if event_handler is not None:
+                event_handler("model_wait_start", {"message": "正在分析目录内容"})
+                event_handler("tool_start", {"name": "read_local_file", "args": {"filename": "report.pdf"}})
+                event_handler("ai_streaming_start", {})
+                event_handler("validation_pass", {"attempt": 1})
+            return "report.pdf | 文档 | A"
+
+        with mock.patch(
+            "file_organizer.app.session_service.analysis_service.run_analysis_cycle",
+            side_effect=fake_run_analysis_cycle,
+        ):
+            service.start_scan(session.session_id)
+
+        progress_events = [
+            event for event in service.read_events(session.session_id) if event["event_type"] == "scan.progress"
+        ]
+        self.assertTrue(progress_events)
+        progress_snapshots = [event["session_snapshot"]["scanner_progress"] for event in progress_events]
+        self.assertTrue(
+            any(
+                progress["current_item"] == "report.pdf"
+                and progress["message"] == "正在读取 report.pdf"
+                and progress["processed_count"] == 1
+                for progress in progress_snapshots
+            )
+        )
+
     def test_submit_user_intent_updates_pending_plan_and_assistant_message(self):
         created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
         session = created.session
@@ -579,6 +614,25 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         self.assertEqual(snapshot["stage"], "interrupted")
         self.assertEqual(snapshot["integrity_flags"]["interrupted_during"], "scanning")
         self.assertEqual(snapshot["last_error"], "scanning_interrupted")
+
+    def test_list_history_recovers_orphaned_locked_session(self):
+        created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
+        session = created.session
+        assert session is not None
+        session.stage = "executing"
+        session.last_error = None
+        self.store.save(session)
+
+        history = self.service.list_history()
+
+        matched = next(item for item in history if item["execution_id"] == session.session_id)
+        reloaded = self.store.load(session.session_id)
+        assert reloaded is not None
+        self.assertEqual(matched["status"], "interrupted")
+        self.assertTrue(matched["is_session"])
+        self.assertEqual(reloaded.stage, "interrupted")
+        self.assertEqual(reloaded.integrity_flags["interrupted_during"], "executing")
+        self.assertEqual(reloaded.last_error, "executing_interrupted")
 
     def test_update_item_target_uses_target_dir_and_removes_unresolved_item(self):
         created = self.service.create_session(str(self.target_dir), resume_if_exists=False)

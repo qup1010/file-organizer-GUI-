@@ -490,6 +490,7 @@ def run_analysis_cycle(target_dir: Path, event_handler=None, model: str = ANALYS
             emit(event_handler, "batch_progress", {
                 "batch_index": batch_index,
                 "total_batches": len(batches),
+                "batch_size": len(batch_entries),
                 "status": status,
                 "completed_batches": finished_batches,
             })

@@ -343,6 +343,24 @@ class SessionApiTests(unittest.TestCase):
         self.assertEqual(response.json()["status"], "completed")
         self.assertEqual(response.json()["item_count"], 2)
 
+    def test_history_endpoint_includes_interrupted_session_after_restart_like_state(self):
+        created = self.client.post(
+            "/api/sessions",
+            json={"target_dir": str(self.target_dir), "resume_if_exists": False},
+        ).json()
+        session = self.store.load(created["session_id"])
+        assert session is not None
+        session.stage = "scanning"
+        session.last_error = None
+        self.store.save(session)
+
+        response = self.client.get("/api/history")
+
+        self.assertEqual(response.status_code, 200)
+        matched = next(item for item in response.json() if item["execution_id"] == created["session_id"])
+        self.assertEqual(matched["status"], "interrupted")
+        self.assertTrue(matched["is_session"])
+
     def test_cleanup_endpoint_returns_session_snapshot_and_count(self):
         created = self.client.post(
             "/api/sessions",

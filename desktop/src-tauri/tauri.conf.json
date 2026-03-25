@@ -14,10 +14,11 @@
       {
         "label": "main",
         "title": "File Organizer Desktop",
-        "width": 1440,
-        "height": 960,
-        "minWidth": 1100,
-        "minHeight": 760,
+        "width": 900,
+        "height": 650,
+        "minWidth": 800,
+        "minHeight": 600,
+        "center": true,
         "resizable": true
       }
     ],

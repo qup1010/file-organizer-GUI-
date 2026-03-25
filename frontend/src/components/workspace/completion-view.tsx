@@ -6,6 +6,7 @@ import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { DirectoryTreeDiff, type DirectoryTreeLeafEntry, type DirectoryTreeFilter } from "./directory-tree-diff";
 import { useState } from "react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -35,6 +36,7 @@ export function CompletionView({
   onRollback,
 }: CompletionViewProps) {
   const [filter, setFilter] = useState<DirectoryTreeFilter>("all");
+  const [rollbackConfirmOpen, setRollbackConfirmOpen] = useState(false);
   if (loading) {
     return (
       <div className="mx-auto max-w-5xl space-y-6 py-8 animate-pulse">
@@ -290,11 +292,7 @@ export function CompletionView({
             <div className="flex-1 hidden md:block" />
             <button
               type="button"
-              onClick={() => {
-                if (window.confirm("回退会尝试把这次移动过的文件放回原来的位置，确定继续吗？")) {
-                  onRollback();
-                }
-              }}
+              onClick={() => setRollbackConfirmOpen(true)}
               disabled={isBusy}
               className="order-3 flex items-center justify-center gap-3 rounded-[1.75rem] border border-error/20 bg-error/5 px-6 py-5 text-sm font-bold text-error transition-all hover:bg-error/10 disabled:opacity-40"
             >
@@ -304,6 +302,20 @@ export function CompletionView({
           </>
         ) : null}
       </div>
+      <ConfirmDialog
+        open={rollbackConfirmOpen}
+        title="确认整批回退？"
+        description="这会尝试把本次整理移动过的文件放回原位置。已经存在冲突或被占用的文件，回退时仍可能失败。"
+        confirmLabel="开始回退"
+        cancelLabel="先不回退"
+        tone="danger"
+        loading={isBusy}
+        onConfirm={() => {
+          setRollbackConfirmOpen(false);
+          onRollback();
+        }}
+        onCancel={() => setRollbackConfirmOpen(false)}
+      />
     </div>
   );
 }

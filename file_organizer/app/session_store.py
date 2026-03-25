@@ -70,6 +70,18 @@ class SessionStore:
             return None
         return self.load(session_id)
 
+    def list_sessions(self) -> list[OrganizerSession]:
+        sessions: list[OrganizerSession] = []
+        for path in self.sessions_dir.glob("*.json"):
+            if path.name == "latest_by_directory.json" or not path.is_file():
+                continue
+            try:
+                session = OrganizerSession.from_dict(json.loads(path.read_text(encoding="utf-8")))
+            except (json.JSONDecodeError, KeyError):
+                continue
+            sessions.append(session)
+        return sessions
+
     def mark_abandoned(self, session_id: str) -> None:
         with self._write_lock:
             session = self.load(session_id)

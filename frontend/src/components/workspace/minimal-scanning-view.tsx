@@ -2,8 +2,8 @@
 
 import React from "react";
 import { motion } from "framer-motion";
-import { Loader2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { GitBranch, Layers3, Loader2 } from "lucide-react";
+
 import { ScannerProgress } from "@/types/session";
 
 interface MinimalScanningViewProps {
@@ -13,74 +13,105 @@ interface MinimalScanningViewProps {
 
 export function MinimalScanningView({ scanner, progressPercent }: MinimalScanningViewProps) {
   const currentItem = scanner.current_item || "正在准备扫描";
-  const statusMessage = scanner.message || "AI 正在分析文件元数据与用途";
-  
+  const itemPercent = Math.max(0, Math.min(100, progressPercent));
+  const isParallel = (scanner.batch_count || 0) > 1;
+  const batchCount = Math.max(1, scanner.batch_count || 0);
+  const completedBatches = Math.max(0, Math.min(batchCount, scanner.completed_batches || 0));
+  const batchPercent = isParallel ? (completedBatches / batchCount) * 100 : itemPercent;
+  const statusMessage = scanner.message || (isParallel ? "系统正在并行分析多个批次" : "AI 正在逐项分析文件元数据与用途");
+
   return (
-    <div className="h-full w-full flex flex-col items-center justify-center p-20 bg-surface">
-      <div className="w-full max-w-md space-y-12">
-        {/* Status Section */}
+    <div className="flex h-full w-full flex-col items-center justify-center bg-surface p-20">
+      <div className="w-full max-w-2xl space-y-10">
         <div className="space-y-4 text-center">
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             className="flex justify-center"
           >
-            <div className="w-16 h-16 rounded-3xl bg-white shadow-xl shadow-primary/5 border border-on-surface/5 flex items-center justify-center text-primary">
-              <Loader2 className="w-8 h-8 animate-spin-slow" />
+            <div className="flex h-16 w-16 items-center justify-center rounded-3xl border border-on-surface/5 bg-white text-primary shadow-xl shadow-primary/5">
+              <Loader2 className="h-8 w-8 animate-spin-slow" />
             </div>
           </motion.div>
-          
+
           <div className="space-y-1">
-            <h2 className="text-xl font-black text-on-surface uppercase tracking-tight font-headline">
+            <h2 className="font-headline text-xl font-black uppercase tracking-tight text-on-surface">
               正在同步目录结构
             </h2>
-            <p className="text-[11px] font-black text-on-surface-variant/40 uppercase tracking-[0.3em]">
+            <p className="text-[11px] font-black uppercase tracking-[0.3em] text-on-surface-variant/40">
               {statusMessage}
+            </p>
+            <div className="flex justify-center pt-2">
+              <span className="inline-flex items-center gap-2 rounded-full border border-primary/12 bg-primary/[0.06] px-3 py-1 text-[10px] font-black uppercase tracking-[0.24em] text-primary">
+                {isParallel ? <GitBranch className="h-3 w-3" /> : <Layers3 className="h-3 w-3" />}
+                {isParallel ? `并行分析 ${batchCount} 批` : "单线程分析"}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="rounded-[28px] border border-on-surface/6 bg-white/72 p-6 shadow-[0_18px_48px_rgba(0,0,0,0.04)]">
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-[10px] font-black uppercase tracking-[0.24em] text-primary">
+                条目进度
+              </span>
+              <span className="text-sm font-black tabular-nums text-on-surface">
+                {scanner.processed_count || 0}/{scanner.total_count || 0}
+              </span>
+            </div>
+            <div className="mt-4 flex h-2 overflow-hidden rounded-full bg-on-surface/5 text-xs">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${Math.max(2, itemPercent)}%` }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
+                className="flex flex-col justify-center whitespace-nowrap rounded-full bg-primary text-center text-white shadow-none"
+              />
+            </div>
+            <p className="mt-4 text-sm leading-6 text-on-surface-variant">
+              {isParallel
+                ? "按已完成批次折算到条目总量，用来表示整体扫描覆盖度。"
+                : "单线程模式下按已触达或已确认的条目持续推进，属于实时估算进度。"}
+            </p>
+          </div>
+
+          <div className="rounded-[28px] border border-on-surface/6 bg-white/72 p-6 shadow-[0_18px_48px_rgba(0,0,0,0.04)]">
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-[10px] font-black uppercase tracking-[0.24em] text-primary">
+                {isParallel ? "批次进度" : "当前状态"}
+              </span>
+              <span className="text-sm font-black tabular-nums text-on-surface">
+                {isParallel ? `${completedBatches}/${batchCount}` : `${Math.round(itemPercent)}%`}
+              </span>
+            </div>
+            <div className="mt-4 flex h-2 overflow-hidden rounded-full bg-on-surface/5 text-xs">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${Math.max(2, batchPercent)}%` }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
+                className="flex flex-col justify-center whitespace-nowrap rounded-full bg-on-surface text-center text-white shadow-none"
+              />
+            </div>
+            <p className="mt-4 text-sm leading-6 text-on-surface-variant">
+              {isParallel
+                ? "每个批次完成后都会立即更新；批次越多，模型等待时间通常也会更长。"
+                : "如果当前目录较大，模型会在单线程里持续读取文件并逐步汇总结果。"}
             </p>
           </div>
         </div>
 
-        {/* Progress Section */}
-        <div className="space-y-6">
-          <div className="relative pt-1">
-            <div className="flex mb-4 items-center justify-between">
-              <div>
-                <span className="text-[10px] font-black inline-block py-1 px-3 uppercase rounded-full text-primary bg-primary/8 border border-primary/10 tracking-widest">
-                  实时扫描进度
-                </span>
-              </div>
-              <div className="text-right">
-                <span className="text-sm font-black inline-block text-on-surface tabular-nums">
-                  {Math.round(progressPercent)}%
-                </span>
-              </div>
-            </div>
-            
-            <div className="overflow-hidden h-1.5 mb-4 text-xs flex rounded-full bg-on-surface/5">
-              <motion.div 
-                initial={{ width: 0 }}
-                animate={{ width: `${Math.max(2, progressPercent)}%` }}
-                transition={{ duration: 0.5, ease: "easeOut" }}
-                className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-primary rounded-full"
-              />
-            </div>
-          </div>
-
-          {/* Current File Banner */}
-          <div className="bg-white/50 border border-on-surface/5 rounded-2xl p-4 flex items-center gap-4 transition-all">
-            <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse shrink-0" />
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-black text-on-surface-variant/40 uppercase tracking-widest mb-0.5">当前正在处理</p>
-              <p className="text-[13px] font-bold text-on-surface truncate pr-2 uppercase italic opacity-80">
-                {currentItem}
-              </p>
-            </div>
+        <div className="flex items-center gap-4 rounded-[28px] border border-on-surface/5 bg-white/50 p-5 transition-all">
+          <div className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-primary" />
+          <div className="min-w-0 flex-1">
+            <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40">
+              当前正在处理
+            </p>
+            <p className="break-all text-[14px] font-bold text-on-surface">{currentItem}</p>
           </div>
         </div>
-        
-        {/* Minimal Tip */}
-        <p className="text-center text-[10px] font-bold text-on-surface-variant/20 uppercase tracking-[0.2em]">
-          读取完成后，AI 将在此展示整理预览
+
+        <p className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-on-surface-variant/20">
+          扫描完成后，系统会自动继续生成第一版整理建议
         </p>
       </div>
     </div>

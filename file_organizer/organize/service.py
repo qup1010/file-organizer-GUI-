@@ -24,6 +24,7 @@ PLAN_DIFF_TOOL_NAME = "submit_plan_diff"
 UNRESOLVED_CHOICES_TOOL_NAME = "request_unresolved_choices"
 REPAIR_FINAL_PLAN_TOOL_NAME = "repair_commit_final_plan"
 MODEL_WAIT_MESSAGE = "正在等待模型回复..."
+SYNTHETIC_PLAN_REPLY = "我已按照您的要求做了修改"
 
 
 def get_scan_content() -> str:
@@ -154,6 +155,21 @@ def _build_tool_result_messages(
             _build_tool_result_message(getattr(tool_call, "id", None), name, payload)
         )
     return tool_messages
+
+
+def _inject_synthetic_plan_reply(
+    content: str,
+    *,
+    plan_diff: PlanDiff | None = None,
+    final_plan: FinalPlan | None = None,
+    event_handler=None,
+) -> tuple[str, bool]:
+    if content or (plan_diff is None and final_plan is None):
+        return content, False
+
+    synthetic_content = SYNTHETIC_PLAN_REPLY
+    emit(event_handler, "ai_chunk", {"content": synthetic_content})
+    return synthetic_content, True
 
 
 def _render_blocks_for_llm(blocks: list[dict] | None) -> str:
@@ -956,14 +972,12 @@ def run_organizer_cycle(
             getattr(message, "tool_calls", None),
             blocks=message_blocks,
         )
-        synthetic_content_used = False
-        
-        # HACK: 补救逻辑。如果模型没说话（可能由于 Tool Use 机制仅输出了工具调用）
-        # 但 plan_diff 中带有 summary，则借用该 summary 作为对话文本进行流式输出。
-        if not content and plan_diff and plan_diff.summary:
-            synthetic_content_used = True
-            content = f"我已经根据你的要求更新了计划：{plan_diff.summary}"
-            emit(event_handler, "ai_chunk", {"content": content})
+        content, synthetic_content_used = _inject_synthetic_plan_reply(
+            content,
+            plan_diff=plan_diff,
+            final_plan=final_plan,
+            event_handler=event_handler,
+        )
 
         assistant_display_message = _build_assistant_message(
             content,
@@ -1119,6 +1133,11 @@ def run_organizer_cycle(
             return_message=True,
         )
         repair_content, _, repaired_plan, _ = _extract_plan_submissions(repair_message)
+        repair_content, repair_synthetic_content_used = _inject_synthetic_plan_reply(
+            repair_content,
+            final_plan=repaired_plan,
+            event_handler=event_handler,
+        )
         repair_validation = validate_final_plan(scan_lines, repaired_plan or FinalPlan())
         if repaired_plan is not None and repair_validation["is_valid"]:
             emit(event_handler, "command_validation_pass", {"attempt": attempt + 1, "details": repair_validation})
@@ -1130,6 +1149,13 @@ def run_organizer_cycle(
             repair_tool_messages = _build_tool_result_messages(
                 repair_message,
                 validation=repair_validation,
+            )
+            _update_debug_log_response(
+                raw_content=repair_raw_content,
+                display_content=repair_content,
+                tool_calls=_serialize_tool_calls(getattr(repair_message, "tool_calls", None)),
+                chunks=None,
+                synthetic_content_used=repair_synthetic_content_used,
             )
             return repair_content, {
                 "is_valid": True,
@@ -1151,6 +1177,13 @@ def run_organizer_cycle(
         repair_tool_messages = _build_tool_result_messages(
             repair_message,
             validation=repair_validation,
+        )
+        _update_debug_log_response(
+            raw_content=repair_raw_content,
+            display_content=repair_content,
+            tool_calls=_serialize_tool_calls(getattr(repair_message, "tool_calls", None)),
+            chunks=None,
+            synthetic_content_used=repair_synthetic_content_used,
         )
         return repair_content, {
             "is_valid": False,
