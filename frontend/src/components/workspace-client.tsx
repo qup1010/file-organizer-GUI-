@@ -55,7 +55,7 @@ export default function WorkspaceClient() {
   } = useSession(sessionIdParam);
 
   const [messageInput, setMessageInput] = useState("");
-  const [leftWidth, setLeftWidth] = useState(56);
+  const [leftWidth, setLeftWidth] = useState(50);
   const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
   const [showExitMenu, setShowExitMenu] = useState(false);
   const [dividerLeft, setDividerLeft] = useState<number | null>(null);
