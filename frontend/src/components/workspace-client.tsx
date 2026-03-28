@@ -16,6 +16,8 @@ import { CompletionView } from "./workspace/completion-view";
 import { ConversationPanel, type ConversationNotice } from "./workspace/conversation-panel";
 import { PreviewPanel } from "./workspace/preview-panel";
 
+const DEFAULT_LEFT_WIDTH = 50;
+
 export default function WorkspaceClient() {
   const APP_CONTEXT_EVENT = "file-organizer-context-change";
   const WORKSPACE_CONTEXT_KEY = "workspace_header_context";
@@ -56,9 +58,11 @@ export default function WorkspaceClient() {
   } = useSession(sessionIdParam);
 
   const [messageInput, setMessageInput] = useState("");
-  const [leftWidth, setLeftWidth] = useState(50);
+  const [leftWidth, setLeftWidth] = useState(DEFAULT_LEFT_WIDTH);
+  const [layoutReady, setLayoutReady] = useState(false);
   const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
   const [executeConfirmOpen, setExecuteConfirmOpen] = useState(false);
+  const [scanAbortConfirmOpen, setScanAbortConfirmOpen] = useState(false);
   const [showExitMenu, setShowExitMenu] = useState(false);
   const [dividerLeft, setDividerLeft] = useState<number | null>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
@@ -67,12 +71,16 @@ export default function WorkspaceClient() {
   const isResizing = React.useRef(false);
 
   React.useEffect(() => {
-    const saved = localStorage.getItem("workspace_sidebar_width");
-    if (saved) {
-      const val = parseFloat(saved);
-      if (val > 32 && val < 72) {
-        setLeftWidth(val);
+    try {
+      const saved = localStorage.getItem("workspace_sidebar_width");
+      if (saved) {
+        const val = parseFloat(saved);
+        if (val > 32 && val < 72) {
+          setLeftWidth(val);
+        }
       }
+    } finally {
+      setLayoutReady(true);
     }
   }, []);
 
@@ -223,6 +231,14 @@ export default function WorkspaceClient() {
     }
   };
 
+  const handleConfirmAbortScan = async () => {
+    const success = await abandonSession();
+    if (success) {
+      setScanAbortConfirmOpen(false);
+      router.push("/");
+    }
+  };
+
 
   const statusNotice = useMemo<ConversationNotice | null>(() => {
     if (streamStatus === "offline") {
@@ -365,7 +381,14 @@ export default function WorkspaceClient() {
 
   const renderPreviewContent = () => {
     if (stage === "scanning") {
-      return <MinimalScanningView scanner={scanner} progressPercent={progressPercent} />;
+      return (
+        <MinimalScanningView
+          scanner={scanner}
+          progressPercent={progressPercent}
+          onAbort={() => setScanAbortConfirmOpen(true)}
+          aborting={loading}
+        />
+      );
     }
 
     if (stage === "completed") {
@@ -483,6 +506,38 @@ export default function WorkspaceClient() {
     );
   };
 
+  const renderLayoutSkeleton = () => (
+    <div className="flex flex-1 min-h-0 animate-pulse">
+      <section
+        style={{ width: `${DEFAULT_LEFT_WIDTH}%` }}
+        className="flex min-h-0 min-w-[360px] flex-col border-r border-on-surface/7 bg-surface-container-lowest"
+      >
+        <div className="border-b border-on-surface/6 px-5 py-4">
+          <div className="h-5 w-32 rounded bg-surface-container-low" />
+          <div className="mt-3 h-3 w-56 rounded bg-surface-container-low" />
+        </div>
+        <div className="flex-1 space-y-4 px-5 py-5">
+          <div className="h-24 rounded-[12px] bg-surface-container-low" />
+          <div className="h-24 rounded-[12px] bg-surface-container-low" />
+          <div className="h-24 rounded-[12px] bg-surface-container-low" />
+        </div>
+        <div className="border-t border-on-surface/6 px-5 py-4">
+          <div className="h-14 rounded-[12px] bg-surface-container-low" />
+        </div>
+      </section>
+      <section
+        style={{ width: `${100 - DEFAULT_LEFT_WIDTH}%` }}
+        className="flex min-h-0 min-w-[320px] flex-col bg-surface-container-low/45 p-5"
+      >
+        <div className="h-28 rounded-[12px] bg-surface-container-low" />
+        <div className="mt-4 grid flex-1 gap-4 md:grid-cols-2">
+          <div className="rounded-[12px] bg-surface-container-low" />
+          <div className="rounded-[12px] bg-surface-container-low" />
+        </div>
+      </section>
+    </div>
+  );
+
   const conversationPanel = (
     <ConversationPanel
       messages={chatMessages}
@@ -584,7 +639,8 @@ export default function WorkspaceClient() {
   return (
     <div ref={containerRef} className="relative flex min-h-0 flex-1 overflow-hidden bg-surface">
       <ErrorBoundary fallbackTitle="页面加载出错了" className="flex-1">
-        <div className="flex flex-1 min-h-0">
+        {layoutReady ? (
+          <div className="flex flex-1 min-h-0">
           {showConversationPane ? (
             <section
               ref={leftPaneRef}
@@ -633,7 +689,8 @@ export default function WorkspaceClient() {
           >
             <div className="flex-1 min-h-0">{renderPreviewContent()}</div>
           </section>
-        </div>
+          </div>
+        ) : renderLayoutSkeleton()}
       </ErrorBoundary>
       <ConfirmDialog
         open={exitConfirmOpen}
@@ -645,6 +702,17 @@ export default function WorkspaceClient() {
         loading={loading}
         onConfirm={handleConfirmExitWorkbench}
         onCancel={() => setExitConfirmOpen(false)}
+      />
+      <ConfirmDialog
+        open={scanAbortConfirmOpen}
+        title="确认中断本次扫描？"
+        description="中断后会结束当前整理任务并返回首页。这一轮扫描不会继续生成后续方案。"
+        confirmLabel="确认中断"
+        cancelLabel="继续扫描"
+        tone="danger"
+        loading={loading}
+        onConfirm={handleConfirmAbortScan}
+        onCancel={() => setScanAbortConfirmOpen(false)}
       />
       <ConfirmDialog
         open={executeConfirmOpen}

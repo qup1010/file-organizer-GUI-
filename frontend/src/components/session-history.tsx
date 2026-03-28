@@ -1,6 +1,5 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import { 
   FolderOpen, 
@@ -15,79 +14,36 @@ import {
   Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { createApiClient } from "@/lib/api";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { getApiBaseUrl, getApiToken } from "@/lib/runtime";
 import { HistoryItem } from "@/types/session";
 import { cn, getFriendlyStatus, formatDisplayDate, getFriendlyStage } from "@/lib/utils";
+import { getHistoryEntryName, isHistorySessionEntry, useHistoryList } from "@/lib/use-history-list";
 
 import { EmptyState } from "@/components/ui/empty-state";
 
 export function SessionHistory({ maxItems }: { maxItems?: number }) {
-  const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<"all" | "active" | "completed" | "rolled_back">("all");
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
   const router = useRouter();
-  const api = useMemo(() => createApiClient(getApiBaseUrl(), getApiToken()), []);
-
-  useEffect(() => {
-    api.getHistory().then(setHistory).catch(err => console.error("Failed to fetch history:", err));
-  }, []);
+  const {
+    history,
+    query,
+    setQuery,
+    filter,
+    setFilter,
+    filteredHistory,
+    pendingDeleteId,
+    deletingId,
+    requestDelete,
+    cancelDelete,
+    confirmDelete,
+  } = useHistoryList();
 
   const handleContinue = (item: HistoryItem) => {
-    if (item.status === 'success' || item.status === 'completed' || item.status === 'rolled_back') {
+    if (!isHistorySessionEntry(item)) {
       router.push(`/workspace?execution_id=${item.execution_id}`);
     } else {
       router.push(`/workspace?session_id=${item.execution_id}`);
     }
   };
-
-  const handleDelete = async () => {
-    if (!pendingDeleteId) {
-      return;
-    }
-    setDeletingId(pendingDeleteId);
-    try {
-      await api.deleteHistoryEntry(pendingDeleteId);
-      setHistory((prev) => prev.filter((item) => item.execution_id !== pendingDeleteId));
-      setPendingDeleteId(null);
-    } catch (err) {
-      console.error("Failed to delete history entry:", err);
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
-  const filteredHistory = useMemo(() => {
-    const keyword = query.trim().toLowerCase();
-
-    return history.filter((item) => {
-      const isSession = item.is_session || !["success", "completed", "rolled_back", "partial_failure"].includes(item.status);
-      const matchesFilter =
-        filter === "all"
-          ? true
-          : filter === "active"
-            ? isSession
-            : filter === "completed"
-              ? !isSession && item.status !== "rolled_back"
-              : item.status === "rolled_back";
-
-      if (!matchesFilter) {
-        return false;
-      }
-
-      if (!keyword) {
-        return true;
-      }
-
-      const dirName = item.target_dir.replace(/[\\/]$/, "").split(/[\\/]/).pop() || "";
-      return [item.target_dir, dirName, item.status, item.execution_id].some((value) =>
-        value.toLowerCase().includes(keyword),
-      );
-    });
-  }, [filter, history, query]);
 
   return (
     <div className="flex min-h-0 flex-col space-y-3 overflow-hidden rounded-[12px] border border-on-surface/8 bg-surface-container-lowest p-4 shadow-[0_6px_18px_rgba(37,45,40,0.04)] min-[1680px]:h-full">
@@ -170,8 +126,8 @@ export function SessionHistory({ maxItems }: { maxItems?: number }) {
           {(maxItems ? filteredHistory.slice(0, maxItems) : filteredHistory).map((item, idx) => {
             const isRolledBack = item.status === 'rolled_back';
             const isCompleted = item.status === 'success' || item.status === 'completed';
-            const isSession = item.is_session || !['success', 'completed', 'rolled_back', 'partial_failure'].includes(item.status);
-            const dirName = item.target_dir.replace(/[\\/]$/, "").split(/[\\/]/).pop() || "未命名记录";
+            const isSession = isHistorySessionEntry(item);
+            const dirName = getHistoryEntryName(item);
             
             const actionLabel = isSession ? "继续查看" : getFriendlyStatus(item.status);
             const statusLabel = isSession ? getFriendlyStage(item.status) : getFriendlyStatus(item.status);
@@ -229,7 +185,7 @@ export function SessionHistory({ maxItems }: { maxItems?: number }) {
                         type="button"
                         onClick={(event) => {
                           event.stopPropagation();
-                          setPendingDeleteId(item.execution_id);
+                          requestDelete(item.execution_id);
                         }}
                         className="rounded-[8px] border border-on-surface/8 bg-surface-container-lowest p-1.5 text-ui-muted transition-colors hover:border-error/20 hover:text-error"
                         title="删除记录"
@@ -278,8 +234,8 @@ export function SessionHistory({ maxItems }: { maxItems?: number }) {
         cancelLabel="取消"
         tone="danger"
         loading={deletingId === pendingDeleteId}
-        onConfirm={() => void handleDelete()}
-        onCancel={() => setPendingDeleteId(null)}
+        onConfirm={() => void confirmDelete()}
+        onCancel={cancelDelete}
       />
     </div>
   );

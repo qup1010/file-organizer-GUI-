@@ -12,6 +12,7 @@ import {
   Loader2,
   ScanSearch,
   ShieldCheck,
+  StopCircle,
   Sparkles,
 } from "lucide-react";
 
@@ -21,6 +22,8 @@ import { RecentAnalysisItem, ScannerProgress } from "@/types/session";
 interface ScanningOverlayProps {
   scanner: ScannerProgress;
   progressPercent: number;
+  onAbort?: () => void;
+  aborting?: boolean;
 }
 
 function getStatusMeta(scanner: ScannerProgress, progressPercent: number) {
@@ -118,7 +121,7 @@ function getPhaseIndex(status: ScannerProgress["status"], progressPercent: numbe
   return 3;
 }
 
-export function ScanningOverlay({ scanner, progressPercent }: ScanningOverlayProps) {
+export function ScanningOverlay({ scanner, progressPercent, onAbort, aborting = false }: ScanningOverlayProps) {
   const processedCount = scanner.processed_count || 0;
   const totalCount = scanner.total_count || 0;
   const recentItems = [...(scanner.recent_analysis_items || [])].slice(-6).reverse();
@@ -237,6 +240,19 @@ export function ScanningOverlay({ scanner, progressPercent }: ScanningOverlayPro
               transition={{ duration: 0.35 }}
             />
           </div>
+          {onAbort ? (
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={onAbort}
+                disabled={aborting}
+                className="inline-flex items-center gap-2 rounded-[10px] border border-on-surface/8 bg-surface px-4 py-2 text-[12px] font-semibold text-on-surface-variant transition-colors hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <StopCircle className="h-4 w-4" />
+                {aborting ? "正在中断..." : "中断本次扫描"}
+              </button>
+            </div>
+          ) : null}
         </div>
 
         <div className="grid min-h-0 flex-1 gap-0 xl:grid-cols-[minmax(0,1fr)_300px]">

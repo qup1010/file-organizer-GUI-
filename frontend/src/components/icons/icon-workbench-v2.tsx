@@ -15,7 +15,6 @@ import type {
   ApplyIconResult,
   FolderIconCandidate,
   IconPreviewVersion,
-  IconTemplate,
   IconWorkbenchPendingAction,
   IconWorkbenchSession,
 } from "@/types/icon-workbench";
@@ -26,6 +25,8 @@ import { IconWorkbenchStylePanel } from "./icon-workbench-style-panel";
 import { IconWorkbenchTemplateDrawer } from "./icon-workbench-template-drawer";
 import { IconWorkbenchToolbar } from "./icon-workbench-toolbar";
 import { buildImageSrc, isFolderReady } from "./icon-workbench-utils";
+import { useBackgroundRemoval } from "./use-background-removal";
+import { useIconTemplates } from "./use-icon-templates";
 
 const APP_CONTEXT_EVENT = "file-organizer-context-change";
 const ICONS_CONTEXT_KEY = "icons_header_context";
@@ -73,7 +74,6 @@ export default function IconWorkbenchV2() {
   const systemApi = useMemo(() => createApiClient(baseUrl, apiToken), [apiToken, baseUrl]);
 
   const [session, setSession] = useState<IconWorkbenchSession | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [actionLabel, setActionLabel] = useState<string | null>(null);
@@ -83,79 +83,47 @@ export default function IconWorkbenchV2() {
   const [templateDrawerOpen, setTemplateDrawerOpen] = useState(false);
   const [previewVersion, setPreviewVersion] = useState<IconPreviewVersion | null>(null);
 
-  const [templates, setTemplates] = useState<IconTemplate[]>([]);
-  const [templatesLoading, setTemplatesLoading] = useState(false);
-  const [selectedTemplateId, setSelectedTemplateId] = useState("");
-  const [templateActionLoading, setTemplateActionLoading] = useState(false);
-  const [templateNameDraft, setTemplateNameDraft] = useState("");
-  const [templateDescriptionDraft, setTemplateDescriptionDraft] = useState("");
-  const [templatePromptDraft, setTemplatePromptDraft] = useState("");
-
   const [activeProcessingId, setActiveProcessingId] = useState<string | null>(null);
   const [isApplyingId, setIsApplyingId] = useState<string | null>(null);
   const [batchApplyLoading, setBatchApplyLoading] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
-  const [bgApiToken, setBgApiToken] = useState("");
-  const [processingBgVersionIds, setProcessingBgVersionIds] = useState<Set<string>>(new Set());
-  const [isRemovingBgBatch, setIsRemovingBgBatch] = useState(false);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const savedToken = localStorage.getItem("hf_bg_token");
-      if (savedToken) setBgApiToken(savedToken);
-    }
-  }, []);
-
-  const handleBgApiTokenChange = useCallback((token: string) => {
-    setBgApiToken(token);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("hf_bg_token", token);
-    }
-  }, []);
-
   const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [folderToRestore, setFolderToRestore] = useState<FolderIconCandidate | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setTemplatesLoading(true);
-    iconApi.listTemplates()
-      .then((items) => {
-        if (!cancelled) {
-          setTemplates(items);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "加载模板失败");
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setTemplatesLoading(false);
-          setLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [iconApi]);
-
-  useEffect(() => {
-    const current = templates.find((template) => template.template_id === selectedTemplateId);
-    if (current) {
-      setTemplateNameDraft(current.name);
-      setTemplateDescriptionDraft(current.description || "");
-      setTemplatePromptDraft(current.prompt_template);
-      return;
-    }
-    setTemplateNameDraft("");
-    setTemplateDescriptionDraft("");
-    setTemplatePromptDraft("");
-  }, [selectedTemplateId, templates]);
+  const {
+    templates,
+    templatesLoading,
+    templatesInitialized,
+    selectedTemplateId,
+    setSelectedTemplateId,
+    selectedTemplate,
+    templateActionLoading,
+    templateNameDraft,
+    setTemplateNameDraft,
+    templateDescriptionDraft,
+    setTemplateDescriptionDraft,
+    templatePromptDraft,
+    setTemplatePromptDraft,
+    reloadTemplates,
+    createTemplate,
+    updateTemplate,
+    deleteTemplate,
+  } = useIconTemplates({ iconApi, setError, setNotice });
+  const {
+    bgApiToken,
+    handleBgApiTokenChange,
+    processingBgVersionIds,
+    isRemovingBgBatch,
+    handleRemoveBg,
+    handleRemoveBgBatch,
+  } = useBackgroundRemoval({
+    desktopReady,
+    session,
+    setSession,
+    setError,
+    setNotice,
+  });
 
   const targetCount = session?.folders.length ?? 0;
   const hasTargets = targetCount > 0;
@@ -167,10 +135,6 @@ export default function IconWorkbenchV2() {
     window.dispatchEvent(new Event(APP_CONTEXT_EVENT));
   }, [hasTargets, targetCount]);
 
-  const selectedTemplate = useMemo(
-    () => templates.find((template) => template.template_id === selectedTemplateId) || null,
-    [selectedTemplateId, templates],
-  );
   const hasSelectedStyle = Boolean(selectedTemplate);
   const allFolderIds = useMemo(() => session?.folders.map((folder) => folder.folder_id) ?? [], [session]);
   const latestTargetPath = useMemo(() => {
@@ -247,75 +211,6 @@ export default function IconWorkbenchV2() {
       setActionLabel(null);
     }
   }, [applySession, desktopReady, iconApi, session, systemApi]);
-
-  const handleReloadTemplates = async (preferredId?: string) => {
-    setTemplatesLoading(true);
-    try {
-      const items = await iconApi.listTemplates();
-      setTemplates(items);
-      const nextSelectedId = preferredId
-        ? (items.some((template) => template.template_id === preferredId) ? preferredId : "")
-        : (selectedTemplateId && items.some((template) => template.template_id === selectedTemplateId) ? selectedTemplateId : "");
-      setSelectedTemplateId(nextSelectedId);
-    } catch {
-      setError("刷新模板失败");
-    } finally {
-      setTemplatesLoading(false);
-    }
-  };
-
-  const handleCreateTemplate = async () => {
-    if (!templateNameDraft.trim() || !templatePromptDraft.trim()) {
-      setError("名称和提示词不能为空");
-      return;
-    }
-    setTemplateActionLoading(true);
-    try {
-      const created = await iconApi.createTemplate({
-        name: templateNameDraft.trim(),
-        description: templateDescriptionDraft.trim(),
-        prompt_template: templatePromptDraft.trim(),
-      });
-      await handleReloadTemplates(created.template_id);
-      setNotice("模板创建成功");
-    } catch {
-      setError("创建模板失败");
-    } finally {
-      setTemplateActionLoading(false);
-    }
-  };
-
-  const handleUpdateTemplate = async () => {
-    if (!selectedTemplate || selectedTemplate.is_builtin) return;
-    setTemplateActionLoading(true);
-    try {
-      const updated = await iconApi.updateTemplate(selectedTemplate.template_id, {
-        name: templateNameDraft.trim(),
-        description: templateDescriptionDraft.trim(),
-        prompt_template: templatePromptDraft.trim(),
-      });
-      await handleReloadTemplates(updated.template_id);
-      setNotice("模板更新成功");
-    } catch {
-      setError("更新模板失败");
-    } finally {
-      setTemplateActionLoading(false);
-    }
-  };
-
-  const handleDeleteTemplate = async () => {
-    if (!selectedTemplate || selectedTemplate.is_builtin) return;
-    setTemplateActionLoading(true);
-    try {
-      await iconApi.deleteTemplate(selectedTemplate.template_id);
-      await handleReloadTemplates();
-      setNotice("模板已删除");
-    } catch {
-      setError("删除模板失败");
-    } finally {
-      setTemplateActionLoading(false);
-    }
-  };
 
   const runGenerateFlow = async (folderIds: string[]) => {
     if (!session || folderIds.length === 0) return;
@@ -406,77 +301,6 @@ export default function IconWorkbenchV2() {
       setError(err instanceof Error ? err.message : "批量应用失败");
     } finally {
       setBatchApplyLoading(false);
-    }
-  };
-
-  const handleRemoveBg = async (folderId: string, version: IconPreviewVersion) => {
-    if (!desktopReady) {
-      setError("抠图功能目前仅支持桌面端。");
-      return;
-    }
-    
-    const processingKey = `${folderId}-${version.version_id}`;
-    setProcessingBgVersionIds(prev => new Set(prev).add(processingKey));
-    
-    try {
-      await invokeTauriCommand("remove_background_for_image", {
-        imagePath: version.image_path,
-        apiToken: bgApiToken || null,
-      });
-
-      setSession(current => {
-        if (!current) return current;
-        const updatedFolders = current.folders.map(folder => {
-          if (folder.folder_id === folderId) {
-            const updatedVersions = folder.versions.map(v => {
-              if (v.version_id === version.version_id) {
-                const url = new URL(v.image_url.startsWith("/") ? `http://dummy${v.image_url}` : v.image_url);
-                url.searchParams.set("t", new Date().getTime().toString());
-                const finalUrl = v.image_url.startsWith("/") ? `${url.pathname}${url.search}` : url.toString();
-                return { ...v, image_url: finalUrl };
-              }
-              return v;
-            });
-            return { ...folder, versions: updatedVersions };
-          }
-          return folder;
-        });
-        return { ...current, folders: updatedFolders };
-      });
-      setNotice(`版本 v${version.version_number} 已成功移除背景。`);
-    } catch (err: any) {
-      setError(`抠图失败: ${err.message || String(err)}`);
-    } finally {
-      setProcessingBgVersionIds(prev => {
-        const next = new Set(prev);
-        next.delete(processingKey);
-        return next;
-      });
-    }
-  };
-
-  const handleRemoveBgBatch = async () => {
-    if (!session || allFolderIds.length === 0 || !desktopReady) return;
-    setIsRemovingBgBatch(true);
-    let successCount = 0;
-    try {
-      for (const folder of session.folders) {
-        if (!folder.current_version_id) continue;
-        const version = folder.versions.find(v => v.version_id === folder.current_version_id && v.status === "ready");
-        if (version) {
-          try {
-            await handleRemoveBg(folder.folder_id, version);
-            successCount++;
-          } catch(e) {
-            console.error(e);
-          }
-        }
-      }
-      if (successCount > 0) {
-        setNotice(`成功为 ${successCount} 个就绪版本移除背景。`);
-      }
-    } finally {
-      setIsRemovingBgBatch(false);
     }
   };
 
@@ -637,7 +461,7 @@ export default function IconWorkbenchV2() {
     </div>
   );
 
-  if (loading) {
+  if (!templatesInitialized && templatesLoading) {
     return (
       <div className="flex flex-1 items-center justify-center bg-surface">
         <div className="flex flex-col items-center gap-4">
@@ -730,6 +554,11 @@ export default function IconWorkbenchV2() {
         templates={templates}
         selectedTemplateId={selectedTemplateId}
         onSelect={setSelectedTemplateId}
+        onRequestManageTemplate={(templateId) => {
+          setSelectedTemplateId(templateId);
+          setStylePanelOpen(false);
+          setTemplateDrawerOpen(true);
+        }}
         bgApiToken={bgApiToken}
         onBgApiTokenChange={handleBgApiTokenChange}
       />
@@ -748,10 +577,10 @@ export default function IconWorkbenchV2() {
         onTemplateNameChange={setTemplateNameDraft}
         onTemplateDescriptionChange={setTemplateDescriptionDraft}
         onTemplatePromptChange={setTemplatePromptDraft}
-        onReloadTemplates={() => handleReloadTemplates(selectedTemplateId)}
-        onCreateTemplate={handleCreateTemplate}
-        onUpdateTemplate={handleUpdateTemplate}
-        onDeleteTemplate={handleDeleteTemplate}
+        onReloadTemplates={() => void reloadTemplates(selectedTemplateId)}
+        onCreateTemplate={() => void createTemplate()}
+        onUpdateTemplate={() => void updateTemplate()}
+        onDeleteTemplate={() => void deleteTemplate()}
       />
 
       {previewVersion ? (

@@ -1,16 +1,19 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2, Sparkles, StopCircle } from "lucide-react";
 
 import { ScannerProgress } from "@/types/session";
+import { Button } from "@/components/ui/button";
 
 interface MinimalScanningViewProps {
   scanner: ScannerProgress;
   progressPercent: number;
+  onAbort?: () => void;
+  aborting?: boolean;
 }
 
-export function MinimalScanningView({ scanner, progressPercent }: MinimalScanningViewProps) {
+export function MinimalScanningView({ scanner, progressPercent, onAbort, aborting = false }: MinimalScanningViewProps) {
   const currentItem = scanner.current_item || "正在读取目录结构...";
 
   return (
@@ -56,6 +59,18 @@ export function MinimalScanningView({ scanner, progressPercent }: MinimalScannin
               {Math.round(progressPercent)}%
             </span>
           </div>
+          {onAbort ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={onAbort}
+              disabled={aborting}
+              className="mt-5 self-center px-5"
+            >
+              <StopCircle className="h-4 w-4" />
+              {aborting ? "正在中断..." : "中断本次扫描"}
+            </Button>
+          ) : null}
         </div>
       </motion.div>
     </div>

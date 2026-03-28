@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   FolderOpen,
   ArrowRight,
@@ -19,25 +19,14 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn, formatDisplayDate, getFriendlyStage } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 
-import { getApiBaseUrl, getApiToken } from "@/lib/runtime";
-import { createApiClient } from "@/lib/api";
 import type { JournalSummary, HistoryItem, SessionSnapshot } from "@/types/session";
 import { Button } from "@/components/ui/button";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-
-type HistoryFilter = "all" | "active" | "completed" | "rolled_back";
-
-function isSessionEntry(entry: HistoryItem): boolean {
-  return entry.is_session || !["success", "completed", "rolled_back", "partial_failure"].includes(entry.status);
-}
-
-function getEntryName(entry: HistoryItem): string {
-  return entry.target_dir.replace(/[\\/]$/, "").split(/[\\/]/).pop() || "未命名记录";
-}
+import { getHistoryEntryName, isHistorySessionEntry, useHistoryList } from "@/lib/use-history-list";
 
 function getEntrySummary(entry: HistoryItem): string {
-  return isSessionEntry(entry) ? getFriendlyStage(entry.status) : entry.status === "rolled_back" ? "回退已完成" : "执行结果";
+  return isHistorySessionEntry(entry) ? getFriendlyStage(entry.status) : entry.status === "rolled_back" ? "回退已完成" : "执行结果";
 }
 
 function formatPath(path: string) {
@@ -65,13 +54,7 @@ function formatMovePath(path: string | null, baseDir: string) {
 export default function HistoryPage() {
   const APP_CONTEXT_EVENT = "file-organizer-context-change";
   const HISTORY_CONTEXT_KEY = "history_header_context";
-  const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<HistoryFilter>("all");
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [journal, setJournal] = useState<JournalSummary | null>(null);
   const [sessionDetail, setSessionDetail] = useState<SessionSnapshot | null>(null);
   const [journalLoading, setJournalLoading] = useState(false);
@@ -79,23 +62,24 @@ export default function HistoryPage() {
   const [rollbackSuccess, setRollbackSuccess] = useState(false);
   const [rollbackConfirmOpen, setRollbackConfirmOpen] = useState(false);
   const router = useRouter();
-  const api = useMemo(() => createApiClient(getApiBaseUrl(), getApiToken()), []);
-
-  async function loadHistory() {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await api.getHistory();
-      setHistory(data);
-      if (data.length > 0 && !selectedSessionId) {
-        setSelectedSessionId(data[0].execution_id);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "未知错误");
-    } finally {
-      setLoading(false);
-    }
-  }
+  const {
+    api,
+    history,
+    loading,
+    error,
+    setError,
+    query,
+    setQuery,
+    filter,
+    setFilter,
+    filteredHistory,
+    pendingDeleteId,
+    deletingId,
+    requestDelete,
+    cancelDelete,
+    confirmDelete,
+    loadHistory,
+  } = useHistoryList();
 
   async function loadJournal(id: string) {
     setJournalLoading(true);
@@ -125,43 +109,10 @@ export default function HistoryPage() {
     }
   }
 
-  useEffect(() => {
-    void loadHistory();
-  }, []);
-
-  const filteredHistory = useMemo(() => {
-    const keyword = query.trim().toLowerCase();
-
-    return history.filter((item) => {
-      const sessionLike = isSessionEntry(item);
-      const matchesFilter =
-        filter === "all"
-          ? true
-          : filter === "active"
-            ? sessionLike
-            : filter === "completed"
-              ? !sessionLike && item.status !== "rolled_back"
-              : item.status === "rolled_back";
-
-      if (!matchesFilter) {
-        return false;
-      }
-
-      if (!keyword) {
-        return true;
-      }
-
-      const name = getEntryName(item);
-      return [item.target_dir, name, item.status, item.execution_id].some((value) =>
-        value.toLowerCase().includes(keyword),
-      );
-    });
-  }, [filter, history, query]);
-
   const selectedEntry = filteredHistory.find((entry) => entry.execution_id === selectedSessionId)
     ?? history.find((entry) => entry.execution_id === selectedSessionId)
     ?? null;
-  const isSelectedSession = Boolean(selectedEntry && isSessionEntry(selectedEntry));
+  const isSelectedSession = Boolean(selectedEntry && isHistorySessionEntry(selectedEntry));
 
   useEffect(() => {
     if (!selectedEntry || !selectedSessionId) {
@@ -201,11 +152,11 @@ export default function HistoryPage() {
       return;
     }
     window.localStorage.setItem(
-      HISTORY_CONTEXT_KEY,
-      JSON.stringify({
-        detail: `${getEntryName(selectedEntry)} · ${getEntrySummary(selectedEntry)}`,
-      }),
-    );
+        HISTORY_CONTEXT_KEY,
+        JSON.stringify({
+          detail: `${getHistoryEntryName(selectedEntry)} · ${getEntrySummary(selectedEntry)}`,
+        }),
+      );
     window.dispatchEvent(new Event(APP_CONTEXT_EVENT));
   }, [APP_CONTEXT_EVENT, HISTORY_CONTEXT_KEY, selectedEntry]);
 
@@ -217,7 +168,7 @@ export default function HistoryPage() {
       await api.rollback(selectedSessionId, true);
       setRollbackConfirmOpen(false);
       setRollbackSuccess(true);
-      void loadHistory();
+      await loadHistory();
       void loadJournal(selectedSessionId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "回退过程中发生错误");
@@ -227,27 +178,16 @@ export default function HistoryPage() {
   };
 
   const handleDeleteHistory = async () => {
-    if (!pendingDeleteId) return;
-    setActionLoading(true);
-    setError(null);
-    try {
-      await api.deleteHistoryEntry(pendingDeleteId);
-      setHistory((prev) => prev.filter((item) => item.execution_id !== pendingDeleteId));
-      if (selectedSessionId === pendingDeleteId) {
-        setSelectedSessionId(null);
-        setJournal(null);
-        setSessionDetail(null);
-      }
-      setPendingDeleteId(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "删除记录时发生错误");
-    } finally {
-      setActionLoading(false);
+    const deletedId = await confirmDelete();
+    if (deletedId && selectedSessionId === deletedId) {
+      setSelectedSessionId(null);
+      setJournal(null);
+      setSessionDetail(null);
     }
   };
 
   const handleOpenSession = (readOnly = false) => {
-    if (!selectedEntry?.is_session || !selectedSessionId) return;
+    if (!selectedEntry || !isHistorySessionEntry(selectedEntry) || !selectedSessionId) return;
     const suffix = readOnly ? "&readonly=1" : "";
     router.push(`/workspace?session_id=${selectedSessionId}${suffix}`);
   };
@@ -256,8 +196,8 @@ export default function HistoryPage() {
     ? journal.restore_items
     : journal?.items?.filter((it) => it.action_type === "MOVE") ?? [];
 
-  const activeCount = history.filter((item) => isSessionEntry(item)).length;
-  const completedCount = history.filter((item) => !isSessionEntry(item) && item.status !== "rolled_back").length;
+  const activeCount = history.filter((item) => isHistorySessionEntry(item)).length;
+  const completedCount = history.filter((item) => !isHistorySessionEntry(item) && item.status !== "rolled_back").length;
   const rollbackCount = history.filter((item) => item.status === "rolled_back").length;
   const historyStats = [
     { label: "进行中", value: activeCount },
@@ -317,7 +257,7 @@ export default function HistoryPage() {
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => setFilter(item.id as HistoryFilter)}
+                    onClick={() => setFilter(item.id as typeof filter)}
                     className={cn(
                       "rounded-[8px] border px-3 py-1.5 text-[12px] font-semibold transition-all",
                       filter === item.id
@@ -350,7 +290,7 @@ export default function HistoryPage() {
               <div className="space-y-2.5">
                 {filteredHistory.map((entry, idx) => {
                   const active = selectedSessionId === entry.execution_id;
-                  const sessionLike = isSessionEntry(entry);
+                  const sessionLike = isHistorySessionEntry(entry);
 
                   return (
                     <motion.div
@@ -400,7 +340,7 @@ export default function HistoryPage() {
                               <span className="text-ui-meta text-ui-muted">{formatDisplayDate(entry.created_at)}</span>
                             </div>
                             <h3 className="line-clamp-1 text-[14px] font-semibold tracking-tight text-on-surface">
-                              {getEntryName(entry)}
+                              {getHistoryEntryName(entry)}
                             </h3>
                             <p className="line-clamp-1 text-ui-meta text-ui-muted" title={entry.target_dir}>
                               {formatPath(entry.target_dir)}
@@ -411,7 +351,7 @@ export default function HistoryPage() {
                             type="button"
                             onClick={(event) => {
                               event.stopPropagation();
-                              setPendingDeleteId(entry.execution_id);
+                              requestDelete(entry.execution_id);
                             }}
                             className={cn(
                               "rounded-[8px] border p-1.5 text-ui-muted transition-colors hover:border-error/20 hover:text-error",
@@ -476,7 +416,7 @@ export default function HistoryPage() {
                         {isSelectedSession ? "会话详情" : "执行详情"}
                       </div>
                       <h2 className="text-[1.25rem] font-black font-headline tracking-tight text-on-surface lg:text-[1.45rem]">
-                        {getEntryName(selectedEntry)}
+                        {getHistoryEntryName(selectedEntry)}
                       </h2>
                       <p className="max-w-3xl text-[14px] leading-6 text-ui-muted">
                         {selectedEntry.target_dir}
@@ -730,9 +670,9 @@ export default function HistoryPage() {
         confirmLabel="确认删除"
         cancelLabel="取消"
         tone="danger"
-        loading={actionLoading}
+        loading={Boolean(deletingId)}
         onConfirm={handleDeleteHistory}
-        onCancel={() => setPendingDeleteId(null)}
+        onCancel={cancelDelete}
       />
     </div>
   );

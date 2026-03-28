@@ -2,14 +2,9 @@
 
 import { AlertCircle, ArrowRight, CheckCircle2, FolderPlus, ListChecks, ShieldAlert } from "lucide-react";
 import { PrecheckSummary } from "@/types/session";
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { cn } from "@/lib/utils";
 import { DirectoryTreeDiff, type DirectoryTreeLeafEntry, type DirectoryTreeFilter } from "./directory-tree-diff";
 import { useState } from "react";
-
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
 
 interface PrecheckViewProps {
   summary: PrecheckSummary | null;
@@ -123,12 +118,12 @@ export function PrecheckView({ summary, isBusy, readOnly = false, onRequestExecu
 
           <div className="grid gap-0 sm:grid-cols-3 lg:grid-cols-1">
             <div className="border-b border-on-surface/8 px-5 py-4 sm:border-r lg:border-r-0">
-              <p className="text-[12px] font-medium text-ui-muted">Blocking errors</p>
+              <p className="text-[12px] font-medium text-ui-muted">阻断错误</p>
               <p className="mt-2 text-[1.5rem] font-black tracking-tight text-on-surface">{hasErrors ? "有" : "无"}</p>
               <p className="mt-2 text-[12px] leading-6 text-ui-muted">{hasErrors ? "存在必须先处理的问题。" : "当前没有阻止执行的问题。"}</p>
             </div>
             <div className="border-b border-on-surface/8 px-5 py-4 sm:border-r lg:border-r-0">
-              <p className="text-[12px] font-medium text-ui-muted">Warnings</p>
+              <p className="text-[12px] font-medium text-ui-muted">注意事项</p>
               <p className="mt-2 text-[1.5rem] font-black tracking-tight text-on-surface">{hasWarnings ? "有" : "无"}</p>
               <p className="mt-2 text-[12px] leading-6 text-ui-muted">{hasWarnings ? "建议执行前先阅读提醒。" : "当前没有额外提醒。"}</p>
             </div>

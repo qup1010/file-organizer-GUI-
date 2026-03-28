@@ -122,6 +122,19 @@ function StrategyDialog({
     if (open) setStep(1);
   }, [open]);
 
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose, open]);
+
   return (
     <AnimatePresence>
       {open ? (

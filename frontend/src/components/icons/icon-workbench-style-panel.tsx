@@ -10,6 +10,7 @@ interface IconWorkbenchStylePanelProps {
   onClose: () => void;
   templates: IconTemplate[];
   onSelect: (id: string) => void;
+  onRequestManageTemplate?: (id: string) => void;
   selectedTemplateId: string;
   bgApiToken: string;
   onBgApiTokenChange: (token: string) => void;
@@ -24,11 +25,16 @@ export function IconWorkbenchStylePanel({
   onClose,
   templates,
   onSelect,
+  onRequestManageTemplate,
   selectedTemplateId,
   bgApiToken,
   onBgApiTokenChange,
 }: IconWorkbenchStylePanelProps) {
   const [query, setQuery] = useState("");
+  const selectedTemplate = useMemo(
+    () => templates.find((template) => template.template_id === selectedTemplateId) || null,
+    [selectedTemplateId, templates],
+  );
 
   const filteredTemplates = useMemo(() => {
     if (!query.trim()) return templates;
@@ -75,10 +81,27 @@ export function IconWorkbenchStylePanel({
 
       {/* 搜索栏 */}
       <div className="border-b border-on-surface/6 bg-surface-container-low/40 px-6 py-4">
-        <div className="mx-auto max-w-[600px] space-y-3">
-          <div className="ui-panel-muted border-primary/12 bg-primary/5 px-4 py-3 text-[12px] leading-6 text-primary/90">
-            选择完成后面板会自动关闭，你可以直接回到工作台，为当前目标文件夹继续生成图标。
-          </div>
+          <div className="mx-auto max-w-[600px] space-y-3">
+            <div className="ui-panel-muted border-primary/12 bg-primary/5 px-4 py-3 text-[12px] leading-6 text-primary/90">
+              选择完成后面板会自动关闭，你可以直接回到工作台，为当前目标文件夹继续生成图标。
+            </div>
+            {selectedTemplate ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-on-surface/8 bg-surface-container-lowest px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-ui-muted">当前已选风格</p>
+                  <p className="mt-1 truncate text-[14px] font-semibold text-on-surface">{selectedTemplate.name}</p>
+                </div>
+                {onRequestManageTemplate ? (
+                  <button
+                    type="button"
+                    onClick={() => onRequestManageTemplate(selectedTemplate.template_id)}
+                    className="shrink-0 rounded-[10px] border border-primary/14 bg-primary/8 px-3.5 py-2 text-[12px] font-semibold text-primary transition-colors hover:bg-primary/12"
+                  >
+                    编辑当前模板
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
           
           <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
             <div className="relative">
