@@ -1,3 +1,4 @@
+from collections import Counter
 import unittest
 from unittest import mock
 
@@ -95,6 +96,24 @@ class ApiConfigTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "ok")
         openai_mock.assert_called_once_with(api_key="persisted-secret", base_url="https://text.example/v1")
+
+    def test_create_app_does_not_register_duplicate_api_routes(self):
+        route_counts = Counter(
+            (
+                tuple(sorted(route.methods or [])),
+                route.path,
+            )
+            for route in self.client.app.routes
+            if route.path.startswith("/api/")
+        )
+
+        duplicates = {
+            f"{','.join(methods)} {path}": count
+            for (methods, path), count in route_counts.items()
+            if count > 1
+        }
+
+        self.assertEqual(duplicates, {})
 
 
 if __name__ == "__main__":

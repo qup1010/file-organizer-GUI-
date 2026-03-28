@@ -54,6 +54,11 @@ IMAGE_ANALYSIS_API_KEY=your_api_key
 IMAGE_ANALYSIS_MODEL=your_vision_model
 ```
 
+配置文件约定：
+
+- 仓库只保留脱敏示例 [`config.example.json`](config.example.json)，用于说明双预设配置结构。
+- 本地运行仍读取根目录 `config.json`；该文件已被 `.gitignore` 忽略，不应提交到版本控制。
+
 ## 测试
 
 ```bash
