@@ -23,5 +23,15 @@ class AnalysisItem:
             confidence=data.get("confidence"),
         )
 
+    def to_dict(self) -> dict:
+        return {
+            "entry_name": self.entry_name,
+            "entry_type": self.entry_type,
+            "suggested_purpose": self.suggested_purpose,
+            "summary": self.summary,
+            "evidence_sources": self.evidence_sources,
+            "confidence": self.confidence,
+        }
+
     def to_scan_line(self) -> str:
         return f"{self.entry_name} | {self.suggested_purpose} | {self.summary}"
