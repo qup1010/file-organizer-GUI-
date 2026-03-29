@@ -456,7 +456,10 @@ def _run_analysis_worker(
                 })
 
         if check["is_valid"]:
-            emit(event_handler, "validation_pass", {"attempt": attempt})
+            emit(event_handler, "validation_pass", {
+                "attempt": attempt,
+                "items": [item.to_dict() for item in normalized_items]
+            })
             return normalized_items
 
         emit(event_handler, "validation_fail", {"attempt": attempt, "details": check})
@@ -581,11 +584,13 @@ def run_analysis_cycle(target_dir: Path, event_handler=None, model: str = ANALYS
         for future in as_completed(futures):
             batch_index, batch_entries = futures[future]
             try:
-                batch_results.append(future.result())
                 status = "completed"
+                batch_result_items = future.result()
+                batch_results.append(batch_result_items)
             except Exception:
-                failed_entries.extend(batch_entries)
+                batch_result_items = []
                 status = "failed"
+                failed_entries.extend(batch_entries)
 
             finished_batches += 1
             emit(event_handler, "batch_progress", {
@@ -594,6 +599,7 @@ def run_analysis_cycle(target_dir: Path, event_handler=None, model: str = ANALYS
                 "batch_size": len(batch_entries),
                 "status": status,
                 "completed_batches": finished_batches,
+                "items": [item.to_dict() for item in batch_result_items] if status == "completed" else []
             })
 
     if failed_entries:

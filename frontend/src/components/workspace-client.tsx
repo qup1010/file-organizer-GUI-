@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { AlertTriangle, Bot, Layers, Loader2, MoreHorizontal, RefreshCw } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 import { useSession } from "@/lib/use-session";
@@ -380,129 +381,144 @@ export default function WorkspaceClient() {
   }, [APP_CONTEXT_EVENT, WORKSPACE_CONTEXT_KEY, dirParam, snapshot?.target_dir, stage]);
 
   const renderPreviewContent = () => {
-    if (stage === "scanning") {
-      return (
-        <MinimalScanningView
-          scanner={scanner}
-          progressPercent={progressPercent}
-          onAbort={() => setScanAbortConfirmOpen(true)}
-          aborting={loading}
-        />
-      );
-    }
-
-    if (stage === "completed") {
-      return (
-        <div className="mx-auto h-full w-full max-w-[1360px] overflow-y-auto p-5 scrollbar-thin">
-          <CompletionView
-            journal={journal}
-            summary={snapshot?.summary || ""}
-            loading={journalLoading || !journal}
-            targetDir={snapshot?.target_dir || ""}
-            isBusy={isBusy}
-            readOnly={isReadOnly}
-            onOpenExplorer={() => void openExplorer(snapshot?.target_dir || "")}
-            onCleanupDirs={() => {
-              if (!isReadOnly) {
-                void cleanupEmptyDirs();
-              }
-            }}
-            onRollback={() => {
-              if (!isReadOnly) {
-                void rollback();
-              }
-            }}
-            onGoHome={handleExitWorkbench}
-          />
-        </div>
-      );
-    }
-
-    if (stage === "ready_to_execute") {
-      return (
-        <div className="mx-auto h-full w-full max-w-[1360px] overflow-y-auto p-5 scrollbar-thin">
-          <PrecheckView
-            summary={precheck}
-            isBusy={isBusy}
-            readOnly={isReadOnly}
-            onRequestExecute={() => {
-              if (!isReadOnly) {
-                setExecuteConfirmOpen(true);
-              }
-            }}
-            onBack={() => {
-              if (!isReadOnly) {
-                void returnToPlanning();
-              }
-            }}
-          />
-        </div>
-      );
-    }
-
     return (
-      <ErrorBoundary fallbackTitle="预览区加载失败">
-        {stage === "idle" || stage === "draft" ? (
-          <EmptyState
-            icon={Layers}
-            title="整理预览准备中"
-            description="先开始扫描，系统会在这里显示整理前后的目录变化。"
-            className="mx-auto h-[70vh] max-w-[1360px]"
-          />
-        ) : (
-          <div className="flex h-full flex-col">
-            {(stage === "stale" || stage === "interrupted") && (
-              <div className="z-10 border-b border-warning/15 bg-warning-container/8 px-4 py-2.5 backdrop-blur-sm">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-warning/15 text-warning">
-                      <AlertTriangle className="h-4 w-4" />
-                    </div>
-                    <p className="text-[13px] font-medium text-on-surface">
-                      {stage === "stale" ? "当前方案已过期，建议重新扫描以同步目录状态。" : "处理被中断，建议重新扫描核心目录。"}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={handleExitWorkbench}
-                      className="rounded-[6px] px-3 py-1.5 text-[12px] font-semibold text-on-surface-variant transition-colors hover:bg-on-surface/5"
-                    >
-                      稍后再说
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void refreshPlan()}
-                      className="inline-flex items-center gap-1.5 rounded-[8px] bg-warning px-3 py-1.5 text-[12px] font-bold text-white shadow-sm transition-opacity hover:opacity-90"
-                    >
-                      <RefreshCw className="h-3.5 w-3.5" />
-                      立即刷新
-                    </button>
-                  </div>
+      <AnimatePresence mode="wait">
+        <motion.div
+           key={stage}
+           initial={{ opacity: 0, y: 4 }}
+           animate={{ opacity: 1, y: 0 }}
+           exit={{ opacity: 0, y: -4 }}
+           transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+           className="h-full w-full"
+        >
+          {(() => {
+            if (stage === "scanning") {
+              return (
+                <MinimalScanningView
+                  scanner={scanner}
+                  progressPercent={progressPercent}
+                  onAbort={() => setScanAbortConfirmOpen(true)}
+                  aborting={loading}
+                />
+              );
+            }
+
+            if (stage === "completed") {
+              return (
+                <div className="mx-auto h-full w-full max-w-[1360px] overflow-y-auto p-5 scrollbar-thin">
+                  <CompletionView
+                    journal={journal}
+                    summary={snapshot?.summary || ""}
+                    loading={journalLoading || !journal}
+                    targetDir={snapshot?.target_dir || ""}
+                    isBusy={isBusy}
+                    readOnly={isReadOnly}
+                    onOpenExplorer={() => void openExplorer(snapshot?.target_dir || "")}
+                    onCleanupDirs={() => {
+                      if (!isReadOnly) {
+                        void cleanupEmptyDirs();
+                      }
+                    }}
+                    onRollback={() => {
+                      if (!isReadOnly) {
+                        void rollback();
+                      }
+                    }}
+                    onGoHome={handleExitWorkbench}
+                  />
                 </div>
-              </div>
-            )}
-            <div className="flex-1 overflow-hidden">
-              <PreviewPanel
-                plan={plan}
-                stage={stage}
-                isBusy={isBusy}
-                readOnly={isReadOnly}
-                onRunPrecheck={() => {
-                  if (!isReadOnly) {
-                    void runPrecheck();
-                  }
-                }}
-                onUpdateItem={(id, payload) => {
-                  if (!isReadOnly) {
-                    void updateItem({ item_id: id, ...payload });
-                  }
-                }}
-              />
-            </div>
-          </div>
-        )}
-      </ErrorBoundary>
+              );
+            }
+
+            if (stage === "ready_to_execute") {
+              return (
+                <div className="mx-auto h-full w-full max-w-[1360px] overflow-y-auto p-5 scrollbar-thin">
+                  <PrecheckView
+                    summary={precheck}
+                    isBusy={isBusy}
+                    readOnly={isReadOnly}
+                    onRequestExecute={() => {
+                      if (!isReadOnly) {
+                        setExecuteConfirmOpen(true);
+                      }
+                    }}
+                    onBack={() => {
+                      if (!isReadOnly) {
+                        void returnToPlanning();
+                      }
+                    }}
+                  />
+                </div>
+              );
+            }
+
+            return (
+              <ErrorBoundary fallbackTitle="预览区加载失败">
+                {stage === "idle" || stage === "draft" ? (
+                  <EmptyState
+                    icon={Layers}
+                    title="整理预览准备中"
+                    description="先开始扫描，系统会在这里显示整理前后的目录变化。"
+                    className="mx-auto h-[70vh] max-w-[1360px]"
+                  />
+                ) : (
+                  <div className="flex h-full flex-col">
+                    {(stage === "stale" || stage === "interrupted") && (
+                      <div className="z-10 border-b border-warning/15 bg-warning-container/8 px-4 py-2.5 backdrop-blur-sm">
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-warning/15 text-warning">
+                              <AlertTriangle className="h-4 w-4" />
+                            </div>
+                            <p className="text-[13px] font-medium text-on-surface">
+                              {stage === "stale" ? "当前方案已过期，建议重新扫描以同步目录状态。" : "处理被中断，建议重新扫描核心目录。"}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={handleExitWorkbench}
+                              className="rounded-[6px] px-3 py-1.5 text-[12px] font-semibold text-on-surface-variant transition-colors hover:bg-on-surface/5"
+                            >
+                              稍后再说
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void refreshPlan()}
+                              className="inline-flex items-center gap-1.5 rounded-[8px] bg-warning px-3 py-1.5 text-[12px] font-bold text-white shadow-sm transition-opacity hover:opacity-90"
+                            >
+                              <RefreshCw className="h-3.5 w-3.5" />
+                              立即刷新
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex-1 overflow-hidden">
+                      <PreviewPanel
+                        plan={plan}
+                        stage={stage}
+                        isBusy={isBusy}
+                        readOnly={isReadOnly}
+                        onRunPrecheck={() => {
+                          if (!isReadOnly) {
+                            void runPrecheck();
+                          }
+                        }}
+                        onUpdateItem={(id, payload) => {
+                          if (!isReadOnly) {
+                            void updateItem({ item_id: id, ...payload });
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </ErrorBoundary>
+            );
+          })()}
+        </motion.div>
+      </AnimatePresence>
     );
   };
 

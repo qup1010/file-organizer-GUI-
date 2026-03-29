@@ -1096,21 +1096,70 @@ class OrganizerSessionService:
 
             if target_name:
                 set_field("current_item", target_name)
+                # 实时追加到最近分析项列表中，用于前端“正在看什么”的可视化
+                if target_name not in {"当前目录", "正在准备扫描"}:
+                    recent = list(progress.get("recent_analysis_items") or [])
+                    # 避免重复添加同一个正在处理的项目
+                    if not any(item.get("display_name") == target_name for item in recent):
+                        recent.insert(0, {
+                            "item_id": target_name,
+                            "display_name": target_name,
+                            "source_relpath": target_name,
+                            "suggested_purpose": "分析中...",
+                            "summary": "读取内容中"
+                        })
+                        set_field("recent_analysis_items", recent[:8]) # 保留最近 8 条
+
             set_field("message", message)
 
             if target_name and target_name not in {"当前目录", "正在准备扫描"} and target_name not in seen_entries:
                 seen_entries.add(target_name)
                 set_field("processed_count", min(total_count, len(seen_entries)) if total_count else len(seen_entries))
         elif event_type == "ai_streaming_start":
-            set_field("message", "模型已返回，正在整理扫描结果")
+            set_field("message", "准备整理结果")
         elif event_type == "ai_chunk":
             set_field("message", "正在输出扫描分析结论")
         elif event_type == "validation_fail":
             set_field("message", "扫描结果需要修正，正在重新校验")
-        elif event_type == "validation_pass":
-            set_field("message", "扫描结果已通过校验，正在完成收尾")
-            if total_count > 1:
-                set_field("processed_count", max(int(progress.get("processed_count") or 0), total_count - 1))
+        elif event_type == "validation_pass" or event_type == "batch_progress":
+            # 强化：当一个批次或单次扫描验证通过时，同步更新最近分析项为“真实结果”
+            items_data = data.get("items") or []
+            if items_data:
+                recent = list(progress.get("recent_analysis_items") or [])
+                # 转换数据格式
+                new_items = []
+                for item in items_data:
+                    new_items.append({
+                        "item_id": item.get("entry_name"),
+                        "display_name": item.get("entry_name"),
+                        "source_relpath": item.get("entry_name"),
+                        "suggested_purpose": item.get("suggested_purpose", "待判断"),
+                        "summary": item.get("summary", ""),
+                    })
+                
+                # 合并并去重（优先使用最新的真实分析结果）
+                # 用字典按 display_name 去重，真实结果覆盖占位符
+                merged_map = {item["display_name"]: item for item in reversed(recent)}
+                for item in new_items:
+                    merged_map[item["display_name"]] = item
+                
+                # 重新转回列表，新结果排在前面
+                updated_recent = sorted(merged_map.values(), key=lambda x: 0 if any(ni["display_name"] == x["display_name"] for ni in new_items) else 1)
+                set_field("recent_analysis_items", updated_recent[:10])
+
+            if event_type == "validation_pass":
+                set_field("message", "分析已完成")
+                if total_count > 1:
+                    set_field("processed_count", max(int(progress.get("processed_count") or 0), total_count - 1))
+            else:
+                # batch_progress
+                set_field("batch_count", data.get("total_batches"))
+                set_field("completed_batches", data.get("completed_batches"))
+                if data.get("status") == "failed":
+                    set_field("message", "批次重试中")
+                else:
+                    set_field("message", f"进度: {data.get('completed_batches')}/{data.get('total_batches')}")
+        
         elif event_type == "cycle_start" and int(data.get("attempt") or 1) > 1:
             attempt = int(data.get("attempt") or 1)
             max_attempts = int(data.get("max_attempts") or attempt)

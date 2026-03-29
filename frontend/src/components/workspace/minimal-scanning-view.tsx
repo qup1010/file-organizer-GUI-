@@ -1,10 +1,17 @@
 "use client";
-
-import { motion } from "framer-motion";
-import { Loader2, Sparkles, StopCircle } from "lucide-react";
+import React from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { 
+  Loader2, 
+  StopCircle, 
+  Search, 
+  FileText, 
+  Activity
+} from "lucide-react";
 
 import { ScannerProgress } from "@/types/session";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface MinimalScanningViewProps {
   scanner: ScannerProgress;
@@ -14,100 +21,165 @@ interface MinimalScanningViewProps {
 }
 
 export function MinimalScanningView({ scanner, progressPercent, onAbort, aborting = false }: MinimalScanningViewProps) {
-  const currentItem = scanner.current_item || "正在读取目录结构...";
+  const currentItem = scanner.current_item || "读取目录中...";
+  const recentItems = scanner.recent_analysis_items || [];
 
   return (
-    <div className="flex h-full w-full flex-col bg-transparent px-4 py-4 sm:px-5 sm:py-5 lg:px-6">
+    <div className="flex h-full w-full flex-col bg-transparent p-4 lg:p-6">
       <motion.div
-        initial={{ opacity: 0, scale: 0.96 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.4, ease: "easeOut" }}
-        className="mx-auto flex h-full w-full max-w-[1240px] flex-col justify-center"
+        initial={{ opacity: 0, y: 4 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mx-auto flex h-full w-full max-w-[1360px] flex-col"
       >
-        <div className="overflow-hidden rounded-[12px] border border-on-surface/8 bg-surface-container-lowest shadow-[0_18px_48px_rgba(0,0,0,0.04)]">
-          <div className="border-b border-on-surface/8 bg-surface px-4 py-4 sm:px-5 lg:px-6">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-              <div className="space-y-2">
-                <div className="inline-flex items-center gap-2 rounded-full border border-primary/12 bg-primary/8 px-3 py-1 text-[12px] font-semibold text-primary">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Scanning
+        {/* Header */}
+        <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <div className="flex h-6 w-6 items-center justify-center rounded-[4px] bg-primary/10 text-primary">
+                <Search className="h-3.5 w-3.5" />
+              </div>
+              <h2 className="text-[14px] font-bold tracking-tight text-on-surface">
+                目录扫描中
+              </h2>
+            </div>
+            <p className="text-[12px] text-ui-muted">
+              正在提取文件特征，完成后自动进入方案生成。
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 rounded-[6px] border border-on-surface/8 bg-surface-container-lowest px-2.5 py-1">
+              <span className="text-[11px] font-medium text-ui-muted">进度</span>
+              <span className="text-[14px] font-bold tabular-nums text-on-surface">
+                {Math.round(progressPercent)}%
+              </span>
+            </div>
+            {onAbort && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onAbort}
+                disabled={aborting}
+                className="h-7 gap-1 rounded-[6px] text-[11px] font-medium text-error hover:bg-error/10 hover:text-error transition-colors"
+              >
+                <StopCircle className="h-3 w-3" />
+                {aborting ? "停止中" : "中断"}
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div className="grid flex-1 gap-4 overflow-hidden lg:grid-cols-[1fr_280px]">
+          <div className="flex flex-col gap-4 overflow-hidden">
+            {/* Status */}
+            <div className="rounded-[6px] border border-on-surface/8 bg-surface-container-lowest p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Activity className="h-3.5 w-3.5 text-primary" />
+                  <h3 className="text-[12px] font-bold text-on-surface">
+                    {scanner.message || "正在提取特征"}
+                  </h3>
                 </div>
-                <h2 className="text-[1.2rem] font-black tracking-tight text-on-surface sm:text-[1.3rem] lg:text-[1.55rem]">
-                  正在扫描并分析目录资料
-                </h2>
-                <p className="max-w-2xl text-[14px] leading-7 text-ui-muted">
-                  系统正在建立目录结构、抽取可读内容并补充用途判断。扫描完成后会自动生成第一版整理方案。
-                </p>
               </div>
 
-              <div className="grid gap-3 xl:min-w-[360px] xl:grid-cols-2">
-                <div className="rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-4 py-3">
-                  <p className="text-[12px] font-medium text-ui-muted">当前处理项</p>
-                  <p className="mt-2 break-all text-[14px] font-semibold text-on-surface">{currentItem}</p>
+              <div className="mb-3 space-y-1.5">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-ui-muted">
+                    {scanner.processed_count} / {scanner.total_count} 已处理
+                  </span>
+                  <span className="truncate ml-4 max-w-[60%] text-ui-muted">
+                    {currentItem}
+                  </span>
                 </div>
-                <div className="rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-4 py-3">
-                  <p className="text-[12px] font-medium text-ui-muted">扫描进度</p>
-                  <p className="mt-2 text-[1.6rem] font-black tracking-tight text-on-surface">{Math.round(progressPercent)}%</p>
+                <div className="h-1 w-full overflow-hidden rounded-full bg-on-surface/5">
+                  <motion.div
+                    className="h-full rounded-full bg-primary"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${Math.max(2, progressPercent)}%` }}
+                    transition={{ duration: 0.4 }}
+                  />
                 </div>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-3">
+                {[
+                  { label: "模式", value: "全量扫描" },
+                  { label: "线程", value: scanner.batch_count ? `${scanner.batch_count} 并行` : "标准" },
+                  { label: "阶段", value: "分类方案" },
+                ].map((stat, idx) => (
+                  <div key={idx} className="border-l border-on-surface/10 pl-3 py-0.5">
+                    <p className="text-[10px] text-ui-muted uppercase tracking-tight">{stat.label}</p>
+                    <p className="text-[12px] font-semibold text-on-surface truncate">{stat.value}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* List */}
+            <div className="flex flex-1 flex-col overflow-hidden rounded-[6px] border border-on-surface/8 bg-surface-container-lowest/50">
+              <div className="flex items-center justify-between border-b border-on-surface/6 bg-surface-container-lowest px-3 py-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface/50">
+                  最近记录
+                </span>
+                <span className="text-[10px] text-success/70 font-medium">同步中</span>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto p-1.5 space-y-1.5 scrollbar-none">
+                <AnimatePresence initial={false}>
+                  {recentItems.length > 0 ? (
+                    recentItems.map((item, idx) => (
+                      <motion.div
+                        key={item.item_id + idx}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className={cn(
+                          "group flex items-center gap-2.5 rounded-[4px] border border-transparent px-2 py-1.5 transition-colors",
+                          idx === 0 ? "bg-primary/[0.03] border-primary/10" : "bg-transparent hover:bg-on-surface/[0.02]"
+                        )}
+                      >
+                        <FileText className={cn("h-3 w-3 shrink-0", idx === 0 ? "text-primary" : "text-on-surface/30")} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="truncate text-[12px] font-medium text-on-surface">
+                              {item.display_name}
+                            </p>
+                            <span className="shrink-0 text-[10px] font-bold text-primary/60">
+                              {item.suggested_purpose}
+                            </span>
+                          </div>
+                          <p className="truncate text-[10px] text-ui-muted">{item.summary}</p>
+                        </div>
+                      </motion.div>
+                    ))
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-ui-muted opacity-30 py-8">
+                      <p className="text-[11px]">等待扫描结果...</p>
+                    </div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
           </div>
 
-          <div className="grid gap-4 px-4 py-4 sm:px-5 sm:py-5 xl:grid-cols-[minmax(0,1fr)_280px] lg:px-6">
-            <div className="rounded-[10px] border border-on-surface/8 bg-surface px-4 py-4">
-              <div className="relative mb-5 flex h-14 items-center">
-                <div className="absolute inset-y-0 left-0 flex items-center">
-                  <div className="relative flex h-12 w-12 items-center justify-center rounded-full bg-primary/6">
-                    <div className="absolute inset-0 animate-ping rounded-full bg-primary/10 opacity-30" style={{ animationDuration: "2s" }} />
-                    <Loader2 className="h-6 w-6 animate-spin text-primary/60 stroke-[2.5px]" />
-                    <Sparkles className="absolute -right-1 -top-1 h-4.5 w-4.5 text-primary/40 animate-pulse" />
-                  </div>
+          {/* Right Sidebar */}
+          <div className="hidden flex-col gap-4 lg:flex">
+            <div className="flex-1 rounded-[6px] border border-on-surface/8 bg-surface-container-low/10 p-4">
+              <h4 className="text-[10px] font-bold uppercase tracking-wider text-on-surface/40 mb-4">
+                说明
+              </h4>
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <p className="text-[12px] font-bold text-on-surface">自动分类</p>
+                  <p className="text-[11px] leading-relaxed text-ui-muted">
+                    系统根据文件摘要自动分类。超大文件仅读取元数据。
+                  </p>
                 </div>
-                <div className="ml-16 flex-1">
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-on-surface/6">
-                    <motion.div
-                      className="h-full rounded-full bg-primary"
-                      initial={{ width: 0 }}
-                      animate={{ width: `${Math.max(2, progressPercent)}%` }}
-                      transition={{ duration: 0.3 }}
-                    />
-                  </div>
+
+                <div className="rounded-[4px] border border-on-surface/6 bg-surface-container-lowest p-3 text-[11px] text-ui-muted">
+                  扫描完成后可直接查看建议方案。
                 </div>
               </div>
-
-              <div className="grid gap-3 min-[1180px]:grid-cols-3">
-                <div className="rounded-[10px] border border-on-surface/6 bg-surface-container-low px-4 py-3">
-                  <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-ui-muted">阶段</p>
-                  <p className="mt-2 text-[13px] font-semibold text-on-surface">建立扫描范围</p>
-                </div>
-                <div className="rounded-[10px] border border-on-surface/6 bg-surface-container-low px-4 py-3">
-                  <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-ui-muted">内容</p>
-                  <p className="mt-2 text-[13px] font-semibold text-on-surface">读取摘要与用途</p>
-                </div>
-                <div className="rounded-[10px] border border-on-surface/6 bg-surface-container-low px-4 py-3">
-                  <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-ui-muted">下一步</p>
-                  <p className="mt-2 text-[13px] font-semibold text-on-surface">自动生成整理草案</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-[10px] border border-on-surface/8 bg-surface px-4 py-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ui-muted">Control</p>
-              <p className="mt-3 text-[13px] leading-6 text-ui-muted">
-                扫描过程中不需要切换页面。系统会在完成后自动进入下一阶段。
-              </p>
-              {onAbort ? (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={onAbort}
-                  disabled={aborting}
-                  className="mt-5 w-full justify-center"
-                >
-                  <StopCircle className="h-4 w-4" />
-                  {aborting ? "正在中断..." : "中断本次扫描"}
-                </Button>
-              ) : null}
             </div>
           </div>
         </div>
