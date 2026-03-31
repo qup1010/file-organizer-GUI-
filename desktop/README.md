@@ -6,6 +6,7 @@
 
 - 开发态拉起本地 `python -m file_organizer.api`
 - 打包态拉起随应用分发的 `file_organizer_api.exe`
+- 打包态后端以后台方式启动，不向用户显示额外终端窗口
 - 通过 `output/runtime/backend.json` 发现并校验后端实例
 - 向前端注入 `window.__FILE_ORGANIZER_RUNTIME__`
 - 提供目录选择、批量目录选择、文件夹图标应用 / 恢复、抠图测试等原生命令

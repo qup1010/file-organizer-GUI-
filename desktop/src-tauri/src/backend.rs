@@ -4,13 +4,22 @@ use std::process::{Child, Command};
 
 use uuid::Uuid;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
 const DEFAULT_API_HOST: &str = "127.0.0.1";
 const DEFAULT_API_PORT: &str = "8765";
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 pub struct BackendLaunch {
     pub child: Child,
     pub instance_id: String,
     pub api_token: String,
+}
+
+pub fn should_hide_backend_window(backend_executable: Option<&Path>) -> bool {
+    backend_executable.is_some()
 }
 
 pub fn build_backend_command(
@@ -42,7 +51,15 @@ pub fn build_backend_command(
         .env("FILE_ORGANIZER_API_BASE_URL", &base_url)
         .env("FILE_ORGANIZER_PROJECT_ROOT", project_root)
         .env("FILE_ORGANIZER_API_TOKEN", api_token);
+    configure_backend_command(&mut command, backend_executable);
     command
+}
+
+fn configure_backend_command(command: &mut Command, backend_executable: Option<&Path>) {
+    #[cfg(target_os = "windows")]
+    if should_hide_backend_window(backend_executable) {
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
 }
 
 pub fn start_backend(project_root: &Path, backend_executable: Option<&Path>) -> Result<BackendLaunch, String> {
@@ -72,7 +89,7 @@ fn validate_backend_port() -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_backend_command, validate_backend_port};
+    use super::{build_backend_command, should_hide_backend_window, validate_backend_port};
     use std::env;
     use std::path::Path;
 
@@ -136,6 +153,14 @@ mod tests {
         assert!(args.is_empty(), "bundled backend should not receive python module args");
         assert_eq!(command.get_current_dir(), Some(Path::new("D:/runtime")));
         assert!(envs.iter().any(|(key, value)| key == "FILE_ORGANIZER_PROJECT_ROOT" && value.as_deref() == Some("D:/runtime")));
+    }
+
+    #[test]
+    fn bundled_backend_requests_hidden_window_but_python_mode_does_not() {
+        assert!(!should_hide_backend_window(None));
+        assert!(should_hide_backend_window(Some(Path::new(
+            "D:/bundle/backend/file_organizer_api.exe"
+        ))));
     }
 
     #[test]

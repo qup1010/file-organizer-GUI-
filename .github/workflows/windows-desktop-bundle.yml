@@ -59,6 +59,7 @@ jobs:
             --noconfirm `
             --clean `
             --onefile `
+            --noconsole `
             --name file_organizer_api `
             --paths . `
             --collect-submodules file_organizer `
