@@ -1,104 +1,73 @@
-import base64
 import unittest
-from unittest.mock import patch
 
-from file_organizer.icon_workbench.client import IconWorkbenchImageClient
+from file_organizer.icon_workbench.client import IconWorkbenchTextClient
 from file_organizer.icon_workbench.models import ModelConfig
+from file_organizer.icon_workbench.prompts import TEXT_ANALYSIS_SYSTEM_PROMPT
 
 
-class IconWorkbenchImageClientTests(unittest.TestCase):
-    def setUp(self):
-        self.client = IconWorkbenchImageClient()
+class RecordingTextClient(IconWorkbenchTextClient):
+    def __init__(self, payload):
+        self.payload = payload
+        self.calls = []
 
-    def test_generate_png_uses_openai_image_payload_and_reads_b64(self):
-        config = ModelConfig(
-            base_url="https://image.example/v1",
-            api_key="image-key",
-            model="gpt-image",
-        )
-        raw_png = b"fake-png"
-
-        with patch("file_organizer.icon_workbench.client._post_json") as post_json:
-            post_json.return_value = {
-                "data": [
-                    {
-                        "b64_json": base64.b64encode(raw_png).decode("ascii"),
-                    }
-                ]
-            }
-
-            image_bytes = self.client.generate_png(config, "draw a folder", "512x512")
-
-        self.assertEqual(image_bytes, raw_png)
-        post_json.assert_called_once_with(
-            "https://image.example/v1/images/generations",
+    def complete_json(self, config, system_prompt, user_prompt, *, temperature=0.3):
+        self.calls.append(
             {
-                "model": "gpt-image",
-                "prompt": "draw a folder",
-                "size": "512x512",
-                "n": 1,
-                "response_format": "b64_json",
-            },
-            "image-key",
+                "config": config,
+                "system_prompt": system_prompt,
+                "user_prompt": user_prompt,
+                "temperature": temperature,
+            }
+        )
+        return dict(self.payload)
+
+
+class IconWorkbenchClientTests(unittest.TestCase):
+    def test_analyze_folder_includes_parent_folder_context(self):
+        client = RecordingTextClient(
+            {
+                "category": "音乐素材",
+                "visual_subject": "a musical note and headphones",
+                "summary": "父目录和文件名都指向音乐内容。",
+            }
         )
 
-    def test_generate_png_uses_modelscope_async_flow_and_reads_output_image(self):
-        config = ModelConfig(
-            base_url="https://api-inference.modelscope.cn/v1",
-            api_key="ms-key",
-            model="black-forest-labs/FLUX.1-schnell",
+        result = client.analyze_folder(
+            ModelConfig(base_url="https://example.com/v1", api_key="key", model="gpt"),
+            "D:/Media/Music/Lofi",
+            "Lofi",
+            ["├─ chill.wav", "└─ covers/"],
         )
 
-        with patch("file_organizer.icon_workbench.client._request_json") as request_json:
-            with patch("file_organizer.icon_workbench.client.time.sleep") as sleep:
-                with patch.object(self.client, "_read_remote_image", return_value=b"modelscope-png") as read_remote_image:
-                    request_json.side_effect = [
-                        {"task_id": "task-123"},
-                        {
-                            "task_id": "task-123",
-                            "task_status": "RUNNING",
-                        },
-                        {
-                            "task_id": "task-123",
-                            "task_status": "SUCCEED",
-                            "output_images": ["https://cdn.modelscope.cn/generated.png"],
-                        },
-                    ]
+        self.assertEqual(result.visual_subject, "a musical note and headphones")
+        self.assertIn("父级文件夹名称: Music", client.calls[0]["user_prompt"])
+        self.assertIn("当前文件夹名称: Lofi", client.calls[0]["user_prompt"])
+        self.assertIn("目录树摘要:", client.calls[0]["user_prompt"])
 
-                    image_bytes = self.client.generate_png(config, "draw a folder", "1024x1024")
-
-        self.assertEqual(image_bytes, b"modelscope-png")
-        self.assertEqual(
-            request_json.call_args_list,
-            [
-                unittest.mock.call(
-                    "https://api-inference.modelscope.cn/v1/images/generations",
-                    method="POST",
-                    payload={
-                        "model": "black-forest-labs/FLUX.1-schnell",
-                        "prompt": "draw a folder",
-                        "n": 1,
-                        "size": "1024x1024",
-                    },
-                    api_key="ms-key",
-                    extra_headers={"X-ModelScope-Async-Mode": "true"},
-                ),
-                unittest.mock.call(
-                    "https://api-inference.modelscope.cn/v1/tasks/task-123",
-                    method="GET",
-                    api_key="ms-key",
-                    extra_headers={"X-ModelScope-Task-Type": "image_generation"},
-                ),
-                unittest.mock.call(
-                    "https://api-inference.modelscope.cn/v1/tasks/task-123",
-                    method="GET",
-                    api_key="ms-key",
-                    extra_headers={"X-ModelScope-Task-Type": "image_generation"},
-                ),
-            ],
+    def test_analyze_folder_falls_back_to_folder_name_when_subject_missing(self):
+        client = RecordingTextClient(
+            {
+                "category": "项目源码",
+                "visual_subject": "",
+                "summary": "目录以源码文件为主。",
+            }
         )
-        self.assertEqual(sleep.call_count, 2)
-        read_remote_image.assert_called_once_with("https://cdn.modelscope.cn/generated.png")
+
+        result = client.analyze_folder(
+            ModelConfig(base_url="https://example.com/v1", api_key="key", model="gpt"),
+            "D:/Projects/RustTools",
+            "RustTools",
+            ["├─ src/", "└─ Cargo.toml"],
+        )
+
+        self.assertEqual(result.visual_subject, "RustTools")
+        self.assertIn("RustTools", result.suggested_prompt)
+
+    def test_analysis_prompt_has_stronger_visual_subject_constraints(self):
+        self.assertIn("父级/上层目录名称", TEXT_ANALYSIS_SYSTEM_PROMPT)
+        self.assertIn("提高名称线索的权重", TEXT_ANALYSIS_SYSTEM_PROMPT)
+        self.assertIn("严禁出现这些类型的词", TEXT_ANALYSIS_SYSTEM_PROMPT)
+        self.assertIn("优先可图标化", TEXT_ANALYSIS_SYSTEM_PROMPT)
 
 
 if __name__ == "__main__":

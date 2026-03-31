@@ -52,3 +52,12 @@ export async function pickDirectoryWithTauri(): Promise<string | null> {
 export async function pickDirectoriesWithTauri(): Promise<string[] | null> {
   return invokeTauriCommand<string[] | null>("pick_directories");
 }
+
+export async function openDirectoryWithTauri(path: string): Promise<void> {
+  await invokeTauriCommand<void>("open_directory", { path });
+}
+
+export async function saveFileAsTauri(sourcePath: string, filename: string): Promise<boolean> {
+  const result = await invokeTauriCommand<boolean>("save_file_as", { sourcePath, filename });
+  return result ?? false;
+}

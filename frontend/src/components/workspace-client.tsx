@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { AlertTriangle, FolderTree, Layers, Loader2, MoreHorizontal, RefreshCw } from "lucide-react";
+import { AlertTriangle, FolderTree, Layers, Loader2, LogOut, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -293,7 +293,7 @@ export default function WorkspaceClient() {
       return {
         tone: "warning",
         title: "这是只读模式",
-        description: "当前只能查看之前的方案 and 记录，不能继续修改、预检或执行。如需继续整理，请返回首页重新选择。",
+        description: "当前只能查看之前的方案和记录，不能继续修改、预检或执行。如需继续整理，请返回首页重新打开任务。",
       };
     }
 
@@ -509,8 +509,8 @@ export default function WorkspaceClient() {
                             <div className="flex h-7 w-7 items-center justify-center rounded-full bg-warning/15 text-warning">
                               <AlertTriangle className="h-4 w-4" />
                             </div>
-                            <p className="text-[13px] font-medium text-on-surface">
-                              {stage === "stale" ? "当前方案已过期，建议重新扫描以同步目录状态。" : "处理被中断，建议重新扫描核心目录。"}
+            <p className="text-[13px] font-medium text-on-surface">
+                              {stage === "stale" ? "当前方案已过期，建议重新扫描以同步目录状态。" : "任务已中断，建议重新扫描后再继续。"}
                             </p>
                           </div>
                           <div className="flex items-center gap-2">
@@ -527,7 +527,7 @@ export default function WorkspaceClient() {
                               className="inline-flex items-center gap-1.5 rounded-[8px] bg-warning px-3 py-1.5 text-[12px] font-bold text-white shadow-sm transition-opacity hover:opacity-90"
                             >
                               <RefreshCw className="h-3.5 w-3.5" />
-                              立即刷新
+                              重新扫描
                             </button>
                           </div>
                         </div>
@@ -539,6 +539,7 @@ export default function WorkspaceClient() {
                         stage={stage}
                         isBusy={isBusy}
                         readOnly={isReadOnly}
+                        precheckSummary={snapshot?.precheck_summary}
                         onRunPrecheck={() => {
                           if (!isReadOnly) {
                             void runPrecheck();
@@ -620,77 +621,60 @@ export default function WorkspaceClient() {
   );
 
   const conversationHeader = (
-    <div className="z-20 flex shrink-0 items-start justify-between gap-3 border-b border-on-surface/8 bg-surface px-4 py-3.5 lg:px-5 lg:py-4">
-      <div className="flex min-w-0 items-start gap-3">
-        <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-[12px] border border-primary/10 bg-primary/[0.05] text-primary/75 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] sm:flex">
-          <FolderTree className="h-4.5 w-4.5" />
-        </div>
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
-            <h2 className="truncate text-[18px] font-black tracking-tight text-on-surface lg:text-[1.1rem]">
-              {targetDirName}
-            </h2>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-on-surface/8 bg-surface-container-low px-2.5 py-0.5 text-[11px] font-bold text-on-surface-variant">
-                <span className={cn(
-                  "h-1.5 w-1.5 rounded-full",
-                  stage === "completed" ? "bg-success" : "bg-warning/80"
-                )} />
-                {getFriendlyStage(stage)}
-              </span>
-              
-              {assistantRuntime ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/10 bg-primary/6 px-2.5 py-0.5 text-[11px] font-bold text-primary/75">
-                  <Loader2 className="h-3 w-3 animate-spin-slow" />
-                  {assistantRuntime.label}
-                </span>
-              ) : null}
-
-              {streamStatus !== "connected" ? (
-                <span
-                  className={cn(
-                    "rounded-full border px-2.5 py-0.5 text-[11px] font-bold",
-                    streamStatus === "connecting" && "border-warning/20 bg-warning-container/20 text-warning",
-                    streamStatus === "reconnecting" && "border-warning/20 bg-warning-container/30 text-warning",
-                    streamStatus === "offline" && "border-on-surface/10 bg-surface-container-low text-ui-muted",
-                  )}
-                >
-                  {streamStatus === "connecting"
-                    ? "正在连接"
-                    : streamStatus === "reconnecting"
-                      ? "连接中断，重连中"
-                      : "连接已断开"}
-                </span>
-              ) : null}
-            </div>
-          </div>
+    <div className="z-20 flex shrink-0 items-center justify-between gap-3 border-b border-on-surface/8 bg-surface px-4 py-2.5 lg:px-5">
+      <div className="flex min-w-0 items-center gap-4">
+        {/* Task title removed because it's redundant with navbar breadcrumb */}
+        
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-on-surface/8 bg-surface-container-low px-2 py-0.5 text-[11px] font-bold text-on-surface-variant">
+            <span className={cn(
+              "h-1.5 w-1.5 rounded-full",
+              stage === "completed" ? "bg-success" : "bg-warning/80"
+            )} />
+            {getFriendlyStage(stage)}
+          </span>
           
-          <p className="max-w-[44rem] text-[12px] leading-relaxed text-on-surface-variant/68" title={targetPath}>
-            {nextStepHint}
-          </p>
+          {assistantRuntime ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/10 bg-primary/6 px-2 py-0.5 text-[11px] font-bold text-primary/75">
+              <Loader2 className="h-3 w-3 animate-spin-slow" />
+              {assistantRuntime.label}
+            </span>
+          ) : null}
+
+          {streamStatus !== "connected" ? (
+            <span
+              className={cn(
+                "rounded-full border px-2 py-0.5 text-[11px] font-bold",
+                streamStatus === "connecting" && "border-warning/20 bg-warning-container/20 text-warning",
+                streamStatus === "reconnecting" && "border-warning/20 bg-warning-container/30 text-warning",
+                streamStatus === "offline" && "border-on-surface/10 bg-surface-container-low text-ui-muted",
+              )}
+            >
+              {streamStatus === "connecting"
+                ? "正在连接"
+                : streamStatus === "reconnecting"
+                  ? "连接中断，重连中"
+                  : "连接已断开"}
+            </span>
+          ) : null}
         </div>
+
+        <div className="h-3 w-[1px] bg-on-surface/10 hidden md:block" />
+
+        <p className="hidden md:block truncate text-[12px] font-medium text-on-surface-variant/70" title={targetPath}>
+          {nextStepHint}
+        </p>
       </div>
 
-      <div className="relative flex items-center gap-3 shrink-0">
+      <div className="flex items-center gap-3 shrink-0">
         <button
           type="button"
-          onClick={() => setShowExitMenu((current) => !current)}
-          className="inline-flex items-center gap-1.5 rounded-[8px] border border-on-surface/8 bg-surface-container-low px-3 py-1.5 text-[12px] font-medium text-on-surface-variant transition-colors hover:border-on-surface/12 hover:text-on-surface"
+          onClick={handleExitWorkbench}
+          className="inline-flex items-center gap-1.5 rounded-[8px] border border-on-surface/10 bg-on-surface/[0.03] px-2.5 py-1.5 text-[11.5px] font-bold text-on-surface-variant transition-all hover:bg-on-surface/5 hover:text-on-surface active:scale-95"
         >
-          <MoreHorizontal className="h-3.5 w-3.5" />
-          更多
+          <LogOut className="h-3.5 w-3.5" />
+          结束并返回
         </button>
-        {showExitMenu ? (
-          <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-[190px] rounded-[10px] border border-on-surface/8 bg-surface-container-lowest p-1.5 shadow-[0_10px_24px_rgba(0,0,0,0.12)]">
-            <button
-              type="button"
-              onClick={handleExitWorkbench}
-              className="w-full rounded-[8px] px-3 py-2 text-left text-[12px] font-semibold text-on-surface-variant transition-colors hover:bg-on-surface/5"
-            >
-              结束本次任务
-            </button>
-          </div>
-        ) : null}
       </div>
     </div>
   );
@@ -753,8 +737,8 @@ export default function WorkspaceClient() {
       </ErrorBoundary>
       <ConfirmDialog
         open={exitConfirmOpen}
-        title="回到首页？"
-        description="当前的整理进度会自动保存。你之后可以随时从首页点击‘恢复先前任务’并继续。"
+        title="返回首页？"
+        description="当前的整理进度会自动保存。之后你可以从首页继续这项任务。"
         confirmLabel="确认退出"
         cancelLabel="留在工作台"
         tone="primary"

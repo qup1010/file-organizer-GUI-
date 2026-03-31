@@ -55,7 +55,8 @@ class ApiConfigTests(unittest.TestCase):
                         "name": "默认图标生图",
                         "image_model": {"base_url": "", "model": "", "secret_state": "empty"},
                         "image_size": "1024x1024",
-                        "concurrency_limit": 1,
+                        "analysis_concurrency_limit": 1,
+                        "image_concurrency_limit": 1,
                         "save_mode": "centralized",
                         "text_model": {
                             "name": "默认文本模型",
@@ -67,11 +68,41 @@ class ApiConfigTests(unittest.TestCase):
                     },
                     "presets": [],
                 },
+                "bg_removal": {
+                    "family": "bg_removal",
+                    "configured": True,
+                    "mode": "preset",
+                    "preset_id": "bria-rmbg-2.0",
+                    "active_preset": {
+                        "name": "BRIA RMBG 2.0",
+                        "model_id": "briaai/BRIA-RMBG-2.0",
+                        "api_type": "gradio_space",
+                        "payload_template": '{"data":[{"path":"{{uploaded_path}}"}]}',
+                        "secret_state": "empty",
+                    },
+                    "builtin_presets": [
+                        {
+                            "id": "bria-rmbg-2.0",
+                            "name": "BRIA RMBG 2.0",
+                            "model_id": "briaai/BRIA-RMBG-2.0",
+                            "api_type": "gradio_space",
+                            "payload_template": '{"data":[{"path":"{{uploaded_path}}"}]}',
+                        }
+                    ],
+                    "custom": {
+                        "name": "自定义抠图",
+                        "model_id": "",
+                        "api_type": "gradio_space",
+                        "payload_template": "",
+                        "secret_state": "empty",
+                    },
+                },
             },
             "status": {
                 "text_configured": True,
                 "vision_configured": False,
                 "icon_image_configured": False,
+                "bg_removal_configured": True,
             },
         }
         with mock.patch(
@@ -83,6 +114,7 @@ class ApiConfigTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"]["text_configured"], True)
         self.assertEqual(response.json()["families"]["text"]["active_preset"]["secret_state"], "stored")
+        self.assertEqual(response.json()["families"]["bg_removal"]["preset_id"], "bria-rmbg-2.0")
 
     def test_patch_settings_forwards_atomic_payload(self):
         payload = {
@@ -101,6 +133,16 @@ class ApiConfigTests(unittest.TestCase):
                     "preset": {"image_model": {"base_url": "https://image.example/v1", "model": "gpt-image-1"}},
                     "secret": {"action": "clear"},
                 },
+                "bg_removal": {
+                    "mode": "custom",
+                    "custom": {
+                        "name": "自定义抠图",
+                        "model_id": "custom/rembg",
+                        "api_type": "gradio_space",
+                        "payload_template": '{"data":[{"path":"{{uploaded_path}}"}]}',
+                    },
+                    "secret": {"action": "replace", "value": "hf-token"},
+                },
             },
         }
         expected_snapshot = {"status": {"text_configured": True}}
@@ -113,6 +155,24 @@ class ApiConfigTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), expected_snapshot)
         update_mock.assert_called_once_with(payload)
+
+    def test_get_runtime_family_returns_live_runtime_config(self):
+        with mock.patch(
+            "file_organizer.shared.config_manager.config_manager.service.get_runtime_family_config",
+            return_value={
+                "name": "BRIA RMBG 2.0",
+                "model_id": "briaai/BRIA-RMBG-2.0",
+                "api_type": "gradio_space",
+                "payload_template": '{"data":[{"path":"{{uploaded_path}}"}]}',
+                "api_token": "hf-secret",
+            },
+        ) as runtime_mock:
+            response = self.client.get("/api/settings/runtime/bg_removal")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["model_id"], "briaai/BRIA-RMBG-2.0")
+        self.assertEqual(response.json()["api_token"], "hf-secret")
+        runtime_mock.assert_called_once_with("bg_removal")
 
     def test_settings_preset_routes_forward_to_unified_service(self):
         with mock.patch(

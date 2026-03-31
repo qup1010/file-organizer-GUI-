@@ -1,12 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 
-import { getApiBaseUrl, invokeTauriCommand } from "@/lib/runtime";
+import { createApiClient } from "@/lib/api";
+import { getApiBaseUrl, getApiToken, invokeTauriCommand } from "@/lib/runtime";
 import type { IconPreviewVersion, IconWorkbenchSession } from "@/types/icon-workbench";
-
-const HF_BG_TOKEN_STORAGE_KEY = "file_organizer__hf_bg_token";
-const HF_BG_TOKEN_LEGACY_STORAGE_KEY = "hf_bg_token";
 
 interface UseBackgroundRemovalOptions {
   desktopReady: boolean;
@@ -23,39 +21,18 @@ export function useBackgroundRemoval({
   setError,
   setNotice,
 }: UseBackgroundRemovalOptions) {
-  const [bgApiToken, setBgApiToken] = useState("");
+  const api = useMemo(() => createApiClient(getApiBaseUrl(), getApiToken()), []);
   const [processingBgVersionIds, setProcessingBgVersionIds] = useState<Set<string>>(new Set());
   const [isRemovingBgBatch, setIsRemovingBgBatch] = useState(false);
 
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    const namespacedToken = window.localStorage.getItem(HF_BG_TOKEN_STORAGE_KEY);
-    const legacyToken = window.localStorage.getItem(HF_BG_TOKEN_LEGACY_STORAGE_KEY);
-    const savedToken = namespacedToken || legacyToken;
-    if (savedToken) {
-      setBgApiToken(savedToken);
-      if (!namespacedToken) {
-        window.localStorage.setItem(HF_BG_TOKEN_STORAGE_KEY, savedToken);
-      }
-    }
-    if (legacyToken) {
-      window.localStorage.removeItem(HF_BG_TOKEN_LEGACY_STORAGE_KEY);
-    }
-  }, []);
-
-  const handleBgApiTokenChange = useCallback((token: string) => {
-    setBgApiToken(token);
-    if (typeof window === "undefined") {
-      return;
-    }
-    if (token.trim()) {
-      window.localStorage.setItem(HF_BG_TOKEN_STORAGE_KEY, token);
-    } else {
-      window.localStorage.removeItem(HF_BG_TOKEN_STORAGE_KEY);
-    }
-  }, []);
+  const loadBgRemovalRuntime = useCallback(async () => {
+    return api.getSettingsRuntime<{
+      model_id: string;
+      api_type: string;
+      payload_template: string;
+      api_token?: string | null;
+    }>("bg_removal");
+  }, [api]);
 
   const handleRemoveBg = useCallback(async (folderId: string, version: IconPreviewVersion) => {
     if (!desktopReady || !session) {
@@ -67,25 +44,39 @@ export function useBackgroundRemoval({
     setProcessingBgVersionIds((prev) => new Set(prev).add(processingKey));
 
     try {
-      // 1. 调用 Tauri 从远端获取移除背景后的字节流（不再覆盖本地文件）
-      const processedBytes = await invokeTauriCommand<number[]>("remove_background_for_image", {
+      const runtimeConfig = await loadBgRemovalRuntime();
+      const processedB64 = await invokeTauriCommand<string>("remove_background_for_image", {
         imagePath: version.image_path,
-        apiToken: bgApiToken || null,
+        config: {
+          modelId: runtimeConfig.model_id,
+          apiType: runtimeConfig.api_type,
+          payloadTemplate: runtimeConfig.payload_template,
+          apiToken: runtimeConfig.api_token ?? null,
+        },
       });
 
-      if (!processedBytes || processedBytes.length === 0) {
-        throw new Error("移除背景返回的数据为空");
+      if (!processedB64) {
+        throw new Error("移除背景返回的结果为空");
       }
 
-      // 2. 将字节流发往后端，注册一个带有 'nobg' 后缀的新版本
+      // decode base64
+      const base64Data = processedB64.includes(",") ? processedB64.split(",")[1] : processedB64;
+      const binaryString = atob(base64Data);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
       const response = await fetch(
         `${getApiBaseUrl()}/api/icon-workbench/sessions/${session.session_id}/folders/${folderId}/versions/${version.version_id}/add-processed?suffix=nobg`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/octet-stream",
+            "Authorization": `Bearer ${getApiToken()}`,
+            "x-file-organizer-token": getApiToken(),
           },
-          body: new Uint8Array(processedBytes),
+          body: bytes,
         }
       );
 
@@ -95,15 +86,19 @@ export function useBackgroundRemoval({
       }
 
       const result = await response.json();
-      
-      // 3. 更新全量 Session 状态（后端会返回包含新版本的 session）
       if (result.session) {
         setSession(result.session);
       }
 
       setNotice(`已基于 v${version.version_number} 生成了移除背景的新版本。`);
     } catch (err) {
-      setError(`抠图失败: ${err instanceof Error ? err.message : String(err)}`);
+      console.error("抠图异常详情 (Trace):", err);
+      const isNetworkError = err instanceof TypeError && err.message === "Failed to fetch";
+      const errorMsg = isNetworkError 
+        ? "Failed to fetch (无法连接至本地服务，请确认后端 API 是否连接正常且 Token 正确)" 
+        : (err instanceof Error ? err.message : String(err));
+      
+      setError(`抠图失败: ${errorMsg}`);
     } finally {
       setProcessingBgVersionIds((prev) => {
         const next = new Set(prev);
@@ -111,7 +106,7 @@ export function useBackgroundRemoval({
         return next;
       });
     }
-  }, [bgApiToken, desktopReady, session, setError, setNotice, setSession]);
+  }, [desktopReady, loadBgRemovalRuntime, session, setError, setNotice, setSession]);
 
   const handleRemoveBgBatch = useCallback(async () => {
     if (!session || session.folders.length === 0 || !desktopReady) {
@@ -147,8 +142,6 @@ export function useBackgroundRemoval({
   }, [desktopReady, handleRemoveBg, session, setNotice]);
 
   return {
-    bgApiToken,
-    handleBgApiTokenChange,
     processingBgVersionIds,
     isRemovingBgBatch,
     handleRemoveBg,

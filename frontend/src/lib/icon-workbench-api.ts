@@ -1,11 +1,9 @@
 import type {
   ApplyReadyPreparation,
-  IconWorkbenchActionResponse,
   IconWorkbenchClientActionReportPayload,
   IconTemplate,
   IconWorkbenchConfig,
   IconWorkbenchConfigPayload,
-  IconWorkbenchMessagePayload,
   IconWorkbenchSession,
   IconWorkbenchTargetUpdatePayload,
 } from "@/types/icon-workbench";
@@ -51,9 +49,6 @@ export interface IconWorkbenchApiClient {
   deleteTemplate(template_id: string): Promise<{ status: string; template_id: string }>;
   applyTemplate(session_id: string, template_id: string, folder_ids: string[]): Promise<IconWorkbenchSession>;
   prepareApplyReady(session_id: string, folder_ids: string[]): Promise<ApplyReadyPreparation>;
-  sendMessage(session_id: string, payload: IconWorkbenchMessagePayload): Promise<IconWorkbenchSession>;
-  confirmAction(session_id: string, action_id: string): Promise<IconWorkbenchActionResponse>;
-  dismissAction(session_id: string, action_id: string): Promise<IconWorkbenchSession>;
   reportClientAction(session_id: string, payload: IconWorkbenchClientActionReportPayload): Promise<IconWorkbenchSession>;
 }
 
@@ -214,30 +209,6 @@ export function createIconWorkbenchApiClient(baseUrl: string, apiToken?: string)
         body: JSON.stringify({ folder_ids }),
       });
       return parseResponse<ApplyReadyPreparation>(response);
-    },
-    async sendMessage(session_id, payload) {
-      const response = await fetch(joinUrl(baseUrl, `/api/icon-workbench/sessions/${session_id}/messages`), {
-        method: "POST",
-        headers: buildAuthHeaders(apiToken, { "Content-Type": "application/json" }),
-        body: JSON.stringify(payload),
-      });
-      const body = await parseResponse<{ session: IconWorkbenchSession }>(response);
-      return body.session;
-    },
-    async confirmAction(session_id, action_id) {
-      const response = await fetch(joinUrl(baseUrl, `/api/icon-workbench/sessions/${session_id}/actions/${action_id}/confirm`), {
-        method: "POST",
-        headers: buildAuthHeaders(apiToken),
-      });
-      return parseResponse<IconWorkbenchActionResponse>(response);
-    },
-    async dismissAction(session_id, action_id) {
-      const response = await fetch(joinUrl(baseUrl, `/api/icon-workbench/sessions/${session_id}/actions/${action_id}/dismiss`), {
-        method: "POST",
-        headers: buildAuthHeaders(apiToken),
-      });
-      const body = await parseResponse<{ session: IconWorkbenchSession }>(response);
-      return body.session;
     },
     async reportClientAction(session_id, payload) {
       const response = await fetch(joinUrl(baseUrl, `/api/icon-workbench/sessions/${session_id}/client-actions/report`), {

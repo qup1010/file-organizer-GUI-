@@ -69,6 +69,7 @@ export interface ApiClient {
   getHistory(): Promise<HistoryItem[]>;
   deleteHistoryEntry(entry_id: string): Promise<{ status: string; entry_id: string; entry_type: string }>;
   getSettings(): Promise<SettingsSnapshot>;
+  getSettingsRuntime<T = Record<string, unknown>>(family: string): Promise<T>;
   updateSettings(payload: SettingsUpdatePayload): Promise<SettingsSnapshot>;
   activateSettingsPreset(family: "text" | "vision" | "icon_image", id: string): Promise<{ status: string }>;
   createSettingsPreset(family: "text" | "vision" | "icon_image", payload: SettingsPresetCreatePayload): Promise<{ status: string; id: string }>;
@@ -220,6 +221,12 @@ export function createApiClient(baseUrl: string, apiToken?: string): ApiClient {
         headers: buildAuthHeaders(apiToken),
       });
       return parseResponse<SettingsSnapshot>(response);
+    },
+    async getSettingsRuntime(family) {
+      const response = await fetch(joinUrl(baseUrl, `/api/settings/runtime/${family}`), {
+        headers: buildAuthHeaders(apiToken),
+      });
+      return parseResponse(response);
     },
     async updateSettings(payload) {
       const response = await fetch(joinUrl(baseUrl, "/api/settings"), {

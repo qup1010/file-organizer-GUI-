@@ -1,36 +1,57 @@
 # Desktop Integration
 
-这个目录放桌面宿主相关文件，当前已经具备一套最小可运行的 Tauri 壳：
+这个目录放桌面宿主相关文件，当前已经具备一套可运行的 Tauri 桌面壳。
+
+## 当前职责
+
+- 拉起本地 `python -m file_organizer.api`
+- 通过 `output/runtime/backend.json` 发现并校验后端实例
+- 向前端注入 `window.__FILE_ORGANIZER_RUNTIME__`
+- 提供目录选择、批量目录选择、文件夹图标应用 / 恢复、抠图测试等原生命令
+
+## 目录说明
 
 - `src-tauri/`
-  - 守护本地 Python FastAPI 子进程
-  - 通过 `output/runtime/backend.json` 发现后端地址
-  - 把 `window.__FILE_ORGANIZER_RUNTIME__` 注入给前端
+  - `src/backend.rs`：后端子进程拉起与管理
+  - `src/runtime.rs`：运行时文件读取、健康校验、前端注入脚本
+  - `src/icon_apply.rs`：Windows 文件夹图标应用 / 恢复
+  - `src/bg_removal.rs`：抠图相关原生命令
 - `package.json`
-  - 提供 `npm run tauri:dev`
-  - 提供 `npm run tauri:build`
+  - `npm run tauri:dev`
+  - `npm run tauri:build`
 - `runtime/backend.json.example`
   - 说明前后端共享的运行时文件结构
 
 ## 当前运行方式
 
-1. 先确保 `frontend/` 依赖已安装。
-2. 在 `desktop/` 目录安装 Tauri CLI 依赖：
-   - `npm install`
-3. 在 `desktop/` 目录启动桌面开发模式：
-   - `npm run tauri:dev`
+```powershell
+Set-Location desktop
+npm install
+npm run tauri:dev
+```
 
 Tauri 启动后会：
 
-- 先拉起 `python -m file_organizer.api`
-- 等待 `output/runtime/backend.json`
-- 将其中的 `base_url` 注入到前端窗口
+1. 拉起 `python -m file_organizer.api`
+2. 等待 `output/runtime/backend.json`
+3. 通过 `/api/health` 校验实例归属与健康状态
+4. 向前端注入运行时对象
 
 前端读取入口固定为：
 
 ```ts
-window.__FILE_ORGANIZER_RUNTIME__.base_url
+window.__FILE_ORGANIZER_RUNTIME__
 ```
+
+当前注入字段至少包括：
+
+- `base_url`
+- `host`
+- `port`
+- `pid`
+- `started_at`
+- `instance_id`
+- `api_token`
 
 ## 运行时契约
 
@@ -38,10 +59,12 @@ window.__FILE_ORGANIZER_RUNTIME__.base_url
 
 - `output/runtime/backend.json`
 
-最小字段包括：
+该文件当前包含的最小字段包括：
 
 - `base_url`
 - `host`
 - `port`
 - `pid`
 - `started_at`
+- `instance_id`
+

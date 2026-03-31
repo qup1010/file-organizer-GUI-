@@ -10,14 +10,13 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { createApiClient } from "@/lib/api";
 import { createIconWorkbenchApiClient } from "@/lib/icon-workbench-api";
-import { getApiBaseUrl, getApiToken, invokeTauriCommand, isTauriDesktop, pickDirectoriesWithTauri } from "@/lib/runtime";
+import { getApiBaseUrl, getApiToken, invokeTauriCommand, isTauriDesktop, openDirectoryWithTauri, pickDirectoriesWithTauri } from "@/lib/runtime";
 import { cn } from "@/lib/utils";
 import type {
   ApplyIconResult,
   FolderIconCandidate,
   IconWorkbenchConfig,
   IconPreviewVersion,
-  IconWorkbenchPendingAction,
   IconWorkbenchSession,
 } from "@/types/icon-workbench";
 import { IconWorkbenchFooterBar } from "./icon-workbench-footer-bar";
@@ -92,6 +91,7 @@ export default function IconWorkbenchV2() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [actionLabel, setActionLabel] = useState<string | null>(null);
+  const [lastAppliedFolderPath, setLastAppliedFolderPath] = useState<string | null>(null);
   const [generateProgress, setGenerateProgress] = useState<GenerateFlowProgress | null>(null);
 
   const [expandedFolderId, setExpandedFolderId] = useState<string | null>(null);
@@ -102,7 +102,6 @@ export default function IconWorkbenchV2() {
   const [activeProcessingId, setActiveProcessingId] = useState<string | null>(null);
   const [isApplyingId, setIsApplyingId] = useState<string | null>(null);
   const [batchApplyLoading, setBatchApplyLoading] = useState(false);
-  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
   const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
@@ -142,8 +141,6 @@ export default function IconWorkbenchV2() {
     deleteTemplate,
   } = useIconTemplates({ iconApi, setError, setNotice });
   const {
-    bgApiToken,
-    handleBgApiTokenChange,
     processingBgVersionIds,
     isRemovingBgBatch,
     handleRemoveBg,
@@ -172,7 +169,7 @@ export default function IconWorkbenchV2() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const detail = hasTargets ? `已选 ${targetCount} 个目标文件夹` : "选择目标文件夹并开始生成";
+    const detail = hasTargets ? `已选 ${targetCount} 个目标文件夹` : "选择目标文件夹并生成预览";
     window.localStorage.setItem(ICONS_CONTEXT_KEY, JSON.stringify({ detail }));
     window.dispatchEvent(new Event(APP_CONTEXT_EVENT));
   }, [hasTargets, targetCount]);
@@ -279,12 +276,12 @@ export default function IconWorkbenchV2() {
       return "先选择一个或多个目标文件夹";
     }
     if (!hasSelectedStyle) {
-      return `已选择 ${targetCount} 个目标文件夹，下一步请选择风格`;
+      return `已选择 ${targetCount} 个目标文件夹，下一步请选择风格模板`;
     }
-    return `已准备完成，将为 ${targetCount} 个目标文件夹按「${selectedTemplate?.name || "当前风格"}」风格生成图标`;
+    return `已选择 ${targetCount} 个目标文件夹和「${selectedTemplate?.name || "当前模板"}」模板，可以开始生成预览`;
   }, [hasSelectedStyle, hasTargets, selectedTemplate?.name, targetCount]);
 
-  const primaryCtaLabel = !hasTargets ? "选择目标文件夹" : !hasSelectedStyle ? "选择风格" : `开始生成 ${targetCount} 个图标`;
+  const primaryCtaLabel = !hasTargets ? "选择目标文件夹" : !hasSelectedStyle ? "选择风格模板" : `生成 ${targetCount} 个预览`;
   const primaryActionKind: GuideActionKind = !hasTargets ? "target" : !hasSelectedStyle ? "style" : "generate";
   const generateBlockedReason = !hasTargets
     ? "先选择目标文件夹"
@@ -432,6 +429,7 @@ export default function IconWorkbenchV2() {
 
       await reportClientAction("apply_icons", report);
       applySession(await iconApi.selectVersion(session.session_id, folderId, version.version_id));
+      setLastAppliedFolderPath(folder.folder_path);
       setNotice(`「${folder.folder_name}」图标已应用。`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "应用图标失败");
@@ -491,7 +489,7 @@ export default function IconWorkbenchV2() {
 
   const handleResetSession = useCallback(async () => {
     if (!session) return;
-    setActionLabel("正在重置图标工坊...");
+      setActionLabel("正在重置图标工作区...");
     try {
       const nextSession = await iconApi.updateTargets(session.session_id, { target_paths: [], mode: "replace" });
       applySession(nextSession);
@@ -537,31 +535,6 @@ export default function IconWorkbenchV2() {
     }
   };
 
-  const handleConfirmAction = async (action: IconWorkbenchPendingAction) => {
-    if (!session) return;
-    setActionLoadingId(action.action_id);
-    try {
-      const response = await iconApi.confirmAction(session.session_id, action.action_id);
-      applySession(response.session);
-    } catch {
-      setError("执行待办动作失败");
-    } finally {
-      setActionLoadingId(null);
-    }
-  };
-
-  const handleDismissAction = async (action: IconWorkbenchPendingAction) => {
-    if (!session) return;
-    setActionLoadingId(action.action_id);
-    try {
-      applySession(await iconApi.dismissAction(session.session_id, action.action_id));
-    } catch {
-      setError("取消待办动作失败");
-    } finally {
-      setActionLoadingId(null);
-    }
-  };
-
   const handleGuidePrimaryAction = () => {
     if (!hasTargets) {
       void handleChooseTargets();
@@ -583,27 +556,27 @@ export default function IconWorkbenchV2() {
     );
   }, [notice]);
 
-  const statusRail = (error || shouldShowNotice || (session?.pending_actions?.length ?? 0) > 0) ? (
+  const statusRail = (error || shouldShowNotice) ? (
     <div className="space-y-3 border-b border-on-surface/6 bg-white/36 px-6 py-3 backdrop-blur-sm">
       {error ? <ErrorAlert message={error} onClose={() => setError(null)} /> : null}
       {shouldShowNotice ? (
         <div className="flex items-center gap-3 rounded-2xl border border-primary/10 bg-primary/4 px-4 py-3 text-[13px] text-primary">
           <p className="flex-1 font-bold">{notice}</p>
-          <button onClick={() => setNotice(null)} className="opacity-60 hover:opacity-100">关闭</button>
+          {lastAppliedFolderPath && notice?.includes("图标已应用") && (
+            <button 
+              onClick={() => openDirectoryWithTauri(lastAppliedFolderPath)}
+              className="flex items-center gap-2 rounded-lg bg-primary/10 px-3 py-1.5 text-[12px] font-black text-primary hover:bg-primary/20 transition-colors"
+            >
+              <FolderOpen className="h-3.5 w-3.5" />
+              打开目录查看
+            </button>
+          )}
+          <button onClick={() => {
+            setNotice(null);
+            setLastAppliedFolderPath(null);
+          }} className="px-2 text-[12px] font-bold opacity-40 hover:opacity-100">关闭</button>
         </div>
       ) : null}
-      {session?.pending_actions?.map((action) => (
-        <div key={action.action_id} className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-warning/20 bg-warning/6 p-4">
-          <div className="max-w-[400px]">
-            <p className="text-[14px] font-black text-on-surface">{action.title}</p>
-            <p className="mt-1 text-[12px] text-ui-muted">{action.description}</p>
-          </div>
-          <div className="flex gap-2">
-            <Button size="sm" onClick={() => handleConfirmAction(action)} loading={actionLoadingId === action.action_id}>确认执行</Button>
-            <Button variant="secondary" size="sm" onClick={() => handleDismissAction(action)} disabled={actionLoadingId === action.action_id}>取消</Button>
-          </div>
-        </div>
-      ))}
     </div>
   ) : null;
 
@@ -674,14 +647,47 @@ export default function IconWorkbenchV2() {
     </div>
   ) : null;
 
-  const renderEmptyState = (title: string, description: string) => (
-    <div className="flex-1 px-6 py-5">
-      <EmptyState icon={FolderOpen} title={title} description={description}>
-        <Button size="lg" onClick={handleChooseTargets} className="px-7">
-          <FolderPlus className="mr-2 h-5 w-5" />
-          {session ? "添加目标文件夹" : "选择目标文件夹"}
+  const renderEmptyState = () => (
+    <div className="flex-1 px-6 py-12 lg:py-20">
+      <div className="mx-auto flex max-w-[640px] flex-col items-center text-center">
+        <div className="relative mb-8 flex h-20 w-20 items-center justify-center rounded-[24px] bg-primary/10 text-primary shadow-[0_12px_24px_-8px_rgba(var(--primary-rgb),0.3)]">
+          <FolderPlus className="h-10 w-10" />
+          <div className="absolute -right-2 -top-2 flex h-8 w-8 items-center justify-center rounded-full border-[3px] border-white bg-primary text-white shadow-sm">
+            <Sparkles className="h-4 w-4" />
+          </div>
+        </div>
+        
+        <h2 className="mb-4 text-[2.2rem] font-black tracking-tight text-on-surface">还没有目标文件夹</h2>
+        
+        <div className="mb-10 space-y-4">
+          <p className="text-[17px] font-bold text-on-surface/80">
+            为目标文件夹生成可预览、可应用的图标方案。
+          </p>
+          <p className="mx-auto max-w-md text-[14px] leading-relaxed text-ui-muted opacity-80">
+            选择目标文件夹和风格模板后，系统会根据文件夹名称与内容生成多版预览，确认后再应用到系统图标。
+          </p>
+        </div>
+
+        <Button size="lg" onClick={handleChooseTargets} className="h-14 rounded-[8px] px-10 text-[16px] font-black shadow-[0_12px_24px_-4px_rgba(var(--primary-rgb),0.2)]">
+          <FolderPlus className="mr-3 h-5.5 w-5.5" />
+          选择目标文件夹
         </Button>
-      </EmptyState>
+        
+        <div className="mt-12 grid grid-cols-3 gap-6 border-t border-on-surface/6 pt-10">
+          <div className="space-y-2">
+            <p className="text-[12px] font-black uppercase tracking-[0.15em] text-primary/70">1. 选择目录</p>
+            <p className="text-[12px] font-semibold text-ui-muted">一次支持多个文件夹</p>
+          </div>
+          <div className="space-y-2">
+            <p className="text-[12px] font-black uppercase tracking-[0.15em] text-primary/70">2. 选择模板</p>
+            <p className="text-[12px] font-semibold text-ui-muted">选定生成图标的风格模板</p>
+          </div>
+          <div className="space-y-2">
+            <p className="text-[12px] font-black uppercase tracking-[0.15em] text-primary/70">3. 生成并应用</p>
+            <p className="text-[12px] font-semibold text-ui-muted">先看预览，再决定是否应用</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 
@@ -690,7 +696,7 @@ export default function IconWorkbenchV2() {
       <div className="flex flex-1 items-center justify-center bg-surface">
         <div className="flex flex-col items-center gap-4">
           <LoaderCircle className="h-10 w-10 animate-spin text-primary/40" />
-          <p className="text-[14px] font-bold text-on-surface">初始化图标工坊...</p>
+          <p className="text-[14px] font-bold text-on-surface">正在加载图标工作区...</p>
         </div>
       </div>
     );
@@ -701,7 +707,7 @@ export default function IconWorkbenchV2() {
       <div className="flex flex-1 items-center justify-center bg-surface">
         <div className="flex flex-col items-center gap-4">
           <LoaderCircle className="h-10 w-10 animate-spin text-primary/40" />
-          <p className="text-[14px] font-bold text-on-surface">正在恢复图标工坊状态...</p>
+          <p className="text-[14px] font-bold text-on-surface">正在恢复图标工作区...</p>
         </div>
       </div>
     );
@@ -719,13 +725,15 @@ export default function IconWorkbenchV2() {
         selectedTemplateName={selectedTemplate?.name || "请先选择风格"}
       />
 
-      <IconWorkbenchGuideBar
-        statusText={topStatusText}
-        primaryCtaLabel={primaryCtaLabel}
-        primaryActionKind={primaryActionKind}
-        primaryCtaDisabled={isBusy}
-        onPrimaryAction={handleGuidePrimaryAction}
-      />
+      {hasTargets ? (
+        <IconWorkbenchGuideBar
+          statusText={topStatusText}
+          primaryCtaLabel={primaryCtaLabel}
+          primaryActionKind={primaryActionKind}
+          primaryCtaDisabled={isBusy}
+          onPrimaryAction={handleGuidePrimaryAction}
+        />
+      ) : null}
 
       {statusRail}
       {processingBanner}
@@ -735,8 +743,8 @@ export default function IconWorkbenchV2() {
           <div className="flex items-center gap-3 text-warning">
             <AlertCircle className="h-5 w-5" />
             <div className="space-y-0.5">
-              <p className="text-[13px] font-black text-on-surface">图标生成模型未配置</p>
-              <p className="text-[12px] font-medium text-ui-muted">未完成配置将无法生成新图标，请前往设置页面完善信息。</p>
+              <p className="text-[13px] font-black text-on-surface">图标生成模型尚未配置</p>
+              <p className="text-[12px] font-medium text-ui-muted">未完成配置前，暂时不能生成新的图标预览。请先到设置里补全信息。</p>
             </div>
           </div>
           <Link href="/settings">
@@ -748,10 +756,7 @@ export default function IconWorkbenchV2() {
       )}
 
       {!hasTargets ? (
-        renderEmptyState(
-          session ? "当前还没有目标文件夹" : "先选择一个或多个要美化图标的文件夹",
-          "选择目标后，再挑一个风格，就可以为这些文件夹生成图标版本。",
-        )
+        renderEmptyState()
       ) : (
         <IconWorkbenchFolderList
           folders={session?.folders || []}
@@ -814,8 +819,6 @@ export default function IconWorkbenchV2() {
           setStylePanelOpen(false);
           setTemplateDrawerOpen(true);
         }}
-        bgApiToken={bgApiToken}
-        onBgApiTokenChange={handleBgApiTokenChange}
       />
 
       <IconWorkbenchTemplateDrawer
@@ -843,28 +846,39 @@ export default function IconWorkbenchV2() {
           src={buildImageSrc(previewVersion, baseUrl, apiToken)}
           title={`版本预览 - v${previewVersion.version_number}`}
           subtitle={selectedTemplate?.name || "预览"}
+          localImagePath={previewVersion.image_path}
+          folderName={session?.folders.find(f => f.versions.some(v => v.version_id === previewVersion.version_id))?.folder_name}
+          folderPath={session?.folders.find(f => f.versions.some(v => v.version_id === previewVersion.version_id))?.folder_path}
+          isApplied={session?.folders.some(f => f.current_version_id === previewVersion.version_id)}
+          onOpenFolder={openDirectoryWithTauri}
           onClose={() => setPreviewVersion(null)}
+          onApply={() => {
+            const folder = session?.folders.find(f => f.versions.some(v => v.version_id === previewVersion.version_id));
+            if (folder) handleApplyVersion(folder.folder_id, previewVersion);
+          }}
+          onRegenerate={() => {
+             const folder = session?.folders.find(f => f.versions.some(v => v.version_id === previewVersion.version_id));
+             if (folder) runGenerateFlow([folder.folder_id]);
+          }}
+          isApplying={isApplyingId === previewVersion.version_id}
+          imageModelName={workbenchConfig?.image_model.model || "默认模型"}
         />
       ) : null}
 
       <ConfirmDialog
         open={restoreConfirmOpen}
+        title="还原默认图标？"
+        description={`确定要将文件夹「${folderToRestore?.folder_name}」恢复为系统默认图标吗？`}
         onClose={() => setRestoreConfirmOpen(false)}
-        title="还原默认图标"
-        description={folderToRestore ? `确定要将「${folderToRestore.folder_name}」还原为默认系统图标吗？` : "确定要还原默认图标吗？"}
-        confirmLabel="还原"
-        tone="danger"
-        onConfirm={handleRestoreIcon}
+        onConfirm={() => void handleRestoreIcon()}
       />
 
       <ConfirmDialog
         open={resetConfirmOpen}
+        title="重置工作台？"
+        description="确定要清空当前所有目标文件夹吗？此操作不会删除任何文件或已生成的图标记录。"
         onClose={() => setResetConfirmOpen(false)}
-        title="清空所有目标"
-        description="确定要移除当前工作台中所有的目标文件夹吗？这将清空相关的预览记录。"
-        confirmLabel="确认清空"
-        tone="danger"
-        onConfirm={handleResetSession}
+        onConfirm={() => void handleResetSession()}
       />
     </div>
   );

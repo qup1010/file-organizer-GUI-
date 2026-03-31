@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ChevronRight, FolderPlus, LayoutGrid, Settings2, Sparkles, Trash2 } from "lucide-react";
+import { ChevronRight, FolderPlus, Settings2, Sparkles, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
@@ -22,25 +22,27 @@ export function IconWorkbenchToolbar({
   onClearTargets,
   onOpenStylePanel,
   onOpenTemplateDrawer,
-  selectedTemplateName = "请先选择风格",
+  selectedTemplateName = "请先选择风格模板",
 }: IconWorkbenchToolbarProps) {
-  const targetSummary = targetCount > 0 ? `已选择 ${targetCount} 个目标文件夹` : "请先选择要美化图标的文件夹";
+  const targetSummary = targetCount > 0 ? `已选择 ${targetCount} 个目标文件夹` : "请先选择目标文件夹";
   const targetDetail = targetCount > 0
-    ? latestTargetPath || "你可以继续追加新的目标文件夹。"
-    : "支持一次选择多个目标文件夹，并在工作台里继续追加。";
+    ? latestTargetPath || "你可以继续添加新的目标文件夹。"
+    : "支持一次选择多个目标文件夹，并在工作区里继续添加。";
 
   return (
     <div className="glass-surface flex min-h-[64px] shrink-0 items-center justify-between border-b border-on-surface/6 px-6 py-2.5">
       <div className="flex items-center gap-3 overflow-hidden">
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={onAddTargets}
-          className="shrink-0 bg-primary/8 text-primary hover:bg-primary/12"
-        >
-          <FolderPlus className="h-4 w-4" />
-          {targetCount > 0 ? "添加目标文件夹" : "选择目标文件夹"}
-        </Button>
+        {targetCount > 0 && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={onAddTargets}
+            className="shrink-0 bg-primary/8 text-primary hover:bg-primary/12"
+          >
+            <FolderPlus className="h-4 w-4" />
+            添加目标文件夹
+          </Button>
+        )}
 
         {targetCount > 0 && (
           <Button
@@ -55,7 +57,7 @@ export function IconWorkbenchToolbar({
         )}
 
         <div className="flex min-w-0 items-center gap-2 overflow-hidden text-[13px] font-medium text-ui-muted">
-          <ChevronRight className="h-3 w-3 shrink-0 opacity-40" />
+          {targetCount > 0 && <ChevronRight className="h-3 w-3 shrink-0 opacity-40" />}
           <div className="min-w-0">
             <p className="truncate text-[14px] font-bold tracking-tight text-on-surface" title={targetSummary}>
               {targetSummary}
@@ -76,7 +78,7 @@ export function IconWorkbenchToolbar({
             <Sparkles className="h-3.5 w-3.5" />
           </div>
           <div className="flex flex-col items-start pr-1 text-left">
-            <span className="text-[10px] font-bold text-ui-muted opacity-80">当前风格</span>
+            <span className="text-[10px] font-bold text-ui-muted opacity-80">当前模板</span>
             <span className="max-w-[140px] truncate text-[13px] font-bold tracking-tight text-on-surface">
               {selectedTemplateName}
             </span>
@@ -90,7 +92,7 @@ export function IconWorkbenchToolbar({
           size="icon"
           onClick={onOpenTemplateDrawer}
           className="h-10 w-10 hover:bg-on-surface/4"
-          title="管理模板"
+          title="管理风格模板"
         >
           <Settings2 className="h-5 w-5 text-ui-muted" />
         </Button>

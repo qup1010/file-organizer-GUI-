@@ -12,8 +12,6 @@ interface IconWorkbenchStylePanelProps {
   onSelect: (id: string) => void;
   onRequestManageTemplate?: (id: string) => void;
   selectedTemplateId: string;
-  bgApiToken: string;
-  onBgApiTokenChange: (token: string) => void;
 }
 
 /**
@@ -48,8 +46,8 @@ export function IconWorkbenchStylePanel({
             <Palette className="h-5.5 w-5.5" />
           </div>
           <div>
-            <h2 className="text-[18px] font-black tracking-tight text-on-surface leading-tight">选择图标风格</h2>
-            <p className="text-[12px] font-medium text-ui-muted">点击任意模板即可直接应用</p>
+            <h2 className="text-[18px] font-black tracking-tight text-on-surface leading-tight">选择风格模板</h2>
+            <p className="text-[12px] font-medium text-ui-muted">选中后会作为当前生成模板</p>
           </div>
         </div>
         <button
@@ -107,7 +105,7 @@ export function IconWorkbenchStylePanel({
                     {template.name}
                   </h3>
                   <p className="line-clamp-2 text-[13px] leading-relaxed text-ui-muted italic">
-                    {template.description || "为文件夹注入灵魂的艺术风格..."}
+                    {template.description || "用于生成这一类文件夹图标的默认风格。"}
                   </p>
                 </div>
 
@@ -117,10 +115,10 @@ export function IconWorkbenchStylePanel({
                     "rounded-full px-2.5 py-0.5 text-[10px] font-bold tracking-wider",
                     template.is_builtin ? "bg-on-surface/6 text-ui-muted" : "bg-primary/10 text-primary"
                   )}>
-                    {template.is_builtin ? "BUILT-IN" : "CUSTOM"}
+                    {template.is_builtin ? "内置模板" : "自定义模板"}
                   </span>
                   <span className="text-[11px] font-black text-primary opacity-0 transition-all translate-x-1 group-hover:opacity-100 group-hover:translate-x-0">
-                    USE STYLE →
+                    使用这个模板
                   </span>
                 </div>
               </button>

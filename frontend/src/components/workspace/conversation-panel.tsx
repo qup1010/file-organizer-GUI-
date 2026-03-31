@@ -101,7 +101,7 @@ function CodeBlock({ children, className }: { children: React.ReactNode; classNa
   };
 
   return (
-    <div className="group relative my-3 overflow-hidden rounded-[10px] border border-on-surface/8 bg-surface-container-lowest transition-colors">
+    <div className="group relative my-3 overflow-hidden rounded-[4px] border border-on-surface/8 bg-surface-container-lowest transition-colors">
       <div className="flex items-center justify-between border-b border-on-surface/8 bg-surface-container-low px-3 py-2">
         <span className="text-[12px] font-medium text-ui-muted">代码片段</span>
         <button
@@ -125,7 +125,7 @@ function MarkdownProse({ content }: { content: string }) {
       remarkPlugins={[remarkGfm]}
       components={{
         p: ({ node, ...props }) => <div className="mb-1.5 last:mb-0 text-[14px] leading-7" {...props} />,
-        strong: ({ node, ...props }) => <strong className="font-black text-on-surface" {...props} />,
+        strong: ({ node, ...props }) => <strong className="font-bold text-on-surface" {...props} />,
         em: ({ node, ...props }) => <em className="italic text-on-surface/80" {...props} />,
         ul: ({ node, ...props }) => <ul className="mb-2 ml-4 list-disc space-y-1.5 text-[14px]" {...props} />,
         ol: ({ node, ...props }) => <ol className="mb-2 ml-4 list-decimal space-y-1.5 text-[14px]" {...props} />,
@@ -144,7 +144,7 @@ function MarkdownProse({ content }: { content: string }) {
           </a>
         ),
         table: ({ node, ...props }) => (
-          <div className="my-4 overflow-x-auto rounded-[10px] border border-on-surface/8 bg-surface-container-low">
+          <div className="my-4 overflow-x-auto rounded-[4px] border border-on-surface/8 bg-surface-container-low">
             <table className="w-full text-left border-collapse text-[13px]" {...props} />
           </div>
         ),
@@ -152,13 +152,13 @@ function MarkdownProse({ content }: { content: string }) {
         th: ({ node, ...props }) => <th className="px-3 py-2 border-b border-on-surface/5" {...props} />,
         td: ({ node, ...props }) => <td className="px-3 py-2 border-b border-on-surface/[0.03] leading-relaxed" {...props} />,
         hr: ({ node, ...props }) => <hr className="my-5 border-t border-on-surface/5" {...props} />,
-        h1: ({ node, ...props }) => <h1 className="mb-3 mt-4 text-xl font-black font-headline tracking-tighter text-on-surface" {...props} />,
-        h2: ({ node, ...props }) => <h2 className="mb-2.5 mt-4 text-lg font-black tracking-tight text-on-surface/90 flex items-center gap-2" {...props} />,
+        h1: ({ node, ...props }) => <h1 className="mb-3 mt-4 text-xl font-headline font-bold tracking-tighter text-on-surface" {...props} />,
+        h2: ({ node, ...props }) => <h2 className="mb-2.5 mt-4 text-lg font-headline font-bold tracking-tight text-on-surface/90 flex items-center gap-2" {...props} />,
         h3: ({ node, ...props }) => (
           <h3 className="mb-2 mt-3 flex items-center gap-2 text-[14px] font-semibold text-on-surface/70" {...props} />
         ),
         blockquote: ({ node, ...props }) => (
-          <blockquote className="my-4 rounded-r-[10px] border-l-4 border-primary/20 bg-primary/[0.03] px-4 py-3 text-on-surface/75 leading-7" {...props} />
+          <blockquote className="my-4 rounded-r-[4px] border-l-4 border-primary/20 bg-primary/[0.03] px-4 py-3 text-on-surface/75 leading-7" {...props} />
         ),
         code: ({ node, inline, className, children, ...props }: any) => {
           if (inline) {
@@ -209,13 +209,13 @@ function UnresolvedChoicesBubble({
 
   if (isSubmitted) {
     return (
-      <div className="mt-2.5 rounded-[10px] border border-emerald-600/15 bg-emerald-600/[0.03] p-3 text-ui-body">
+      <div className="mt-2.5 rounded-[4px] border border-emerald-600/15 bg-emerald-600/[0.03] p-3 text-ui-body">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-emerald-700">
             <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-white">
               <Check className="h-3 w-3" />
             </div>
-            <span className="text-[13px] font-bold">处理完成</span>
+            <span className="text-[13px] font-bold">已记录这些归类</span>
           </div>
           <span className="text-[12px] font-medium text-emerald-600/60 tabular-nums">
             共处理 {block.items.length} 项
@@ -240,23 +240,23 @@ function UnresolvedChoicesBubble({
   }
 
   return (
-    <div className="mt-2.5 rounded-[16px] border border-on-surface/[0.04] bg-surface-container-low/70 backdrop-blur-md p-4 font-sans shadow-sm ring-1 ring-inset ring-white/5 transition-all">
+    <div className="mt-2.5 rounded-[6px] border border-on-surface/[0.04] bg-surface-container-low/70 backdrop-blur-md p-4 font-sans shadow-sm ring-1 ring-inset ring-white/5 transition-all">
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1">
-          <h4 className="flex items-center gap-2 text-[13px] font-black tracking-tight text-on-surface/90">
+          <h4 className="flex items-center gap-2 text-[13px] font-bold tracking-tight text-on-surface/90">
             <div className="flex h-5 w-5 items-center justify-center rounded-full bg-warning/10 text-warning">
               <Sparkles className="h-3 w-3" />
             </div>
             待确认项目
           </h4>
           <p className="text-[12px] font-medium leading-relaxed text-on-surface-variant/70">
-            {block.summary || "请为以下文件选择合适的归类建议。"}
+            {block.summary || "请为以下文件选择合适的归类位置。"}
           </p>
         </div>
         <button
           type="button"
           onClick={onSetAllReview}
-          className="shrink-0 rounded-[8px] border border-on-surface/5 bg-on-surface/[0.02] px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-on-surface-variant/60 transition-all hover:bg-white hover:text-on-surface active:scale-95"
+          className="shrink-0 rounded-[8px] border border-on-surface/5 bg-on-surface/[0.02] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant/60 transition-all hover:bg-white hover:text-on-surface active:scale-95"
         >
           全部 Review
         </button>
@@ -270,9 +270,9 @@ function UnresolvedChoicesBubble({
           const customSelected = draft.custom_selected;
           
           return (
-            <div key={item.item_id} className="group/item rounded-[12px] border border-on-surface/[0.03] bg-surface-container-lowest/50 p-3.5 transition-all hover:border-primary/10 hover:shadow-md hover:shadow-black/[0.02]">
+            <div key={item.item_id} className="group/item rounded-[4px] border border-on-surface/[0.03] bg-surface-container-lowest/50 p-3.5 transition-all hover:border-primary/10 hover:shadow-md hover:shadow-black/[0.02]">
               <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-3 min-w-0">
-                <span className="shrink-0 text-[13.5px] font-black text-on-surface truncate max-w-[70%] sm:max-w-[60%]">{item.display_name}</span>
+                <span className="shrink-0 text-[13.5px] font-bold text-on-surface truncate max-w-[70%] sm:max-w-[60%]">{item.display_name}</span>
                 <span className="text-[12px] font-medium text-ui-muted opacity-60 truncate flex-1">{item.question}</span>
               </div>
 
@@ -283,7 +283,7 @@ function UnresolvedChoicesBubble({
                     type="button"
                     onClick={() => onPickFolder(item.item_id, folder)}
                     className={cn(
-                      "rounded-full border px-3 py-1 text-[11.5px] font-black transition-all active:scale-95",
+                      "rounded-[4px] border px-3 py-1 text-[11.5px] font-black transition-all active:scale-95",
                       selectedFolder === folder
                         ? "border-primary bg-primary text-white shadow-lg shadow-primary/20"
                         : "border-on-surface/[0.06] bg-surface/80 text-on-surface-variant/80 hover:border-on-surface/20 hover:text-on-surface",
@@ -308,7 +308,7 @@ function UnresolvedChoicesBubble({
                   type="button"
                   onClick={() => onPickCustom(item.item_id)}
                   className={cn(
-                    "rounded-full border px-3 py-1 text-[11.5px] font-black transition-all active:scale-95",
+                    "rounded-[4px] border px-3 py-1 text-[11.5px] font-black transition-all active:scale-95",
                     customSelected
                       ? "border-on-surface bg-on-surface text-white"
                       : "border-on-surface/[0.06] bg-surface/80 text-on-surface-variant/80 hover:bg-on-surface/5 hover:text-on-surface",
@@ -323,7 +323,7 @@ function UnresolvedChoicesBubble({
                   value={currentNote}
                   onChange={(event) => onChangeNote(item.item_id, event.target.value)}
                   placeholder="补充你的分类建议..."
-                  className="mt-3 min-h-[64px] w-full rounded-[10px] border border-on-surface/[0.08] bg-surface-container-low/50 px-3 py-2.5 text-[12px] font-medium leading-relaxed text-on-surface outline-none transition-all focus:border-primary/30"
+                  className="mt-3 min-h-[64px] w-full rounded-[4px] border border-on-surface/[0.08] bg-surface-container-low/50 px-3 py-2.5 text-[12px] font-medium leading-relaxed text-on-surface outline-none transition-all focus:border-primary/30"
                 />
               )}
             </div>
@@ -334,7 +334,7 @@ function UnresolvedChoicesBubble({
           <button
             type="button"
             onClick={() => setIsExpanded(!isExpanded)}
-            className="flex w-full items-center justify-center gap-2 py-1 text-[11px] font-black uppercase tracking-widest text-on-surface-variant/40 transition-colors hover:text-primary"
+            className="flex w-full items-center justify-center gap-2 py-1 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant/40 transition-colors hover:text-primary"
           >
             {isExpanded ? (
               <>收起所有项目 <ChevronDown className="h-3 w-3 rotate-180" /></>
@@ -346,7 +346,7 @@ function UnresolvedChoicesBubble({
       </div>
 
       {warning && (
-        <div className="mt-4 flex items-center gap-2.5 rounded-[10px] border border-error/10 bg-error-container/10 px-4 py-2.5 text-[11.5px] font-bold text-error">
+        <div className="mt-4 flex items-center gap-2.5 rounded-[4px] border border-error/10 bg-error-container/10 px-4 py-2.5 text-[11.5px] font-bold text-error">
           <AlertTriangle className="h-4 w-4 shrink-0" />
           {warning}
         </div>
@@ -356,10 +356,10 @@ function UnresolvedChoicesBubble({
         type="button"
         onClick={onSubmit}
         disabled={isSubmitting}
-        className="mt-5 flex w-full items-center justify-center gap-2.5 rounded-[12px] border border-primary/20 bg-primary py-2.5 text-[13px] font-black text-white transition-all hover:bg-primary-dim hover:shadow-lg hover:shadow-primary/20 active:scale-[0.98] disabled:opacity-40"
+        className="mt-5 flex w-full items-center justify-center gap-2.5 rounded-[4px] border border-primary/20 bg-primary py-2.5 text-[13px] font-black text-white transition-all hover:bg-primary/90 hover:shadow-lg hover:shadow-primary/20 active:scale-[0.98] disabled:opacity-40"
       >
         {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-        确认并推送到计划阶段
+        确认这些归类
       </button>
     </div>
   );
@@ -505,7 +505,7 @@ export function ConversationPanel({
   const renderNotice = notice ? (
     <div
       className={cn(
-        "rounded-[10px] border p-4",
+        "rounded-[4px] border p-4",
         notice.tone === "danger" && "border-error/20 bg-error-container/10",
         notice.tone === "warning" && "border-warning/20 bg-warning-container/20",
         notice.tone === "info" && "border-primary/12 bg-surface-container-lowest",
@@ -531,7 +531,7 @@ export function ConversationPanel({
               <button
                 type="button"
                 onClick={notice.secondaryAction.onClick}
-                className="rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-4 py-2.5 text-[13px] font-medium text-on-surface-variant transition-colors hover:bg-surface-container-low hover:text-on-surface"
+                className="rounded-[4px] border border-on-surface/8 bg-surface-container-lowest px-4 py-2.5 text-[13px] font-bold text-on-surface-variant transition-colors hover:bg-surface-container-low hover:text-on-surface"
               >
                 {notice.secondaryAction.label}
               </button>
@@ -554,7 +554,7 @@ export function ConversationPanel({
             animate={{ opacity: 1, scale: 1 }} 
             className="flex flex-col items-center justify-center space-y-5 py-18 text-center"
           >
-            <div className="flex h-14 w-14 items-center justify-center rounded-[10px] border border-primary/12 bg-primary/6 text-primary/55">
+            <div className="flex h-14 w-14 items-center justify-center rounded-[6px] border border-primary/12 bg-primary/6 text-primary/55">
               <Cpu className="w-7 h-7" />
             </div>
             <div className="max-w-[360px] space-y-3">
@@ -568,7 +568,7 @@ export function ConversationPanel({
               </p>
               {isBusy ? (
                 <div className="pt-2">
-                  <div className="inline-flex items-center gap-2.5 rounded-[10px] border border-primary/16 bg-primary/8 px-6 py-3 text-[13px] font-semibold text-primary">
+                  <div className="inline-flex items-center gap-2.5 rounded-[4px] border border-primary/16 bg-primary/8 px-6 py-3 text-[13px] font-black text-primary">
                     <Loader2 className="w-4 h-4 animate-spin" /> 正在自动开始
                   </div>
                 </div>
@@ -577,7 +577,7 @@ export function ConversationPanel({
                   <button
                     onClick={onStartScan}
                     disabled={isBusy}
-                    className="inline-flex items-center gap-2.5 rounded-[10px] border border-primary/20 bg-primary px-6 py-3 text-[13px] font-semibold text-white transition-colors hover:bg-primary-dim active:scale-[0.96] disabled:opacity-50"
+                    className="inline-flex items-center gap-2.5 rounded-[4px] border border-primary/20 bg-primary px-6 py-3 text-[13px] font-black text-white transition-colors hover:bg-primary/90 active:scale-[0.96] disabled:opacity-50"
                   >
                     <Sparkles className="w-4 h-4" /> 开始扫描
                   </button>
@@ -590,9 +590,9 @@ export function ConversationPanel({
           <motion.div
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="flex items-center gap-3.5 rounded-[12px] border border-on-surface/8 bg-surface-container-low px-4 py-3 shadow-sm shadow-black/[0.02]"
+            className="flex items-center gap-3.5 rounded-[6px] border border-on-surface/8 bg-surface-container-low px-4 py-2.5 shadow-sm shadow-black/[0.02]"
           >
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border border-primary/20 bg-primary/5 text-primary">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[4px] border border-primary/20 bg-primary/5 text-primary">
               <Bot className="h-4 w-4" />
             </div>
             <div className="flex flex-1 items-center justify-between gap-4">
@@ -603,7 +603,7 @@ export function ConversationPanel({
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/40 opacity-75"></span>
                     <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary/60"></span>
                   </span>
-                  AI 引擎扫描中
+                  正在扫描
                 </div>
               </div>
               <div className="flex items-center gap-2 rounded-full bg-primary/10 px-2.5 py-0.5 text-[12px] font-black tabular-nums text-primary">
@@ -624,7 +624,7 @@ export function ConversationPanel({
               return (
                 <div key={message.id} className="ml-10 py-1.5 text-[11.5px] font-bold text-on-surface-variant/40 flex items-center gap-2">
                   <div className="h-[1px] w-4 bg-on-surface-variant/10" />
-                  日志: 系统任务同步完成
+                  系统记录已同步
                 </div>
               );
             }
@@ -662,7 +662,7 @@ export function ConversationPanel({
                   {message.content && (
                     <div
                       className={cn(
-                        "max-w-[90%] 2xl:max-w-[84%] rounded-[12px] px-3.5 py-2.5 text-ui-body leading-relaxed transition-all shadow-sm shadow-black/[0.01]",
+                        "max-w-[90%] 2xl:max-w-[84%] rounded-[6px] px-3.5 py-2.5 text-ui-body leading-relaxed transition-all shadow-sm shadow-black/[0.01]",
                         isAssistant
                           ? "border border-on-surface/8 bg-surface-container-lowest text-on-surface"
                           : "bg-surface-container-low text-on-surface font-medium whitespace-pre-wrap ml-auto",
@@ -799,7 +799,7 @@ export function ConversationPanel({
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 10 }}
-                className="mb-4 rounded-[10px] border border-error/12 bg-error-container/22 px-4 py-3 text-[13px] text-error"
+                className="mb-4 rounded-[4px] border border-error/12 bg-error-container/22 px-4 py-3 text-[13px] text-error"
               >
                 <div className="flex items-start gap-3">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -845,14 +845,14 @@ export function ConversationPanel({
                 className="mb-2 flex items-center gap-2 px-1 text-[11px] font-bold text-emerald-600/70"
               >
                 <Sparkles className="h-3 w-3" />
-                <p>方案已绪，可以点击右侧底部的 “开始预检” 执行整理</p>
+                <p>方案已就绪，可以点击右侧底部的“开始预检”继续。</p>
               </motion.div>
             ) : null}
           </AnimatePresence>
 
           {composerMode === "editable" ? (
             <div className={cn(
-              "relative flex items-end rounded-[8px] border px-3 pb-1.5 pt-1.5 transition-all duration-300",
+              "relative flex items-end rounded-[4px] border px-3 pb-1.5 pt-1.5 transition-all duration-300",
               isComposerLocked 
                 ? "cursor-not-allowed border-on-surface/[0.06] bg-on-surface/[0.02] grayscale-[0.2]" 
                 : "border-on-surface/[0.08] bg-surface-container-lowest focus-within:border-primary/30 focus-within:ring-4 focus-within:ring-primary/[0.015]"
@@ -879,7 +879,7 @@ export function ConversationPanel({
                 onClick={onSendMessage}
                 disabled={isComposerLocked || !messageInput.trim()}
                 className={cn(
-                  "mb-1.5 mr-1.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] transition-all active:scale-90",
+                  "mb-1.5 mr-1.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-[4px] transition-all active:scale-90",
                   messageInput.trim() && !isComposerLocked
                     ? "bg-primary text-white shadow-[0_4px_12px_rgba(0,120,212,0.16)]"
                     : "text-on-surface-variant/20 bg-on-surface/[0.03]"
@@ -901,7 +901,7 @@ export function ConversationPanel({
             </div>
           ) : (
             <div className="rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-5 py-4 text-[13px] text-on-surface-variant">
-              正在扫描目录，暂时还不能继续输入。
+              当前正在扫描目录，暂时还不能继续输入。
             </div>
           )}
 

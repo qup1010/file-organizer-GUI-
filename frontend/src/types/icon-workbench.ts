@@ -11,7 +11,8 @@ export interface IconWorkbenchConfig {
   text_model: IconWorkbenchModelConfig;
   image_model: IconWorkbenchModelConfig;
   image_size: string;
-  concurrency_limit: number;
+  analysis_concurrency_limit: number;
+  image_concurrency_limit: number;
   save_mode: "in_folder" | "centralized";
 }
 
@@ -65,40 +66,23 @@ export interface FolderIconCandidate {
   updated_at: string;
 }
 
-export interface IconWorkbenchToolResult {
-  tool_name: string;
-  success: boolean;
-  message: string;
-  payload: Record<string, unknown>;
-}
-
-export interface IconWorkbenchPendingAction {
-  action_id: string;
+export interface IconWorkbenchClientActionSummary {
   action_type: string;
-  title: string;
-  description: string;
-  requires_confirmation: boolean;
-  requires_client: boolean;
-  payload: Record<string, unknown>;
-  created_at: string;
-}
-
-export interface IconWorkbenchChatMessage {
-  message_id: string;
-  role: "assistant" | "user" | "system" | string;
-  content: string;
-  tool_results: IconWorkbenchToolResult[];
-  action_ids: string[];
-  created_at: string;
+  summary: {
+    success_count: number;
+    failed_count: number;
+    skipped_count: number;
+    message: string;
+  };
+  results: Record<string, unknown>[];
+  updated_at: string;
 }
 
 export interface IconWorkbenchSession {
   session_id: string;
   target_paths: string[];
   folders: FolderIconCandidate[];
-  messages: IconWorkbenchChatMessage[];
-  pending_actions: IconWorkbenchPendingAction[];
-  chat_updated_at: string;
+  last_client_action?: IconWorkbenchClientActionSummary | null;
   created_at: string;
   updated_at: string;
   folder_count: number;
@@ -140,19 +124,6 @@ export interface ApplyReadyPreparation {
   skipped_items: ApplyReadySkippedItem[];
 }
 
-export interface IconWorkbenchClientExecution {
-  command: "apply_ready_icons" | "restore_ready_icons" | string;
-  action_type: string;
-  tasks: ApplyReadyTask[] | RestoreReadyTask[];
-  skipped_items: ApplyReadySkippedItem[];
-}
-
-export interface IconWorkbenchMessagePayload {
-  content: string;
-  selected_folder_ids?: string[];
-  active_folder_id?: string | null;
-}
-
 export interface IconWorkbenchClientActionResult {
   folder_id?: string | null;
   folder_name?: string | null;
@@ -165,11 +136,6 @@ export interface IconWorkbenchClientActionReportPayload {
   action_type: string;
   results: IconWorkbenchClientActionResult[];
   skipped_items: IconWorkbenchClientActionResult[];
-}
-
-export interface IconWorkbenchActionResponse {
-  session: IconWorkbenchSession;
-  client_execution?: IconWorkbenchClientExecution;
 }
 
 export interface ApplyIconResult {

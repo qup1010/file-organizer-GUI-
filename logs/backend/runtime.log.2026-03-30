@@ -1,0 +1,1950 @@
+2026-03-30 08:56:43 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 08:56:44 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 08:56:45 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 08:56:49 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 08:56:49 [INFO] file_organizer.app.session_service: scan.completed session_id=2027b361a9c84d4eabd47b72c058f62b target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本 stage=planning summary={"moves": 0, "unresolved": 0, "entry_count": 5, "mode": "sync"}
+2026-03-30 08:56:49 [INFO] file_organizer.app.session_service: session.refreshed session_id=2027b361a9c84d4eabd47b72c058f62b target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本 stage=planning summary={"moves": 0, "unresolved": 0, "invalidated_count": 0}
+2026-03-30 08:56:53 [INFO] file_organizer.app.session_service: session.abandoned session_id=2027b361a9c84d4eabd47b72c058f62b target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本 stage=abandoned summary={"moves": 0, "unresolved": 0}
+2026-03-30 08:56:58 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 08:57:06 [INFO] file_organizer.app.session_service: session.created session_id=edfecbd4ba514dca83ac97ac231d16fa target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本 stage=draft summary={"moves": 0, "unresolved": 0, "strategy": {"template_id": "general_downloads", "naming_style": "zh", "caution_level": "balanced", "note": ""}}
+2026-03-30 08:57:06 [INFO] file_organizer.app.session_service: scan.started session_id=edfecbd4ba514dca83ac97ac231d16fa target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本 stage=scanning summary={"moves": 0, "unresolved": 0}
+2026-03-30 08:57:10 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 08:57:11 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 08:57:12 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 08:57:15 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 08:57:15 [INFO] file_organizer.app.session_service: scan.completed session_id=edfecbd4ba514dca83ac97ac231d16fa target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本 stage=planning summary={"moves": 0, "unresolved": 0, "entry_count": 5, "auto_plan_pending": true}
+2026-03-30 08:57:15 [INFO] file_organizer.app.session_service: plan.auto_started session_id=edfecbd4ba514dca83ac97ac231d16fa target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本 stage=planning summary={"moves": 0, "unresolved": 0}
+2026-03-30 08:57:15 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 08:57:21 [INFO] file_organizer.organize.service: organizer.response_recorded round=1
+2026-03-30 08:57:21 [ERROR] file_organizer.app.session_service: plan.auto_failed session_id=edfecbd4ba514dca83ac97ac231d16fa target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\app\session_service.py", line 1324, in _finish_async_scan
+    self._log_runtime_event("scan.completed", session, entry_count=len(all_entries), mode="sync")
+                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+    return result
+    ^^^^^^^^^
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\organize\service.py", line 1117, in run_organizer_cycle
+    current_pending = pending_plan or PendingPlan()
+    
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\organize\service.py", line 1084, in _extract_plan_submissions
+    content = getattr(message, "content", "") or ""
+                                 ^^^^^^^^^^^^^^^^^^
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\organize\models.py", line 162, in from_dict
+    items=[UnresolvedChoiceItem.from_dict(item) for item in data.get("items", [])],
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\organize\models.py", line 136, in from_dict
+    item_id=data.get("item_id", ""),
+            ^^^^^^^^
+AttributeError: 'str' object has no attribute 'get'
+2026-03-30 08:57:21 [ERROR] file_organizer.app.session_service: plan.auto_failed session_id=edfecbd4ba514dca83ac97ac231d16fa target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本 stage=interrupted summary={"moves": 0, "unresolved": 0, "error": "'str' object has no attribute 'get'"}
+2026-03-30 09:10:53 [INFO] uvicorn.error: Shutting down
+2026-03-30 09:10:53 [INFO] uvicorn.error: Waiting for connections to close. (CTRL+C to force quit)
+2026-03-30 09:13:46 [INFO] __main__: backend.starting host=127.0.0.1 port=8765 reload=False runtime_log=D:\3_Projects\Active\file-organizer-GUI-\logs\backend\runtime.log
+2026-03-30 09:13:46 [INFO] uvicorn.error: Started server process [11648]
+2026-03-30 09:13:46 [INFO] uvicorn.error: Waiting for application startup.
+2026-03-30 09:13:46 [INFO] uvicorn.error: Application startup complete.
+2026-03-30 09:13:46 [INFO] uvicorn.error: Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+2026-03-30 09:14:17 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 09:14:24 [INFO] file_organizer.app.session_service: session.abandoned session_id=edfecbd4ba514dca83ac97ac231d16fa target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本 stage=abandoned summary={"moves": 0, "unresolved": 0}
+2026-03-30 09:14:30 [INFO] file_organizer.app.session_service: session.created session_id=dfc0f07356a945e7b9f3ce5a7a096b39 target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本 stage=draft summary={"moves": 0, "unresolved": 0, "strategy": {"template_id": "general_downloads", "naming_style": "zh", "caution_level": "balanced", "note": ""}}
+2026-03-30 09:14:30 [INFO] file_organizer.app.session_service: scan.started session_id=dfc0f07356a945e7b9f3ce5a7a096b39 target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本 stage=scanning summary={"moves": 0, "unresolved": 0}
+2026-03-30 09:14:34 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 09:14:38 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 09:14:38 [INFO] file_organizer.app.session_service: scan.completed session_id=dfc0f07356a945e7b9f3ce5a7a096b39 target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本 stage=planning summary={"moves": 0, "unresolved": 0, "entry_count": 5, "auto_plan_pending": true}
+2026-03-30 09:14:38 [INFO] file_organizer.app.session_service: plan.auto_started session_id=dfc0f07356a945e7b9f3ce5a7a096b39 target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本 stage=planning summary={"moves": 0, "unresolved": 0}
+2026-03-30 09:14:39 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 09:14:46 [INFO] file_organizer.organize.service: organizer.response_recorded round=1
+2026-03-30 09:14:46 [INFO] file_organizer.organize.service: organizer.response_recorded round=1
+2026-03-30 09:14:50 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 09:14:55 [INFO] file_organizer.organize.service: organizer.response_recorded round=2
+2026-03-30 09:14:55 [INFO] file_organizer.organize.service: organizer.response_recorded round=2
+2026-03-30 09:14:55 [INFO] file_organizer.app.session_service: plan.auto_completed session_id=dfc0f07356a945e7b9f3ce5a7a096b39 target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本 stage=planning summary={"moves": 5, "unresolved": 1, "summary": "已分类4项，调整5项，仍剩1项待定（md子目录需确认其内容用途后归类）"}
+2026-03-30 09:15:34 [INFO] file_organizer.app.session_service: session.abandoned session_id=dfc0f07356a945e7b9f3ce5a7a096b39 target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本 stage=abandoned summary={"moves": 5, "unresolved": 1}
+2026-03-30 09:15:44 [INFO] httpx: HTTP Request: POST https://ai.qaq.al/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 09:15:52 [INFO] file_organizer.app.session_service: session.created session_id=482ac30ee8e2446b8ebe62189bcfcdaa target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本 stage=draft summary={"moves": 0, "unresolved": 0, "strategy": {"template_id": "general_downloads", "naming_style": "zh", "caution_level": "balanced", "note": ""}}
+2026-03-30 09:15:52 [INFO] file_organizer.app.session_service: scan.started session_id=482ac30ee8e2446b8ebe62189bcfcdaa target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本 stage=scanning summary={"moves": 0, "unresolved": 0}
+2026-03-30 09:15:53 [INFO] httpx: HTTP Request: POST https://ai.qaq.al/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 09:15:53 [ERROR] file_organizer.app.session_service: scan.failed session_id=482ac30ee8e2446b8ebe62189bcfcdaa target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\app\async_scanner.py", line 20, in worker
+    result = run_scan(target_dir)
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\app\session_service.py", line 240, in <lambda>
+    run_scan=lambda d: self._default_scan_runner(d, event_handler=on_scan_event, session_id=session.session_id),
+                       ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\app\session_service.py", line 1173, in _default_scan_runner
+    return analysis_service.run_analysis_cycle(target_dir, event_handler=event_handler, session_id=session_id)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\analysis\service.py", line 825, in run_analysis_cycle
+    result = _run_single_analysis(target_dir, files_info, model, event_handler=event_handler, session_id=session_id)
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\analysis\service.py", line 736, in _run_single_analysis
+    items = _run_analysis_worker(
+        target_dir=target_dir,
+    ...<8 lines>...
+        wait_message="正在分析目录内容",
+    )
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\analysis\service.py", line 640, in _run_analysis_worker
+    "response": response.choices[0].message.to_dict() if hasattr(response.choices[0].message, "to_dict") else str(response),
+                                                                 ^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'choices'
+2026-03-30 09:15:53 [ERROR] file_organizer.app.session_service: scan.failed session_id=482ac30ee8e2446b8ebe62189bcfcdaa target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本 stage=interrupted summary={"moves": 0, "unresolved": 0, "error": "'str' object has no attribute 'choices'"}
+2026-03-30 09:15:57 [INFO] httpx: HTTP Request: POST https://ai.qaq.al/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 09:15:57 [ERROR] uvicorn.error: Exception in ASGI application
+Traceback (most recent call last):
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\uvicorn\protocols\http\h11_impl.py", line 410, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        self.scope, self.receive, self.send
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 60, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\fastapi\applications.py", line 1135, in __call__
+    await super().__call__(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\applications.py", line 107, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    raise exc
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+                                   ~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\QUPENG\miniconda3\Lib\contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\_utils.py", line 85, in collapse_excgroups
+    raise exc
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 214, in require_api_token
+    return await call_next(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\cors.py", line 93, in __call__
+    await self.simple_response(scope, receive, send, request_headers=headers)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\cors.py", line 144, in simple_response
+    await self.app(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\fastapi\routing.py", line 115, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\fastapi\routing.py", line 101, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\fastapi\routing.py", line 355, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\fastapi\routing.py", line 245, in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\concurrency.py", line 32, in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\anyio\to_thread.py", line 63, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        func, args, abandon_on_cancel=abandon_on_cancel, limiter=limiter
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\anyio\_backends\_asyncio.py", line 2502, in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\anyio\_backends\_asyncio.py", line 986, in run
+    result = context.run(func, *args)
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 294, in refresh_session
+    result = app.state.service.refresh_session(session_id)
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\app\session_service.py", line 117, in refresh_session
+    scan_lines = self._run_scan_sync(session, scan_runner or self._default_scan_runner)
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\app\session_service.py", line 1309, in _run_scan_sync
+    result = scan_runner(Path(session.target_dir), session_id=session.session_id)
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\app\session_service.py", line 1173, in _default_scan_runner
+    return analysis_service.run_analysis_cycle(target_dir, event_handler=event_handler, session_id=session_id)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\analysis\service.py", line 825, in run_analysis_cycle
+    result = _run_single_analysis(target_dir, files_info, model, event_handler=event_handler, session_id=session_id)
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\analysis\service.py", line 736, in _run_single_analysis
+    items = _run_analysis_worker(
+        target_dir=target_dir,
+    ...<8 lines>...
+        wait_message="正在分析目录内容",
+    )
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\analysis\service.py", line 640, in _run_analysis_worker
+    "response": response.choices[0].message.to_dict() if hasattr(response.choices[0].message, "to_dict") else str(response),
+                                                                 ^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'choices'
+2026-03-30 09:16:12 [INFO] file_organizer.app.session_service: session.interrupted session_id=482ac30ee8e2446b8ebe62189bcfcdaa target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本 stage=interrupted summary={"moves": 0, "unresolved": 0, "interrupted_during": "scanning"}
+2026-03-30 09:16:12 [INFO] file_organizer.app.session_service: session.interrupted session_id=482ac30ee8e2446b8ebe62189bcfcdaa target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本 stage=interrupted summary={"moves": 0, "unresolved": 0, "interrupted_during": "scanning"}
+2026-03-30 09:16:14 [INFO] file_organizer.app.session_service: session.abandoned session_id=482ac30ee8e2446b8ebe62189bcfcdaa target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本 stage=abandoned summary={"moves": 0, "unresolved": 0}
+2026-03-30 09:16:19 [INFO] file_organizer.app.session_service: session.created session_id=b0f27404a303471ebb61630b86e40083 target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本 stage=draft summary={"moves": 0, "unresolved": 0, "strategy": {"template_id": "general_downloads", "naming_style": "zh", "caution_level": "balanced", "note": ""}}
+2026-03-30 09:16:19 [INFO] file_organizer.app.session_service: scan.started session_id=b0f27404a303471ebb61630b86e40083 target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本 stage=scanning summary={"moves": 0, "unresolved": 0}
+2026-03-30 09:16:27 [INFO] httpx: HTTP Request: POST https://api.bwen.net/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 09:16:31 [INFO] httpx: HTTP Request: POST https://api.bwen.net/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 09:16:37 [INFO] httpx: HTTP Request: POST https://api.bwen.net/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 09:16:37 [INFO] file_organizer.app.session_service: scan.completed session_id=b0f27404a303471ebb61630b86e40083 target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本 stage=planning summary={"moves": 0, "unresolved": 0, "entry_count": 5, "auto_plan_pending": true}
+2026-03-30 09:16:37 [INFO] file_organizer.app.session_service: plan.auto_started session_id=b0f27404a303471ebb61630b86e40083 target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本 stage=planning summary={"moves": 0, "unresolved": 0}
+2026-03-30 09:16:39 [INFO] httpx: HTTP Request: POST https://api.bwen.net/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 09:16:48 [INFO] file_organizer.organize.service: organizer.response_recorded round=1
+2026-03-30 09:16:48 [INFO] file_organizer.organize.service: organizer.response_recorded round=1
+2026-03-30 09:16:48 [INFO] file_organizer.app.session_service: plan.auto_completed session_id=b0f27404a303471ebb61630b86e40083 target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本 stage=planning summary={"moves": 5, "unresolved": 1, "summary": "已分类 4 项，调整 0 项，仍剩 1 项待定"}
+2026-03-30 09:16:56 [INFO] file_organizer.app.session_service: plan.unresolved_choices_submitted session_id=b0f27404a303471ebb61630b86e40083 target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本 stage=planning summary={"moves": 5, "unresolved": 1, "request_id": "unresolved-20260330-001", "resolution_count": 1}
+2026-03-30 09:16:56 [INFO] file_organizer.app.session_service: plan.updated session_id=b0f27404a303471ebb61630b86e40083 target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本 stage=ready_for_precheck summary={"moves": 5, "unresolved": 0, "source": "resolve_unresolved_choices"}
+2026-03-30 09:17:03 [INFO] file_organizer.app.session_service: precheck.started session_id=b0f27404a303471ebb61630b86e40083 target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本 stage=ready_for_precheck summary={"moves": 5, "unresolved": 0}
+2026-03-30 09:17:03 [INFO] file_organizer.app.session_service: precheck.completed session_id=b0f27404a303471ebb61630b86e40083 target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本 stage=ready_to_execute summary={"moves": 5, "unresolved": 0, "can_execute": true, "blocking_error_count": 0, "warning_count": 0}
+2026-03-30 09:17:15 [INFO] file_organizer.app.session_service: execution.started session_id=b0f27404a303471ebb61630b86e40083 target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本 stage=executing summary={"moves": 5, "unresolved": 0}
+2026-03-30 09:17:15 [INFO] file_organizer.app.session_service: execution.completed session_id=b0f27404a303471ebb61630b86e40083 target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 - 副本 stage=completed summary={"moves": 5, "unresolved": 0, "execution_id": "43a7d529985c43b9a88f167da189de25", "success_count": 10, "failure_count": 0}
+2026-03-30 09:17:29 [INFO] httpx: HTTP Request: GET https://api-inference.modelscope.cn/v1/images/generations/models "HTTP/1.1 404 Not Found"
+2026-03-30 09:17:29 [ERROR] file_organizer.api.main: 模型链路连通性测试失败
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 821, in test_llm
+    client.models.list()
+    ~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\openai\resources\models.py", line 93, in list
+    return self._get_api_list(
+           ~~~~~~~~~~~~~~~~~~^
+        "/models",
+        ^^^^^^^^^^
+    ...<4 lines>...
+        model=Model,
+        ^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\openai\_base_client.py", line 1383, in get_api_list
+    return self._request_api_list(model, page, opts)
+           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\openai\_base_client.py", line 1182, in _request_api_list
+    return self.request(page, options, stream=False)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\openai\_base_client.py", line 1070, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.NotFoundError: 404 page not found
+2026-03-30 09:17:39 [INFO] httpx: HTTP Request: GET https://api-inference.modelscope.cn/v1/images/generations/models "HTTP/1.1 404 Not Found"
+2026-03-30 09:17:39 [ERROR] file_organizer.api.main: 模型链路连通性测试失败
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 821, in test_llm
+    client.models.list()
+    ~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\openai\resources\models.py", line 93, in list
+    return self._get_api_list(
+           ~~~~~~~~~~~~~~~~~~^
+        "/models",
+        ^^^^^^^^^^
+    ...<4 lines>...
+        model=Model,
+        ^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\openai\_base_client.py", line 1383, in get_api_list
+    return self._request_api_list(model, page, opts)
+           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\openai\_base_client.py", line 1182, in _request_api_list
+    return self.request(page, options, stream=False)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\openai\_base_client.py", line 1070, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.NotFoundError: 404 page not found
+2026-03-30 09:18:46 [INFO] httpx: HTTP Request: GET https://api-inference.modelscope.cn/v1/images/generations/models "HTTP/1.1 404 Not Found"
+2026-03-30 09:18:46 [ERROR] file_organizer.api.main: 模型链路连通性测试失败
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 821, in test_llm
+    client.models.list()
+    ~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\openai\resources\models.py", line 93, in list
+    return self._get_api_list(
+           ~~~~~~~~~~~~~~~~~~^
+        "/models",
+        ^^^^^^^^^^
+    ...<4 lines>...
+        model=Model,
+        ^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\openai\_base_client.py", line 1383, in get_api_list
+    return self._request_api_list(model, page, opts)
+           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\openai\_base_client.py", line 1182, in _request_api_list
+    return self.request(page, options, stream=False)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\openai\_base_client.py", line 1070, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.NotFoundError: 404 page not found
+2026-03-30 09:22:19 [INFO] httpx: HTTP Request: POST http://testserver/api/utils/config/presets "HTTP/1.1 200 OK"
+2026-03-30 09:22:19 [INFO] httpx: HTTP Request: GET http://testserver/api/utils/config "HTTP/1.1 200 OK"
+2026-03-30 09:22:19 [INFO] httpx: HTTP Request: POST http://testserver/api/utils/config/secrets "HTTP/1.1 200 OK"
+2026-03-30 09:22:19 [INFO] httpx: HTTP Request: POST http://testserver/api/utils/config/presets/switch "HTTP/1.1 200 OK"
+2026-03-30 09:22:19 [INFO] httpx: HTTP Request: POST http://testserver/api/utils/test-llm "HTTP/1.1 200 OK"
+2026-03-30 09:22:19 [INFO] httpx: HTTP Request: POST http://testserver/api/utils/test-llm "HTTP/1.1 200 OK"
+2026-03-30 09:22:19 [INFO] httpx: HTTP Request: POST http://testserver/api/utils/test-llm "HTTP/1.1 400 Bad Request"
+2026-03-30 09:22:19 [INFO] httpx: HTTP Request: POST http://testserver/api/utils/test-llm "HTTP/1.1 400 Bad Request"
+2026-03-30 09:22:19 [INFO] httpx: HTTP Request: POST http://testserver/api/utils/test-llm "HTTP/1.1 400 Bad Request"
+2026-03-30 09:22:19 [INFO] httpx: HTTP Request: POST http://testserver/api/utils/test-llm "HTTP/1.1 200 OK"
+2026-03-30 09:26:44 [INFO] __main__: backend.starting host=127.0.0.1 port=8765 reload=False runtime_log=D:\3_Projects\Active\file-organizer-GUI-\logs\backend\runtime.log
+2026-03-30 09:26:44 [INFO] uvicorn.error: Started server process [54404]
+2026-03-30 09:26:44 [INFO] uvicorn.error: Waiting for application startup.
+2026-03-30 09:26:44 [INFO] uvicorn.error: Application startup complete.
+2026-03-30 09:26:44 [INFO] uvicorn.error: Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+2026-03-30 09:26:53 [INFO] httpx: HTTP Request: GET https://api-inference.modelscope.cn/v1/images/generations/models "HTTP/1.1 404 Not Found"
+2026-03-30 09:27:06 [INFO] httpx: HTTP Request: GET https://api-inference.modelscope.cn/v1/images/generations/models "HTTP/1.1 404 Not Found"
+2026-03-30 09:27:30 [INFO] httpx: HTTP Request: GET https://api-inference.modelscope.cn/v1/images/generations/models "HTTP/1.1 404 Not Found"
+2026-03-30 09:27:30 [ERROR] file_organizer.api.main: 模型链路连通性测试失败
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 864, in test_llm
+    client.models.list()
+    ~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\openai\resources\models.py", line 93, in list
+    return self._get_api_list(
+           ~~~~~~~~~~~~~~~~~~^
+        "/models",
+        ^^^^^^^^^^
+    ...<4 lines>...
+        model=Model,
+        ^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\openai\_base_client.py", line 1383, in get_api_list
+    return self._request_api_list(model, page, opts)
+           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\openai\_base_client.py", line 1182, in _request_api_list
+    return self.request(page, options, stream=False)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\openai\_base_client.py", line 1070, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.NotFoundError: 404 page not found
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 872, in test_llm
+    _probe_image_generation_endpoint(str(base_url or ""), str(model or ""), str(api_key or ""))
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 216, in _probe_image_generation_endpoint
+    with urllib_request.urlopen(request, timeout=20):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\urllib\request.py", line 189, in urlopen
+    return opener.open(url, data, timeout)
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\urllib\request.py", line 495, in open
+    response = meth(req, response)
+  File "C:\Users\QUPENG\miniconda3\Lib\urllib\request.py", line 604, in http_response
+    response = self.parent.error(
+        'http', request, response, code, msg, hdrs)
+  File "C:\Users\QUPENG\miniconda3\Lib\urllib\request.py", line 533, in error
+    return self._call_chain(*args)
+           ~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\urllib\request.py", line 466, in _call_chain
+    result = func(*args)
+  File "C:\Users\QUPENG\miniconda3\Lib\urllib\request.py", line 613, in http_error_default
+    raise HTTPError(req.full_url, code, msg, hdrs, fp)
+urllib.error.HTTPError: HTTP Error 401: Unauthorized
+2026-03-30 09:27:40 [INFO] httpx: HTTP Request: GET https://api-inference.modelscope.cn/v1/images/generations/models "HTTP/1.1 404 Not Found"
+2026-03-30 09:27:51 [INFO] httpx: HTTP Request: GET https://api-inference.modelscope.cn/v1/images/generations/models "HTTP/1.1 404 Not Found"
+2026-03-30 09:29:28 [INFO] openai._base_client: Retrying request to /chat/completions in 0.496876 seconds
+2026-03-30 09:29:39 [INFO] openai._base_client: Retrying request to /chat/completions in 0.957211 seconds
+2026-03-30 09:29:51 [ERROR] file_organizer.api.main: 模型链路连通性测试失败
+Traceback (most recent call last):
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\httpx\_transports\default.py", line 101, in map_httpcore_exceptions
+    yield
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\httpx\_transports\default.py", line 250, in handle_request
+    resp = self._pool.handle_request(req)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\httpcore\_sync\connection_pool.py", line 256, in handle_request
+    raise exc from None
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\httpcore\_sync\connection_pool.py", line 236, in handle_request
+    response = connection.handle_request(
+        pool_request.request
+    )
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\httpcore\_sync\connection.py", line 101, in handle_request
+    raise exc
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\httpcore\_sync\connection.py", line 78, in handle_request
+    stream = self._connect(request)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\httpcore\_sync\connection.py", line 124, in _connect
+    stream = self._network_backend.connect_tcp(**kwargs)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\httpcore\_backends\sync.py", line 207, in connect_tcp
+    with map_exceptions(exc_map):
+         ~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\httpcore\_exceptions.py", line 14, in map_exceptions
+    raise to_exc(exc) from exc
+httpcore.ConnectError: [Errno 11001] getaddrinfo failed
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\openai\_base_client.py", line 1005, in request
+    response = self._client.send(
+        request,
+        stream=stream or self._should_stream_response_body(request=request),
+        **kwargs,
+    )
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\httpx\_client.py", line 914, in send
+    response = self._send_handling_auth(
+        request,
+    ...<2 lines>...
+        history=[],
+    )
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\httpx\_client.py", line 942, in _send_handling_auth
+    response = self._send_handling_redirects(
+        request,
+        follow_redirects=follow_redirects,
+        history=history,
+    )
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\httpx\_client.py", line 979, in _send_handling_redirects
+    response = self._send_single_request(request)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\httpx\_client.py", line 1014, in _send_single_request
+    response = transport.handle_request(request)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\httpx\_transports\default.py", line 249, in handle_request
+    with map_httpcore_exceptions():
+         ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\QUPENG\miniconda3\Lib\contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\httpx\_transports\default.py", line 118, in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+httpx.ConnectError: [Errno 11001] getaddrinfo failed
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 874, in test_llm
+    client.chat.completions.create(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        model=model,
+        ^^^^^^^^^^^^
+        messages=[{"role": "user", "content": "ping"}],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        max_tokens=1,
+        ^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\openai\_utils\_utils.py", line 286, in wrapper
+    return func(*args, **kwargs)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\openai\resources\chat\completions\completions.py", line 1211, in create
+    return self._post(
+           ~~~~~~~~~~^
+        "/chat/completions",
+        ^^^^^^^^^^^^^^^^^^^^
+    ...<47 lines>...
+        stream_cls=Stream[ChatCompletionChunk],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\openai\_base_client.py", line 1297, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+                           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\openai\_base_client.py", line 1037, in request
+    raise APIConnectionError(request=request) from err
+openai.APIConnectionError: Connection error.
+2026-03-30 09:30:03 [INFO] openai._base_client: Retrying request to /chat/completions in 0.394929 seconds
+2026-03-30 09:30:14 [INFO] openai._base_client: Retrying request to /chat/completions in 0.988883 seconds
+2026-03-30 09:30:39 [INFO] __main__: backend.starting host=127.0.0.1 port=8765 reload=False runtime_log=D:\3_Projects\Active\file-organizer-GUI-\logs\backend\runtime.log
+2026-03-30 09:30:39 [INFO] uvicorn.error: Started server process [644]
+2026-03-30 09:30:39 [INFO] uvicorn.error: Waiting for application startup.
+2026-03-30 09:30:39 [INFO] uvicorn.error: Application startup complete.
+2026-03-30 09:30:39 [INFO] uvicorn.error: Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+2026-03-30 09:31:19 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 09:31:38 [INFO] file_organizer.app.session_service: session.created session_id=161900b6d853424e9cae982916e1e387 target_dir=d:/5_downloads/downloads/test for file stage=draft summary={"moves": 0, "unresolved": 0, "strategy": {"template_id": "general_downloads", "naming_style": "zh", "caution_level": "balanced", "note": ""}}
+2026-03-30 09:31:38 [INFO] file_organizer.app.session_service: scan.started session_id=161900b6d853424e9cae982916e1e387 target_dir=d:/5_downloads/downloads/test for file stage=scanning summary={"moves": 0, "unresolved": 0}
+2026-03-30 09:31:41 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 09:31:42 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 09:31:42 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 09:31:45 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 09:31:45 [INFO] file_organizer.app.session_service: scan.completed session_id=161900b6d853424e9cae982916e1e387 target_dir=d:/5_downloads/downloads/test for file stage=planning summary={"moves": 0, "unresolved": 0, "entry_count": 5, "auto_plan_pending": true}
+2026-03-30 09:31:45 [INFO] file_organizer.app.session_service: plan.auto_started session_id=161900b6d853424e9cae982916e1e387 target_dir=d:/5_downloads/downloads/test for file stage=planning summary={"moves": 0, "unresolved": 0}
+2026-03-30 09:31:45 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 09:31:54 [INFO] file_organizer.organize.service: organizer.response_recorded round=1
+2026-03-30 09:31:54 [INFO] file_organizer.organize.service: organizer.response_recorded round=1
+2026-03-30 09:31:54 [INFO] file_organizer.app.session_service: plan.auto_completed session_id=161900b6d853424e9cae982916e1e387 target_dir=d:/5_downloads/downloads/test for file stage=planning summary={"moves": 0, "unresolved": 0, "summary": ""}
+2026-03-30 09:33:36 [INFO] file_organizer.app.session_service: plan.user_intent_submitted session_id=161900b6d853424e9cae982916e1e387 target_dir=d:/5_downloads/downloads/test for file stage=planning summary={"moves": 0, "unresolved": 0, "message_count": 4, "content_preview": "你调用了提供给你的工具了吗？"}
+2026-03-30 09:33:36 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 09:33:40 [INFO] file_organizer.organize.service: organizer.response_recorded round=2
+2026-03-30 09:33:40 [INFO] file_organizer.organize.service: organizer.response_recorded round=2
+2026-03-30 09:33:40 [INFO] file_organizer.app.session_service: plan.updated session_id=161900b6d853424e9cae982916e1e387 target_dir=d:/5_downloads/downloads/test for file stage=ready_for_precheck summary={"moves": 5, "unresolved": 0, "source": "user_intent"}
+2026-03-30 09:34:37 [INFO] file_organizer.app.session_service: plan.user_intent_submitted session_id=161900b6d853424e9cae982916e1e387 target_dir=d:/5_downloads/downloads/test for file stage=ready_for_precheck summary={"moves": 5, "unresolved": 0, "message_count": 7, "content_preview": "为什么你忘记了调用工具呢？"}
+2026-03-30 09:34:38 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 09:34:40 [INFO] file_organizer.organize.service: organizer.response_recorded round=3
+2026-03-30 09:34:40 [INFO] file_organizer.organize.service: organizer.response_recorded round=3
+2026-03-30 09:34:40 [INFO] file_organizer.app.session_service: plan.updated session_id=161900b6d853424e9cae982916e1e387 target_dir=d:/5_downloads/downloads/test for file stage=ready_for_precheck summary={"moves": 5, "unresolved": 0, "source": "user_intent"}
+2026-03-30 09:35:17 [INFO] file_organizer.app.session_service: plan.user_intent_submitted session_id=161900b6d853424e9cae982916e1e387 target_dir=d:/5_downloads/downloads/test for file stage=ready_for_precheck summary={"moves": 5, "unresolved": 0, "message_count": 10, "content_preview": "你可以调用的有几个工具？它们应该在什么情况下使用"}
+2026-03-30 09:35:17 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 09:35:22 [INFO] file_organizer.organize.service: organizer.response_recorded round=4
+2026-03-30 09:35:22 [INFO] file_organizer.organize.service: organizer.response_recorded round=4
+2026-03-30 09:35:22 [INFO] file_organizer.app.session_service: plan.updated session_id=161900b6d853424e9cae982916e1e387 target_dir=d:/5_downloads/downloads/test for file stage=ready_for_precheck summary={"moves": 5, "unresolved": 0, "source": "user_intent"}
+2026-03-30 09:36:40 [INFO] file_organizer.app.session_service: precheck.started session_id=161900b6d853424e9cae982916e1e387 target_dir=d:/5_downloads/downloads/test for file stage=ready_for_precheck summary={"moves": 5, "unresolved": 0}
+2026-03-30 09:36:40 [INFO] file_organizer.app.session_service: precheck.completed session_id=161900b6d853424e9cae982916e1e387 target_dir=d:/5_downloads/downloads/test for file stage=ready_to_execute summary={"moves": 5, "unresolved": 0, "can_execute": true, "blocking_error_count": 0, "warning_count": 0}
+2026-03-30 09:36:43 [INFO] file_organizer.app.session_service: session.abandoned session_id=161900b6d853424e9cae982916e1e387 target_dir=d:/5_downloads/downloads/test for file stage=abandoned summary={"moves": 5, "unresolved": 0}
+2026-03-30 09:36:51 [INFO] file_organizer.app.session_service: session.resume_available session_id=5a29fc606a784494a7fdee1b3357c522 target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 stage=interrupted summary={"moves": 0, "unresolved": 0, "existing_session_id": "5a29fc606a784494a7fdee1b3357c522"}
+2026-03-30 09:36:55 [INFO] file_organizer.app.session_service: session.abandoned session_id=5a29fc606a784494a7fdee1b3357c522 target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 stage=abandoned summary={"moves": 0, "unresolved": 0}
+2026-03-30 09:36:55 [INFO] file_organizer.app.session_service: session.created session_id=e9ad388479624d8c8a630275bc3f7dad target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 stage=draft summary={"moves": 0, "unresolved": 0, "strategy": {"template_id": "general_downloads", "naming_style": "zh", "caution_level": "balanced", "note": ""}}
+2026-03-30 09:36:55 [INFO] file_organizer.app.session_service: scan.started session_id=e9ad388479624d8c8a630275bc3f7dad target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 stage=scanning summary={"moves": 0, "unresolved": 0}
+2026-03-30 09:36:59 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 09:36:59 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 09:37:00 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 09:37:04 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 09:37:04 [INFO] file_organizer.app.session_service: scan.completed session_id=e9ad388479624d8c8a630275bc3f7dad target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 stage=planning summary={"moves": 0, "unresolved": 0, "entry_count": 5, "auto_plan_pending": true}
+2026-03-30 09:37:04 [INFO] file_organizer.app.session_service: plan.auto_started session_id=e9ad388479624d8c8a630275bc3f7dad target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 stage=planning summary={"moves": 0, "unresolved": 0}
+2026-03-30 09:37:04 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 09:37:10 [INFO] file_organizer.organize.service: organizer.response_recorded round=1
+2026-03-30 09:37:10 [ERROR] file_organizer.app.session_service: plan.auto_failed session_id=e9ad388479624d8c8a630275bc3f7dad target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\app\session_service.py", line 1232, in _finish_async_scan
+    assistant_message, cycle_result = organize_service.run_organizer_cycle(
+                                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        messages=list(session.messages),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+        event_handler=on_plan_event,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\organize\service.py", line 1137, in run_organizer_cycle
+    content, plan_diff, final_plan, unresolved_request = _extract_plan_submissions(message)
+                                                         ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\organize\service.py", line 1091, in _extract_plan_submissions
+    args = json.loads(tool_call.function.arguments)
+  File "C:\Users\QUPENG\miniconda3\Lib\json\__init__.py", line 352, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 10 column 26 (char 586)
+2026-03-30 09:37:10 [ERROR] file_organizer.app.session_service: plan.auto_failed session_id=e9ad388479624d8c8a630275bc3f7dad target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 stage=interrupted summary={"moves": 0, "unresolved": 0, "error": "Expecting value: line 10 column 26 (char 586)"}
+2026-03-30 09:51:24 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 09:51:46 [INFO] file_organizer.app.session_service: session.abandoned session_id=e9ad388479624d8c8a630275bc3f7dad target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 stage=abandoned summary={"moves": 0, "unresolved": 0}
+2026-03-30 09:51:52 [INFO] file_organizer.app.session_service: session.created session_id=b0290e079c8846fca9618d313afe4cb1 target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 stage=draft summary={"moves": 0, "unresolved": 0, "strategy": {"template_id": "general_downloads", "naming_style": "zh", "caution_level": "balanced", "note": ""}}
+2026-03-30 09:51:52 [INFO] file_organizer.app.session_service: scan.started session_id=b0290e079c8846fca9618d313afe4cb1 target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 stage=scanning summary={"moves": 0, "unresolved": 0}
+2026-03-30 09:52:03 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 09:52:19 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 09:52:19 [INFO] file_organizer.app.session_service: scan.completed session_id=b0290e079c8846fca9618d313afe4cb1 target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 stage=planning summary={"moves": 0, "unresolved": 0, "entry_count": 5, "auto_plan_pending": true}
+2026-03-30 09:52:19 [INFO] file_organizer.app.session_service: plan.auto_started session_id=b0290e079c8846fca9618d313afe4cb1 target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 stage=planning summary={"moves": 0, "unresolved": 0}
+2026-03-30 09:52:21 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 09:52:53 [INFO] file_organizer.organize.service: organizer.response_recorded round=1
+2026-03-30 09:52:53 [INFO] file_organizer.organize.service: organizer.response_recorded round=1
+2026-03-30 09:52:53 [INFO] file_organizer.app.session_service: plan.auto_completed session_id=b0290e079c8846fca9618d313afe4cb1 target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 stage=ready_for_precheck summary={"moves": 5, "unresolved": 0, "summary": "已分类 5 项，调整 5 项，仍剩 0 项待定"}
+2026-03-30 09:54:08 [INFO] file_organizer.app.session_service: precheck.started session_id=b0290e079c8846fca9618d313afe4cb1 target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 stage=ready_for_precheck summary={"moves": 5, "unresolved": 0}
+2026-03-30 09:54:08 [INFO] file_organizer.app.session_service: precheck.completed session_id=b0290e079c8846fca9618d313afe4cb1 target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 stage=ready_to_execute summary={"moves": 5, "unresolved": 0, "can_execute": true, "blocking_error_count": 0, "warning_count": 0}
+2026-03-30 09:54:12 [INFO] file_organizer.app.session_service: execution.started session_id=b0290e079c8846fca9618d313afe4cb1 target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 stage=executing summary={"moves": 5, "unresolved": 0}
+2026-03-30 09:54:12 [INFO] file_organizer.app.session_service: execution.completed session_id=b0290e079c8846fca9618d313afe4cb1 target_dir=d:/5_downloads/downloads/simple test - 副本 - 副本 - 副本 - 副本 stage=completed summary={"moves": 5, "unresolved": 0, "execution_id": "c912046bea464c81ab39739e6b44cf42", "success_count": 7, "failure_count": 0}
+2026-03-30 09:54:26 [INFO] httpx: HTTP Request: GET https://api-inference.modelscope.cn/v1/images/generations/models "HTTP/1.1 404 Not Found"
+2026-03-30 09:54:40 [INFO] httpx: HTTP Request: GET https://api-inference.modelscope.cn/v1/images/generations/models "HTTP/1.1 404 Not Found"
+2026-03-30 10:06:39 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/apply-template "HTTP/1.1 200 OK"
+2026-03-30 10:06:39 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/apply-ready "HTTP/1.1 200 OK"
+2026-03-30 10:06:39 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/analyze "HTTP/1.1 200 OK"
+2026-03-30 10:06:39 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/generate "HTTP/1.1 200 OK"
+2026-03-30 10:06:39 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/actions/action-1/confirm "HTTP/1.1 200 OK"
+2026-03-30 10:06:39 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/actions/action-1/dismiss "HTTP/1.1 200 OK"
+2026-03-30 10:06:39 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/client-actions/report "HTTP/1.1 200 OK"
+2026-03-30 10:06:39 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions "HTTP/1.1 200 OK"
+2026-03-30 10:06:39 [INFO] httpx: HTTP Request: GET http://testserver/api/icon-workbench/sessions/icon-session/folders/folder-1/versions/version-1/image "HTTP/1.1 200 OK"
+2026-03-30 10:06:39 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/messages "HTTP/1.1 200 OK"
+2026-03-30 10:06:39 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/folders/folder-1/prompt "HTTP/1.1 200 OK"
+2026-03-30 10:06:39 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/folders/folder-1/select-version "HTTP/1.1 200 OK"
+2026-03-30 10:06:39 [INFO] httpx: HTTP Request: GET http://testserver/api/icon-workbench/config "HTTP/1.1 200 OK"
+2026-03-30 10:06:39 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/config "HTTP/1.1 200 OK"
+2026-03-30 10:06:39 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/config/presets "HTTP/1.1 200 OK"
+2026-03-30 10:06:39 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/config/presets/switch "HTTP/1.1 200 OK"
+2026-03-30 10:06:39 [INFO] httpx: HTTP Request: DELETE http://testserver/api/icon-workbench/config/presets/icon-preset-2 "HTTP/1.1 200 OK"
+2026-03-30 10:06:39 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/targets "HTTP/1.1 200 OK"
+2026-03-30 10:06:39 [INFO] httpx: HTTP Request: DELETE http://testserver/api/icon-workbench/sessions/icon-session/targets/folder-1 "HTTP/1.1 200 OK"
+2026-03-30 10:06:39 [INFO] httpx: HTTP Request: GET http://testserver/api/icon-workbench/templates "HTTP/1.1 200 OK"
+2026-03-30 10:06:39 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/templates "HTTP/1.1 200 OK"
+2026-03-30 10:06:39 [INFO] httpx: HTTP Request: PATCH http://testserver/api/icon-workbench/templates/user-template-1 "HTTP/1.1 200 OK"
+2026-03-30 10:06:39 [INFO] httpx: HTTP Request: DELETE http://testserver/api/icon-workbench/templates/user-template-1 "HTTP/1.1 200 OK"
+2026-03-30 10:09:58 [INFO] __main__: backend.starting host=127.0.0.1 port=8765 reload=False runtime_log=D:\3_Projects\Active\file-organizer-GUI-\logs\backend\runtime.log
+2026-03-30 10:09:58 [INFO] uvicorn.error: Started server process [48172]
+2026-03-30 10:09:58 [INFO] uvicorn.error: Waiting for application startup.
+2026-03-30 10:09:58 [INFO] uvicorn.error: Application startup complete.
+2026-03-30 10:09:58 [INFO] uvicorn.error: Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+2026-03-30 10:12:22 [INFO] httpx: HTTP Request: GET https://dashscope.aliyuncs.com/compatible-mode/v1/models "HTTP/1.1 200 OK"
+2026-03-30 10:21:59 [INFO] httpx: HTTP Request: GET https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation/models "HTTP/1.1 400 Bad Request"
+2026-03-30 10:21:59 [ERROR] file_organizer.api.main: 模型链路连通性测试失败
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 894, in test_llm
+    client.models.list()
+    ~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\openai\resources\models.py", line 93, in list
+    return self._get_api_list(
+           ~~~~~~~~~~~~~~~~~~^
+        "/models",
+        ^^^^^^^^^^
+    ...<4 lines>...
+        model=Model,
+        ^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\openai\_base_client.py", line 1383, in get_api_list
+    return self._request_api_list(model, page, opts)
+           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\openai\_base_client.py", line 1182, in _request_api_list
+    return self.request(page, options, stream=False)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\openai\_base_client.py", line 1070, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.BadRequestError: Error code: 400 - {'requestId': '1f495a7c-460e-4c52-88e7-ee81ed9e5eef', 'code': 'InvalidParameter', 'message': "Request method 'GET' is not supported."}
+2026-03-30 10:22:05 [INFO] httpx: HTTP Request: GET https://dashscope.aliyuncs.com/compatible-mode/v1/models "HTTP/1.1 200 OK"
+2026-03-30 11:56:08 [INFO] httpx: HTTP Request: POST http://testserver/api/utils/config/presets "HTTP/1.1 200 OK"
+2026-03-30 11:56:08 [INFO] httpx: HTTP Request: GET http://testserver/api/utils/config "HTTP/1.1 200 OK"
+2026-03-30 11:56:08 [INFO] httpx: HTTP Request: POST http://testserver/api/utils/config/secrets "HTTP/1.1 410 Gone"
+2026-03-30 11:56:08 [INFO] httpx: HTTP Request: POST http://testserver/api/utils/config/presets/switch "HTTP/1.1 200 OK"
+2026-03-30 11:56:09 [ERROR] file_organizer.api.main: 设置连接测试失败
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\icon_workbench\client.py", line 80, in _request_json
+    with request.urlopen(req, timeout=timeout) as response:
+         ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\unittest\mock.py", line 1169, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\unittest\mock.py", line 1173, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\unittest\mock.py", line 1228, in _execute_mock_call
+    raise effect
+urllib.error.HTTPError: HTTP Error 422: unprocessable
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 975, in _execute_settings_test
+    image_bytes = app.state.icon_workbench_service.image_client.generate_png(
+        ModelConfig(
+    ...<5 lines>...
+        "256x256",
+    )
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\icon_workbench\client.py", line 230, in generate_png
+    response = _post_json(url, payload, config.api_key)
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\icon_workbench\client.py", line 90, in _post_json
+    return _request_json(url, method="POST", payload=payload, api_key=api_key)
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\icon_workbench\client.py", line 84, in _request_json
+    raise RuntimeError(f"接口请求失败: {exc.code} {body}") from exc
+RuntimeError: 接口请求失败: 422 
+2026-03-30 11:56:09 [INFO] httpx: HTTP Request: POST http://testserver/api/utils/test-llm "HTTP/1.1 400 Bad Request"
+2026-03-30 11:56:09 [ERROR] file_organizer.api.main: 设置连接测试失败
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 975, in _execute_settings_test
+    image_bytes = app.state.icon_workbench_service.image_client.generate_png(
+        ModelConfig(
+    ...<5 lines>...
+        "256x256",
+    )
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\icon_workbench\client.py", line 229, in generate_png
+    return self._generate_modelscope_png(url, payload, config.api_key)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\icon_workbench\client.py", line 175, in _generate_modelscope_png
+    response = _request_json(
+        url,
+    ...<3 lines>...
+        extra_headers={"X-ModelScope-Async-Mode": "true"},
+    )
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\icon_workbench\client.py", line 81, in _request_json
+    return json.loads(response.read().decode("utf-8"))
+           ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\json\__init__.py", line 345, in loads
+    raise TypeError(f'the JSON object must be str, bytes or bytearray, '
+                    f'not {s.__class__.__name__}')
+TypeError: the JSON object must be str, bytes or bytearray, not Mock
+2026-03-30 11:56:09 [INFO] httpx: HTTP Request: POST http://testserver/api/utils/test-llm "HTTP/1.1 400 Bad Request"
+2026-03-30 11:56:09 [INFO] httpx: HTTP Request: POST http://testserver/api/utils/test-llm "HTTP/1.1 400 Bad Request"
+2026-03-30 11:56:09 [INFO] httpx: HTTP Request: POST http://testserver/api/utils/test-llm "HTTP/1.1 400 Bad Request"
+2026-03-30 11:56:20 [INFO] openai._base_client: Retrying request to /chat/completions in 0.443431 seconds
+2026-03-30 11:56:32 [INFO] openai._base_client: Retrying request to /chat/completions in 0.977909 seconds
+2026-03-30 11:56:44 [ERROR] file_organizer.api.main: 设置连接测试失败
+Traceback (most recent call last):
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\httpx\_transports\default.py", line 101, in map_httpcore_exceptions
+    yield
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\httpx\_transports\default.py", line 250, in handle_request
+    resp = self._pool.handle_request(req)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\httpcore\_sync\connection_pool.py", line 256, in handle_request
+    raise exc from None
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\httpcore\_sync\connection_pool.py", line 236, in handle_request
+    response = connection.handle_request(
+        pool_request.request
+    )
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\httpcore\_sync\connection.py", line 101, in handle_request
+    raise exc
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\httpcore\_sync\connection.py", line 78, in handle_request
+    stream = self._connect(request)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\httpcore\_sync\connection.py", line 124, in _connect
+    stream = self._network_backend.connect_tcp(**kwargs)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\httpcore\_backends\sync.py", line 207, in connect_tcp
+    with map_exceptions(exc_map):
+         ~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\httpcore\_exceptions.py", line 14, in map_exceptions
+    raise to_exc(exc) from exc
+httpcore.ConnectError: [Errno 11001] getaddrinfo failed
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\openai\_base_client.py", line 1005, in request
+    response = self._client.send(
+        request,
+        stream=stream or self._should_stream_response_body(request=request),
+        **kwargs,
+    )
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\httpx\_client.py", line 914, in send
+    response = self._send_handling_auth(
+        request,
+    ...<2 lines>...
+        history=[],
+    )
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\httpx\_client.py", line 942, in _send_handling_auth
+    response = self._send_handling_redirects(
+        request,
+        follow_redirects=follow_redirects,
+        history=history,
+    )
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\httpx\_client.py", line 979, in _send_handling_redirects
+    response = self._send_single_request(request)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\httpx\_client.py", line 1014, in _send_single_request
+    response = transport.handle_request(request)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\httpx\_transports\default.py", line 249, in handle_request
+    with map_httpcore_exceptions():
+         ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\QUPENG\miniconda3\Lib\contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\httpx\_transports\default.py", line 118, in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+httpx.ConnectError: [Errno 11001] getaddrinfo failed
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 924, in _execute_settings_test
+    client.chat.completions.create(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        model=runtime["model"],
+        ^^^^^^^^^^^^^^^^^^^^^^^
+        messages=[{"role": "user", "content": "ping"}],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        max_tokens=1,
+        ^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\openai\_utils\_utils.py", line 286, in wrapper
+    return func(*args, **kwargs)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\openai\resources\chat\completions\completions.py", line 1211, in create
+    return self._post(
+           ~~~~~~~~~~^
+        "/chat/completions",
+        ^^^^^^^^^^^^^^^^^^^^
+    ...<47 lines>...
+        stream_cls=Stream[ChatCompletionChunk],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\openai\_base_client.py", line 1297, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+                           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\openai\_base_client.py", line 1037, in request
+    raise APIConnectionError(request=request) from err
+openai.APIConnectionError: Connection error.
+2026-03-30 11:56:44 [INFO] httpx: HTTP Request: POST http://testserver/api/utils/test-llm "HTTP/1.1 400 Bad Request"
+2026-03-30 11:56:44 [INFO] httpx: HTTP Request: POST http://testserver/api/utils/test-llm "HTTP/1.1 200 OK"
+2026-03-30 11:56:44 [INFO] file_organizer.app.session_service: session.created session_id=0cf2ce761a514cac882dce28c6db8e9d target_dir=d:/3_projects/active/file-organizer-gui-/test_temp_api_auth/inbox stage=draft summary={"moves": 0, "unresolved": 0, "strategy": {"template_id": "general_downloads", "naming_style": "zh", "caution_level": "balanced", "note": ""}}
+2026-03-30 11:56:44 [INFO] httpx: HTTP Request: POST http://testserver/api/sessions "HTTP/1.1 200 OK"
+2026-03-30 11:56:44 [INFO] httpx: HTTP Request: GET http://testserver/api/sessions/0cf2ce761a514cac882dce28c6db8e9d/events?access_token=test-api-token "HTTP/1.1 200 OK"
+2026-03-30 11:56:44 [INFO] file_organizer.app.session_service: session.created session_id=92b642ba1e0d4feea7394b617dbe2586 target_dir=d:/3_projects/active/file-organizer-gui-/test_temp_api_auth/inbox stage=draft summary={"moves": 0, "unresolved": 0, "strategy": {"template_id": "general_downloads", "naming_style": "zh", "caution_level": "balanced", "note": ""}}
+2026-03-30 11:56:44 [INFO] httpx: HTTP Request: POST http://testserver/api/sessions "HTTP/1.1 200 OK"
+2026-03-30 11:56:44 [INFO] httpx: HTTP Request: GET http://testserver/api/sessions/92b642ba1e0d4feea7394b617dbe2586/events "HTTP/1.1 401 Unauthorized"
+2026-03-30 11:56:44 [INFO] httpx: HTTP Request: GET http://testserver/api/health "HTTP/1.1 200 OK"
+2026-03-30 11:56:44 [INFO] httpx: HTTP Request: OPTIONS http://testserver/api/sessions "HTTP/1.1 200 OK"
+2026-03-30 11:56:44 [INFO] file_organizer.app.session_service: session.created session_id=0c0102b12b1940e1be34b8dac46aa784 target_dir=d:/3_projects/active/file-organizer-gui-/test_temp_api_auth/inbox stage=draft summary={"moves": 0, "unresolved": 0, "strategy": {"template_id": "general_downloads", "naming_style": "zh", "caution_level": "balanced", "note": ""}}
+2026-03-30 11:56:44 [INFO] httpx: HTTP Request: POST http://testserver/api/sessions "HTTP/1.1 200 OK"
+2026-03-30 11:56:44 [INFO] httpx: HTTP Request: POST http://testserver/api/sessions "HTTP/1.1 401 Unauthorized"
+2026-03-30 11:56:44 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/apply-template "HTTP/1.1 200 OK"
+2026-03-30 11:56:44 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/apply-ready "HTTP/1.1 200 OK"
+2026-03-30 11:56:45 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/analyze "HTTP/1.1 200 OK"
+2026-03-30 11:56:45 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/generate "HTTP/1.1 200 OK"
+2026-03-30 11:56:45 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/actions/action-1/confirm "HTTP/1.1 200 OK"
+2026-03-30 11:56:45 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/actions/action-1/dismiss "HTTP/1.1 200 OK"
+2026-03-30 11:56:45 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/client-actions/report "HTTP/1.1 200 OK"
+2026-03-30 11:56:45 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions "HTTP/1.1 200 OK"
+2026-03-30 11:56:45 [INFO] httpx: HTTP Request: GET http://testserver/api/icon-workbench/sessions/icon-session/folders/folder-1/versions/version-1/image "HTTP/1.1 200 OK"
+2026-03-30 11:56:45 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/messages "HTTP/1.1 200 OK"
+2026-03-30 11:56:45 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/folders/folder-1/prompt "HTTP/1.1 200 OK"
+2026-03-30 11:56:45 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/folders/folder-1/select-version "HTTP/1.1 200 OK"
+2026-03-30 11:56:45 [INFO] httpx: HTTP Request: GET http://testserver/api/icon-workbench/config "HTTP/1.1 200 OK"
+2026-03-30 11:56:45 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/config "HTTP/1.1 200 OK"
+2026-03-30 11:56:45 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/config/presets "HTTP/1.1 200 OK"
+2026-03-30 11:56:45 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/config/presets/switch "HTTP/1.1 200 OK"
+2026-03-30 11:56:45 [INFO] httpx: HTTP Request: DELETE http://testserver/api/icon-workbench/config/presets/icon-preset-2 "HTTP/1.1 200 OK"
+2026-03-30 11:56:45 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/targets "HTTP/1.1 200 OK"
+2026-03-30 11:56:45 [INFO] httpx: HTTP Request: DELETE http://testserver/api/icon-workbench/sessions/icon-session/targets/folder-1 "HTTP/1.1 200 OK"
+2026-03-30 11:56:45 [INFO] httpx: HTTP Request: GET http://testserver/api/icon-workbench/templates "HTTP/1.1 200 OK"
+2026-03-30 11:56:45 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/templates "HTTP/1.1 200 OK"
+2026-03-30 11:56:45 [INFO] httpx: HTTP Request: PATCH http://testserver/api/icon-workbench/templates/user-template-1 "HTTP/1.1 200 OK"
+2026-03-30 11:56:45 [INFO] httpx: HTTP Request: DELETE http://testserver/api/icon-workbench/templates/user-template-1 "HTTP/1.1 200 OK"
+2026-03-30 11:59:29 [INFO] httpx: HTTP Request: POST http://testserver/api/utils/config/secrets "HTTP/1.1 410 Gone"
+2026-03-30 11:59:30 [INFO] httpx: HTTP Request: GET http://testserver/api/settings "HTTP/1.1 200 OK"
+2026-03-30 11:59:30 [INFO] httpx: HTTP Request: GET http://testserver/api/utils/config "HTTP/1.1 200 OK"
+2026-03-30 11:59:30 [INFO] httpx: HTTP Request: POST http://testserver/api/utils/test-llm "HTTP/1.1 200 OK"
+2026-03-30 11:59:30 [INFO] httpx: HTTP Request: PATCH http://testserver/api/settings "HTTP/1.1 200 OK"
+2026-03-30 11:59:30 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/presets/text "HTTP/1.1 200 OK"
+2026-03-30 11:59:30 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/presets/text/preset-2/activate "HTTP/1.1 200 OK"
+2026-03-30 11:59:30 [INFO] httpx: HTTP Request: DELETE http://testserver/api/settings/presets/text/preset-2 "HTTP/1.1 200 OK"
+2026-03-30 11:59:30 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/test "HTTP/1.1 200 OK"
+2026-03-30 11:59:30 [ERROR] file_organizer.api.main: 设置连接测试失败
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 932, in _execute_settings_test
+    client.chat.completions.create(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        model=runtime["model"],
+        ^^^^^^^^^^^^^^^^^^^^^^^
+        messages=[{"role": "user", "content": "ping"}],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        max_tokens=1,
+        ^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\QUPENG\miniconda3\Lib\unittest\mock.py", line 1169, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\unittest\mock.py", line 1173, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\unittest\mock.py", line 1228, in _execute_mock_call
+    raise effect
+RuntimeError: 接口请求失败: 404 model not found
+2026-03-30 11:59:30 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/test "HTTP/1.1 400 Bad Request"
+2026-03-30 11:59:30 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/test "HTTP/1.1 200 OK"
+2026-03-30 11:59:30 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/test "HTTP/1.1 200 OK"
+2026-03-30 11:59:30 [INFO] file_organizer.app.session_service: session.created session_id=10790915b5b14ab8b6c4a313b49157a5 target_dir=d:/3_projects/active/file-organizer-gui-/test_temp_api_auth/inbox stage=draft summary={"moves": 0, "unresolved": 0, "strategy": {"template_id": "general_downloads", "naming_style": "zh", "caution_level": "balanced", "note": ""}}
+2026-03-30 11:59:30 [INFO] httpx: HTTP Request: POST http://testserver/api/sessions "HTTP/1.1 200 OK"
+2026-03-30 11:59:30 [INFO] httpx: HTTP Request: GET http://testserver/api/sessions/10790915b5b14ab8b6c4a313b49157a5/events?access_token=test-api-token "HTTP/1.1 200 OK"
+2026-03-30 11:59:30 [INFO] file_organizer.app.session_service: session.created session_id=99058ad11c9c48bcab414862af23693c target_dir=d:/3_projects/active/file-organizer-gui-/test_temp_api_auth/inbox stage=draft summary={"moves": 0, "unresolved": 0, "strategy": {"template_id": "general_downloads", "naming_style": "zh", "caution_level": "balanced", "note": ""}}
+2026-03-30 11:59:30 [INFO] httpx: HTTP Request: POST http://testserver/api/sessions "HTTP/1.1 200 OK"
+2026-03-30 11:59:30 [INFO] httpx: HTTP Request: GET http://testserver/api/sessions/99058ad11c9c48bcab414862af23693c/events "HTTP/1.1 401 Unauthorized"
+2026-03-30 11:59:30 [INFO] httpx: HTTP Request: GET http://testserver/api/health "HTTP/1.1 200 OK"
+2026-03-30 11:59:30 [INFO] httpx: HTTP Request: OPTIONS http://testserver/api/sessions "HTTP/1.1 200 OK"
+2026-03-30 11:59:30 [INFO] file_organizer.app.session_service: session.created session_id=637a3dc7d5c1472598b414836bb43a1f target_dir=d:/3_projects/active/file-organizer-gui-/test_temp_api_auth/inbox stage=draft summary={"moves": 0, "unresolved": 0, "strategy": {"template_id": "general_downloads", "naming_style": "zh", "caution_level": "balanced", "note": ""}}
+2026-03-30 11:59:30 [INFO] httpx: HTTP Request: POST http://testserver/api/sessions "HTTP/1.1 200 OK"
+2026-03-30 11:59:30 [INFO] httpx: HTTP Request: POST http://testserver/api/sessions "HTTP/1.1 401 Unauthorized"
+2026-03-30 11:59:30 [INFO] httpx: HTTP Request: GET http://testserver/api/settings "HTTP/1.1 401 Unauthorized"
+2026-03-30 11:59:30 [INFO] httpx: HTTP Request: PATCH http://testserver/api/settings "HTTP/1.1 401 Unauthorized"
+2026-03-30 11:59:30 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/test "HTTP/1.1 401 Unauthorized"
+2026-03-30 11:59:42 [INFO] httpx: HTTP Request: POST http://testserver/api/utils/config/secrets "HTTP/1.1 410 Gone"
+2026-03-30 11:59:42 [INFO] httpx: HTTP Request: GET http://testserver/api/settings "HTTP/1.1 200 OK"
+2026-03-30 11:59:42 [INFO] httpx: HTTP Request: GET http://testserver/api/utils/config "HTTP/1.1 200 OK"
+2026-03-30 11:59:42 [INFO] httpx: HTTP Request: POST http://testserver/api/utils/test-llm "HTTP/1.1 200 OK"
+2026-03-30 11:59:42 [INFO] httpx: HTTP Request: PATCH http://testserver/api/settings "HTTP/1.1 200 OK"
+2026-03-30 11:59:42 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/presets/text "HTTP/1.1 200 OK"
+2026-03-30 11:59:42 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/presets/text/preset-2/activate "HTTP/1.1 200 OK"
+2026-03-30 11:59:42 [INFO] httpx: HTTP Request: DELETE http://testserver/api/settings/presets/text/preset-2 "HTTP/1.1 200 OK"
+2026-03-30 11:59:42 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/test "HTTP/1.1 200 OK"
+2026-03-30 11:59:42 [ERROR] file_organizer.api.main: 设置连接测试失败
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 932, in _execute_settings_test
+    client.chat.completions.create(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        model=runtime["model"],
+        ^^^^^^^^^^^^^^^^^^^^^^^
+        messages=[{"role": "user", "content": "ping"}],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        max_tokens=1,
+        ^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\QUPENG\miniconda3\Lib\unittest\mock.py", line 1169, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\unittest\mock.py", line 1173, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\unittest\mock.py", line 1228, in _execute_mock_call
+    raise effect
+RuntimeError: 接口请求失败: 404 model not found
+2026-03-30 11:59:42 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/test "HTTP/1.1 400 Bad Request"
+2026-03-30 11:59:42 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/test "HTTP/1.1 200 OK"
+2026-03-30 11:59:42 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/test "HTTP/1.1 200 OK"
+2026-03-30 11:59:42 [INFO] file_organizer.app.session_service: session.created session_id=79753916b58042109a54ae1259d2901d target_dir=d:/3_projects/active/file-organizer-gui-/test_temp_api_auth/inbox stage=draft summary={"moves": 0, "unresolved": 0, "strategy": {"template_id": "general_downloads", "naming_style": "zh", "caution_level": "balanced", "note": ""}}
+2026-03-30 11:59:42 [INFO] httpx: HTTP Request: POST http://testserver/api/sessions "HTTP/1.1 200 OK"
+2026-03-30 11:59:42 [INFO] httpx: HTTP Request: GET http://testserver/api/sessions/79753916b58042109a54ae1259d2901d/events?access_token=test-api-token "HTTP/1.1 200 OK"
+2026-03-30 11:59:42 [INFO] file_organizer.app.session_service: session.created session_id=eb3426248bc34a52ad50d468ff73487b target_dir=d:/3_projects/active/file-organizer-gui-/test_temp_api_auth/inbox stage=draft summary={"moves": 0, "unresolved": 0, "strategy": {"template_id": "general_downloads", "naming_style": "zh", "caution_level": "balanced", "note": ""}}
+2026-03-30 11:59:42 [INFO] httpx: HTTP Request: POST http://testserver/api/sessions "HTTP/1.1 200 OK"
+2026-03-30 11:59:42 [INFO] httpx: HTTP Request: GET http://testserver/api/sessions/eb3426248bc34a52ad50d468ff73487b/events "HTTP/1.1 401 Unauthorized"
+2026-03-30 11:59:42 [INFO] httpx: HTTP Request: GET http://testserver/api/health "HTTP/1.1 200 OK"
+2026-03-30 11:59:42 [INFO] httpx: HTTP Request: OPTIONS http://testserver/api/sessions "HTTP/1.1 200 OK"
+2026-03-30 11:59:42 [INFO] file_organizer.app.session_service: session.created session_id=9b362673356b491c9d5a1a52f39f20d5 target_dir=d:/3_projects/active/file-organizer-gui-/test_temp_api_auth/inbox stage=draft summary={"moves": 0, "unresolved": 0, "strategy": {"template_id": "general_downloads", "naming_style": "zh", "caution_level": "balanced", "note": ""}}
+2026-03-30 11:59:43 [INFO] httpx: HTTP Request: POST http://testserver/api/sessions "HTTP/1.1 200 OK"
+2026-03-30 11:59:43 [INFO] httpx: HTTP Request: POST http://testserver/api/sessions "HTTP/1.1 401 Unauthorized"
+2026-03-30 11:59:43 [INFO] httpx: HTTP Request: GET http://testserver/api/settings "HTTP/1.1 401 Unauthorized"
+2026-03-30 11:59:43 [INFO] httpx: HTTP Request: PATCH http://testserver/api/settings "HTTP/1.1 401 Unauthorized"
+2026-03-30 11:59:43 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/test "HTTP/1.1 401 Unauthorized"
+2026-03-30 11:59:43 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/apply-template "HTTP/1.1 200 OK"
+2026-03-30 11:59:43 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/apply-ready "HTTP/1.1 200 OK"
+2026-03-30 11:59:43 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/analyze "HTTP/1.1 200 OK"
+2026-03-30 11:59:43 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/generate "HTTP/1.1 200 OK"
+2026-03-30 11:59:43 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/actions/action-1/confirm "HTTP/1.1 200 OK"
+2026-03-30 11:59:43 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/actions/action-1/dismiss "HTTP/1.1 200 OK"
+2026-03-30 11:59:43 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/client-actions/report "HTTP/1.1 200 OK"
+2026-03-30 11:59:43 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions "HTTP/1.1 200 OK"
+2026-03-30 11:59:43 [INFO] httpx: HTTP Request: GET http://testserver/api/icon-workbench/sessions/icon-session/folders/folder-1/versions/version-1/image "HTTP/1.1 200 OK"
+2026-03-30 11:59:43 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/messages "HTTP/1.1 200 OK"
+2026-03-30 11:59:43 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/folders/folder-1/prompt "HTTP/1.1 200 OK"
+2026-03-30 11:59:43 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/folders/folder-1/select-version "HTTP/1.1 200 OK"
+2026-03-30 11:59:43 [INFO] httpx: HTTP Request: GET http://testserver/api/icon-workbench/config "HTTP/1.1 200 OK"
+2026-03-30 11:59:43 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/config "HTTP/1.1 200 OK"
+2026-03-30 11:59:43 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/config/presets "HTTP/1.1 200 OK"
+2026-03-30 11:59:43 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/config/presets/switch "HTTP/1.1 200 OK"
+2026-03-30 11:59:43 [INFO] httpx: HTTP Request: DELETE http://testserver/api/icon-workbench/config/presets/icon-preset-2 "HTTP/1.1 200 OK"
+2026-03-30 11:59:43 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/targets "HTTP/1.1 200 OK"
+2026-03-30 11:59:43 [INFO] httpx: HTTP Request: DELETE http://testserver/api/icon-workbench/sessions/icon-session/targets/folder-1 "HTTP/1.1 200 OK"
+2026-03-30 11:59:43 [INFO] httpx: HTTP Request: GET http://testserver/api/icon-workbench/templates "HTTP/1.1 200 OK"
+2026-03-30 11:59:43 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/templates "HTTP/1.1 200 OK"
+2026-03-30 11:59:43 [INFO] httpx: HTTP Request: PATCH http://testserver/api/icon-workbench/templates/user-template-1 "HTTP/1.1 200 OK"
+2026-03-30 11:59:43 [INFO] httpx: HTTP Request: DELETE http://testserver/api/icon-workbench/templates/user-template-1 "HTTP/1.1 200 OK"
+2026-03-30 12:01:51 [INFO] httpx: HTTP Request: POST http://testserver/api/utils/config/secrets "HTTP/1.1 410 Gone"
+2026-03-30 12:01:51 [INFO] httpx: HTTP Request: GET http://testserver/api/settings "HTTP/1.1 200 OK"
+2026-03-30 12:01:51 [INFO] httpx: HTTP Request: GET http://testserver/api/utils/config "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: POST http://testserver/api/utils/test-llm "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: PATCH http://testserver/api/settings "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/presets/text "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/presets/text/preset-2/activate "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: DELETE http://testserver/api/settings/presets/text/preset-2 "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/test "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [ERROR] file_organizer.api.main: 设置连接测试失败
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 932, in _execute_settings_test
+    client.chat.completions.create(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        model=runtime["model"],
+        ^^^^^^^^^^^^^^^^^^^^^^^
+        messages=[{"role": "user", "content": "ping"}],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        max_tokens=1,
+        ^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\QUPENG\miniconda3\Lib\unittest\mock.py", line 1169, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\unittest\mock.py", line 1173, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\unittest\mock.py", line 1228, in _execute_mock_call
+    raise effect
+RuntimeError: 接口请求失败: 404 model not found
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/test "HTTP/1.1 400 Bad Request"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/test "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/test "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] file_organizer.app.session_service: session.created session_id=d40b472e11f747278efd0e261f088d3b target_dir=d:/3_projects/active/file-organizer-gui-/test_temp_api_auth/inbox stage=draft summary={"moves": 0, "unresolved": 0, "strategy": {"template_id": "general_downloads", "naming_style": "zh", "caution_level": "balanced", "note": ""}}
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: POST http://testserver/api/sessions "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: GET http://testserver/api/sessions/d40b472e11f747278efd0e261f088d3b/events?access_token=test-api-token "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] file_organizer.app.session_service: session.created session_id=02d20ba115484a94bb84ac8589936ea9 target_dir=d:/3_projects/active/file-organizer-gui-/test_temp_api_auth/inbox stage=draft summary={"moves": 0, "unresolved": 0, "strategy": {"template_id": "general_downloads", "naming_style": "zh", "caution_level": "balanced", "note": ""}}
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: POST http://testserver/api/sessions "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: GET http://testserver/api/sessions/02d20ba115484a94bb84ac8589936ea9/events "HTTP/1.1 401 Unauthorized"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: GET http://testserver/api/health "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: OPTIONS http://testserver/api/sessions "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] file_organizer.app.session_service: session.created session_id=f624edc6303b46c09adc7a08091ca06b target_dir=d:/3_projects/active/file-organizer-gui-/test_temp_api_auth/inbox stage=draft summary={"moves": 0, "unresolved": 0, "strategy": {"template_id": "general_downloads", "naming_style": "zh", "caution_level": "balanced", "note": ""}}
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: POST http://testserver/api/sessions "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: POST http://testserver/api/sessions "HTTP/1.1 401 Unauthorized"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: GET http://testserver/api/settings "HTTP/1.1 401 Unauthorized"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: PATCH http://testserver/api/settings "HTTP/1.1 401 Unauthorized"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/test "HTTP/1.1 401 Unauthorized"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/apply-template "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/apply-ready "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/analyze "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/generate "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/actions/action-1/confirm "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/actions/action-1/dismiss "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/client-actions/report "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: GET http://testserver/api/icon-workbench/sessions/icon-session/folders/folder-1/versions/version-1/image "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/messages "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/folders/folder-1/prompt "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/folders/folder-1/select-version "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: GET http://testserver/api/icon-workbench/config "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/config "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/config/presets "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/config/presets/switch "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: DELETE http://testserver/api/icon-workbench/config/presets/icon-preset-2 "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/targets "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: DELETE http://testserver/api/icon-workbench/sessions/icon-session/targets/folder-1 "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: GET http://testserver/api/icon-workbench/templates "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/templates "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: PATCH http://testserver/api/icon-workbench/templates/user-template-1 "HTTP/1.1 200 OK"
+2026-03-30 12:01:52 [INFO] httpx: HTTP Request: DELETE http://testserver/api/icon-workbench/templates/user-template-1 "HTTP/1.1 200 OK"
+2026-03-30 13:00:06 [INFO] __main__: backend.starting host=127.0.0.1 port=8765 reload=False runtime_log=D:\3_Projects\Active\file-organizer-GUI-\logs\backend\runtime.log
+2026-03-30 13:00:06 [INFO] uvicorn.error: Started server process [50612]
+2026-03-30 13:00:06 [INFO] uvicorn.error: Waiting for application startup.
+2026-03-30 13:00:06 [INFO] uvicorn.error: Application startup complete.
+2026-03-30 13:00:06 [INFO] uvicorn.error: Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+2026-03-30 13:00:33 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 13:00:42 [INFO] httpx: HTTP Request: POST https://yyds.215.im/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 13:02:05 [ERROR] file_organizer.api.main: 设置连接测试失败
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\icon_workbench\client.py", line 80, in _request_json
+    with request.urlopen(req, timeout=timeout) as response:
+         ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\urllib\request.py", line 189, in urlopen
+    return opener.open(url, data, timeout)
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\urllib\request.py", line 495, in open
+    response = meth(req, response)
+  File "C:\Users\QUPENG\miniconda3\Lib\urllib\request.py", line 604, in http_response
+    response = self.parent.error(
+        'http', request, response, code, msg, hdrs)
+  File "C:\Users\QUPENG\miniconda3\Lib\urllib\request.py", line 533, in error
+    return self._call_chain(*args)
+           ~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\urllib\request.py", line 466, in _call_chain
+    result = func(*args)
+  File "C:\Users\QUPENG\miniconda3\Lib\urllib\request.py", line 613, in http_error_default
+    raise HTTPError(req.full_url, code, msg, hdrs, fp)
+urllib.error.HTTPError: HTTP Error 401: Unauthorized
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 983, in _execute_settings_test
+    image_bytes = app.state.icon_workbench_service.image_client.generate_png(
+        ModelConfig(
+    ...<5 lines>...
+        "256x256",
+    )
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\icon_workbench\client.py", line 229, in generate_png
+    return self._generate_modelscope_png(url, payload, config.api_key)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\icon_workbench\client.py", line 175, in _generate_modelscope_png
+    response = _request_json(
+        url,
+    ...<3 lines>...
+        extra_headers={"X-ModelScope-Async-Mode": "true"},
+    )
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\icon_workbench\client.py", line 84, in _request_json
+    raise RuntimeError(f"接口请求失败: {exc.code} {body}") from exc
+RuntimeError: 接口请求失败: 401 {"errors":{"message":"Authentication failed, please make sure that a valid ModelScope token is supplied."},"request_id":"f3b1eb78-e93c-408e-9688-bffcc2692a05"}
+2026-03-30 13:02:28 [ERROR] file_organizer.api.main: 设置连接测试失败
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\icon_workbench\client.py", line 80, in _request_json
+    with request.urlopen(req, timeout=timeout) as response:
+         ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\urllib\request.py", line 189, in urlopen
+    return opener.open(url, data, timeout)
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\urllib\request.py", line 495, in open
+    response = meth(req, response)
+  File "C:\Users\QUPENG\miniconda3\Lib\urllib\request.py", line 604, in http_response
+    response = self.parent.error(
+        'http', request, response, code, msg, hdrs)
+  File "C:\Users\QUPENG\miniconda3\Lib\urllib\request.py", line 533, in error
+    return self._call_chain(*args)
+           ~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\urllib\request.py", line 466, in _call_chain
+    result = func(*args)
+  File "C:\Users\QUPENG\miniconda3\Lib\urllib\request.py", line 613, in http_error_default
+    raise HTTPError(req.full_url, code, msg, hdrs, fp)
+urllib.error.HTTPError: HTTP Error 401: Unauthorized
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 983, in _execute_settings_test
+    image_bytes = app.state.icon_workbench_service.image_client.generate_png(
+        ModelConfig(
+    ...<5 lines>...
+        "256x256",
+    )
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\icon_workbench\client.py", line 229, in generate_png
+    return self._generate_modelscope_png(url, payload, config.api_key)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\icon_workbench\client.py", line 175, in _generate_modelscope_png
+    response = _request_json(
+        url,
+    ...<3 lines>...
+        extra_headers={"X-ModelScope-Async-Mode": "true"},
+    )
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\icon_workbench\client.py", line 84, in _request_json
+    raise RuntimeError(f"接口请求失败: {exc.code} {body}") from exc
+RuntimeError: 接口请求失败: 401 {"errors":{"message":"Authentication failed, please make sure that a valid ModelScope token is supplied."},"request_id":"81a29728-52dd-403a-ae3e-556f76859825"}
+2026-03-30 13:02:53 [ERROR] file_organizer.api.main: 设置连接测试失败
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\icon_workbench\client.py", line 80, in _request_json
+    with request.urlopen(req, timeout=timeout) as response:
+         ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\urllib\request.py", line 189, in urlopen
+    return opener.open(url, data, timeout)
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\urllib\request.py", line 495, in open
+    response = meth(req, response)
+  File "C:\Users\QUPENG\miniconda3\Lib\urllib\request.py", line 604, in http_response
+    response = self.parent.error(
+        'http', request, response, code, msg, hdrs)
+  File "C:\Users\QUPENG\miniconda3\Lib\urllib\request.py", line 533, in error
+    return self._call_chain(*args)
+           ~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\urllib\request.py", line 466, in _call_chain
+    result = func(*args)
+  File "C:\Users\QUPENG\miniconda3\Lib\urllib\request.py", line 613, in http_error_default
+    raise HTTPError(req.full_url, code, msg, hdrs, fp)
+urllib.error.HTTPError: HTTP Error 401: Unauthorized
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 983, in _execute_settings_test
+    image_bytes = app.state.icon_workbench_service.image_client.generate_png(
+        ModelConfig(
+    ...<5 lines>...
+        "256x256",
+    )
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\icon_workbench\client.py", line 229, in generate_png
+    return self._generate_modelscope_png(url, payload, config.api_key)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\icon_workbench\client.py", line 175, in _generate_modelscope_png
+    response = _request_json(
+        url,
+    ...<3 lines>...
+        extra_headers={"X-ModelScope-Async-Mode": "true"},
+    )
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\icon_workbench\client.py", line 84, in _request_json
+    raise RuntimeError(f"接口请求失败: {exc.code} {body}") from exc
+RuntimeError: 接口请求失败: 401 {"errors":{"message":"Authentication failed, please make sure that a valid ModelScope token is supplied."},"request_id":"df9359d2-add2-4fd4-9415-2228305a1217"}
+2026-03-30 13:14:13 [INFO] httpx: HTTP Request: POST https://yyds.215.im/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 13:15:02 [ERROR] file_organizer.api.main: 设置连接测试失败
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 983, in _execute_settings_test
+    image_bytes = app.state.icon_workbench_service.image_client.generate_png(
+        ModelConfig(
+    ...<5 lines>...
+        "256x256",
+    )
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\icon_workbench\client.py", line 229, in generate_png
+    return self._generate_modelscope_png(url, payload, config.api_key)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\icon_workbench\client.py", line 188, in _generate_modelscope_png
+    task_response = self._poll_modelscope_result(task_url, api_key)
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\icon_workbench\client.py", line 172, in _poll_modelscope_result
+    raise RuntimeError("ModelScope 任务超时 (120秒)")
+RuntimeError: ModelScope 任务超时 (120秒)
+2026-03-30 13:17:27 [INFO] httpx: HTTP Request: POST http://testserver/api/utils/config/secrets "HTTP/1.1 410 Gone"
+2026-03-30 13:17:27 [INFO] httpx: HTTP Request: GET http://testserver/api/settings "HTTP/1.1 200 OK"
+2026-03-30 13:17:27 [INFO] httpx: HTTP Request: GET http://testserver/api/utils/config "HTTP/1.1 200 OK"
+2026-03-30 13:17:27 [INFO] httpx: HTTP Request: POST http://testserver/api/utils/test-llm "HTTP/1.1 200 OK"
+2026-03-30 13:17:27 [INFO] httpx: HTTP Request: PATCH http://testserver/api/settings "HTTP/1.1 200 OK"
+2026-03-30 13:17:27 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/presets/text "HTTP/1.1 200 OK"
+2026-03-30 13:17:27 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/presets/text/preset-2/activate "HTTP/1.1 200 OK"
+2026-03-30 13:17:27 [INFO] httpx: HTTP Request: DELETE http://testserver/api/settings/presets/text/preset-2 "HTTP/1.1 200 OK"
+2026-03-30 13:17:27 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/test "HTTP/1.1 200 OK"
+2026-03-30 13:17:27 [ERROR] file_organizer.api.main: 设置连接测试失败
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 985, in _execute_settings_test
+    image_bytes = app.state.icon_workbench_service.image_client.generate_png(
+        ModelConfig(
+    ...<6 lines>...
+        timeout_seconds=45,
+    )
+  File "C:\Users\QUPENG\miniconda3\Lib\unittest\mock.py", line 1169, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\unittest\mock.py", line 1173, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\unittest\mock.py", line 1228, in _execute_mock_call
+    raise effect
+RuntimeError: ModelScope 任务超时 (45秒)
+2026-03-30 13:17:27 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/test "HTTP/1.1 400 Bad Request"
+2026-03-30 13:17:27 [ERROR] file_organizer.api.main: 设置连接测试失败
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 934, in _execute_settings_test
+    client.chat.completions.create(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        model=runtime["model"],
+        ^^^^^^^^^^^^^^^^^^^^^^^
+        messages=[{"role": "user", "content": "ping"}],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        max_tokens=1,
+        ^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\QUPENG\miniconda3\Lib\unittest\mock.py", line 1169, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\unittest\mock.py", line 1173, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\unittest\mock.py", line 1228, in _execute_mock_call
+    raise effect
+RuntimeError: 接口请求失败: 404 model not found
+2026-03-30 13:17:27 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/test "HTTP/1.1 400 Bad Request"
+2026-03-30 13:17:27 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/test "HTTP/1.1 200 OK"
+2026-03-30 13:17:27 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/test "HTTP/1.1 200 OK"
+2026-03-30 13:20:30 [INFO] uvicorn.error: Shutting down
+2026-03-30 13:20:30 [INFO] uvicorn.error: Waiting for application shutdown.
+2026-03-30 13:20:30 [INFO] uvicorn.error: Application shutdown complete.
+2026-03-30 13:20:30 [INFO] uvicorn.error: Finished server process [50612]
+2026-03-30 13:20:30 [INFO] __main__: backend.stopping host=127.0.0.1 port=8765
+2026-03-30 13:20:38 [INFO] __main__: backend.starting host=127.0.0.1 port=8765 reload=False runtime_log=D:\3_Projects\Active\file-organizer-GUI-\logs\backend\runtime.log
+2026-03-30 13:20:38 [INFO] uvicorn.error: Started server process [14652]
+2026-03-30 13:20:38 [INFO] uvicorn.error: Waiting for application startup.
+2026-03-30 13:20:38 [INFO] uvicorn.error: Application startup complete.
+2026-03-30 13:20:38 [INFO] uvicorn.error: Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+2026-03-30 13:21:31 [ERROR] file_organizer.api.main: 设置连接测试失败
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 985, in _execute_settings_test
+    image_bytes = app.state.icon_workbench_service.image_client.generate_png(
+        ModelConfig(
+    ...<6 lines>...
+        timeout_seconds=45,
+    )
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\icon_workbench\client.py", line 252, in generate_png
+    return self._generate_modelscope_png(url, payload, config.api_key, timeout_seconds=timeout_seconds)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\icon_workbench\client.py", line 204, in _generate_modelscope_png
+    task_response = self._poll_modelscope_result(task_url, api_key, max_wait_seconds=timeout_seconds)
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\icon_workbench\client.py", line 180, in _poll_modelscope_result
+    raise RuntimeError(f"ModelScope 任务超时 ({int(max_wait_seconds)}秒)")
+RuntimeError: ModelScope 任务超时 (45秒)
+2026-03-30 13:25:19 [INFO] httpx: HTTP Request: POST http://testserver/api/utils/config/secrets "HTTP/1.1 410 Gone"
+2026-03-30 13:25:19 [INFO] httpx: HTTP Request: GET http://testserver/api/settings "HTTP/1.1 200 OK"
+2026-03-30 13:25:19 [INFO] httpx: HTTP Request: GET http://testserver/api/utils/config "HTTP/1.1 200 OK"
+2026-03-30 13:25:19 [INFO] httpx: HTTP Request: POST http://testserver/api/utils/test-llm "HTTP/1.1 200 OK"
+2026-03-30 13:25:19 [INFO] httpx: HTTP Request: PATCH http://testserver/api/settings "HTTP/1.1 200 OK"
+2026-03-30 13:25:19 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/presets/text "HTTP/1.1 200 OK"
+2026-03-30 13:25:19 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/presets/text/preset-2/activate "HTTP/1.1 200 OK"
+2026-03-30 13:25:19 [INFO] httpx: HTTP Request: DELETE http://testserver/api/settings/presets/text/preset-2 "HTTP/1.1 200 OK"
+2026-03-30 13:25:19 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/test "HTTP/1.1 200 OK"
+2026-03-30 13:25:19 [ERROR] file_organizer.api.main: 设置连接测试失败
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 363, in _probe_image_generation_endpoint
+    with urllib_request.urlopen(request, timeout=20):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\unittest\mock.py", line 1169, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\unittest\mock.py", line 1173, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\unittest\mock.py", line 1228, in _execute_mock_call
+    raise effect
+urllib.error.HTTPError: HTTP Error 401: Unauthorized
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 982, in _execute_settings_test
+    _probe_image_generation_endpoint(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        str(image_model.get("base_url") or ""),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        str(image_model.get("model") or ""),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        str(image_model.get("api_key") or ""),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 369, in _probe_image_generation_endpoint
+    raise RuntimeError(f"接口请求失败: {exc.code} {body}") from exc
+RuntimeError: 接口请求失败: 401 {"error":"unauthorized"}
+2026-03-30 13:25:19 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/test "HTTP/1.1 400 Bad Request"
+2026-03-30 13:25:19 [ERROR] file_organizer.api.main: 设置连接测试失败
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 931, in _execute_settings_test
+    client.chat.completions.create(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        model=runtime["model"],
+        ^^^^^^^^^^^^^^^^^^^^^^^
+        messages=[{"role": "user", "content": "ping"}],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        max_tokens=1,
+        ^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\QUPENG\miniconda3\Lib\unittest\mock.py", line 1169, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\unittest\mock.py", line 1173, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\unittest\mock.py", line 1228, in _execute_mock_call
+    raise effect
+RuntimeError: 接口请求失败: 404 model not found
+2026-03-30 13:25:19 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/test "HTTP/1.1 400 Bad Request"
+2026-03-30 13:25:19 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/test "HTTP/1.1 200 OK"
+2026-03-30 13:25:19 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/test "HTTP/1.1 200 OK"
+2026-03-30 13:25:29 [INFO] httpx: HTTP Request: POST http://testserver/api/utils/config/secrets "HTTP/1.1 410 Gone"
+2026-03-30 13:25:29 [INFO] httpx: HTTP Request: GET http://testserver/api/settings "HTTP/1.1 200 OK"
+2026-03-30 13:25:29 [INFO] httpx: HTTP Request: GET http://testserver/api/utils/config "HTTP/1.1 200 OK"
+2026-03-30 13:25:29 [INFO] httpx: HTTP Request: POST http://testserver/api/utils/test-llm "HTTP/1.1 200 OK"
+2026-03-30 13:25:29 [INFO] httpx: HTTP Request: PATCH http://testserver/api/settings "HTTP/1.1 200 OK"
+2026-03-30 13:25:29 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/presets/text "HTTP/1.1 200 OK"
+2026-03-30 13:25:29 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/presets/text/preset-2/activate "HTTP/1.1 200 OK"
+2026-03-30 13:25:29 [INFO] httpx: HTTP Request: DELETE http://testserver/api/settings/presets/text/preset-2 "HTTP/1.1 200 OK"
+2026-03-30 13:25:29 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/test "HTTP/1.1 200 OK"
+2026-03-30 13:25:29 [ERROR] file_organizer.api.main: 设置连接测试失败
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 363, in _probe_image_generation_endpoint
+    with urllib_request.urlopen(request, timeout=20):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\unittest\mock.py", line 1169, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\unittest\mock.py", line 1173, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\unittest\mock.py", line 1228, in _execute_mock_call
+    raise effect
+urllib.error.HTTPError: HTTP Error 401: Unauthorized
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 982, in _execute_settings_test
+    _probe_image_generation_endpoint(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        str(image_model.get("base_url") or ""),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        str(image_model.get("model") or ""),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        str(image_model.get("api_key") or ""),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 369, in _probe_image_generation_endpoint
+    raise RuntimeError(f"接口请求失败: {exc.code} {body}") from exc
+RuntimeError: 接口请求失败: 401 {"error":"unauthorized"}
+2026-03-30 13:25:29 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/test "HTTP/1.1 400 Bad Request"
+2026-03-30 13:25:29 [ERROR] file_organizer.api.main: 设置连接测试失败
+Traceback (most recent call last):
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 931, in _execute_settings_test
+    client.chat.completions.create(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        model=runtime["model"],
+        ^^^^^^^^^^^^^^^^^^^^^^^
+        messages=[{"role": "user", "content": "ping"}],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        max_tokens=1,
+        ^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\QUPENG\miniconda3\Lib\unittest\mock.py", line 1169, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\unittest\mock.py", line 1173, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\unittest\mock.py", line 1228, in _execute_mock_call
+    raise effect
+RuntimeError: 接口请求失败: 404 model not found
+2026-03-30 13:25:29 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/test "HTTP/1.1 400 Bad Request"
+2026-03-30 13:25:29 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/test "HTTP/1.1 200 OK"
+2026-03-30 13:25:29 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/test "HTTP/1.1 200 OK"
+2026-03-30 13:25:29 [INFO] file_organizer.app.session_service: session.created session_id=ccdeb709fa92490b89a4b314035b0d5d target_dir=d:/3_projects/active/file-organizer-gui-/test_temp_api_auth/inbox stage=draft summary={"moves": 0, "unresolved": 0, "strategy": {"template_id": "general_downloads", "naming_style": "zh", "caution_level": "balanced", "note": ""}}
+2026-03-30 13:25:29 [INFO] httpx: HTTP Request: POST http://testserver/api/sessions "HTTP/1.1 200 OK"
+2026-03-30 13:25:29 [INFO] httpx: HTTP Request: GET http://testserver/api/sessions/ccdeb709fa92490b89a4b314035b0d5d/events?access_token=test-api-token "HTTP/1.1 200 OK"
+2026-03-30 13:25:29 [INFO] file_organizer.app.session_service: session.created session_id=2ace74a347dc4993b0326c135fb9870c target_dir=d:/3_projects/active/file-organizer-gui-/test_temp_api_auth/inbox stage=draft summary={"moves": 0, "unresolved": 0, "strategy": {"template_id": "general_downloads", "naming_style": "zh", "caution_level": "balanced", "note": ""}}
+2026-03-30 13:25:29 [INFO] httpx: HTTP Request: POST http://testserver/api/sessions "HTTP/1.1 200 OK"
+2026-03-30 13:25:29 [INFO] httpx: HTTP Request: GET http://testserver/api/sessions/2ace74a347dc4993b0326c135fb9870c/events "HTTP/1.1 401 Unauthorized"
+2026-03-30 13:25:29 [INFO] httpx: HTTP Request: GET http://testserver/api/health "HTTP/1.1 200 OK"
+2026-03-30 13:25:29 [INFO] httpx: HTTP Request: OPTIONS http://testserver/api/sessions "HTTP/1.1 200 OK"
+2026-03-30 13:25:30 [INFO] file_organizer.app.session_service: session.created session_id=4f8968d9492145fb8af06e073947cea8 target_dir=d:/3_projects/active/file-organizer-gui-/test_temp_api_auth/inbox stage=draft summary={"moves": 0, "unresolved": 0, "strategy": {"template_id": "general_downloads", "naming_style": "zh", "caution_level": "balanced", "note": ""}}
+2026-03-30 13:25:30 [INFO] httpx: HTTP Request: POST http://testserver/api/sessions "HTTP/1.1 200 OK"
+2026-03-30 13:25:30 [INFO] httpx: HTTP Request: POST http://testserver/api/sessions "HTTP/1.1 401 Unauthorized"
+2026-03-30 13:25:30 [INFO] httpx: HTTP Request: GET http://testserver/api/settings "HTTP/1.1 401 Unauthorized"
+2026-03-30 13:25:30 [INFO] httpx: HTTP Request: PATCH http://testserver/api/settings "HTTP/1.1 401 Unauthorized"
+2026-03-30 13:25:30 [INFO] httpx: HTTP Request: POST http://testserver/api/settings/test "HTTP/1.1 401 Unauthorized"
+2026-03-30 13:25:30 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/apply-template "HTTP/1.1 200 OK"
+2026-03-30 13:25:30 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/apply-ready "HTTP/1.1 200 OK"
+2026-03-30 13:25:30 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/analyze "HTTP/1.1 200 OK"
+2026-03-30 13:25:30 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/generate "HTTP/1.1 200 OK"
+2026-03-30 13:25:30 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/actions/action-1/confirm "HTTP/1.1 200 OK"
+2026-03-30 13:25:30 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/actions/action-1/dismiss "HTTP/1.1 200 OK"
+2026-03-30 13:25:30 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/client-actions/report "HTTP/1.1 200 OK"
+2026-03-30 13:25:30 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions "HTTP/1.1 200 OK"
+2026-03-30 13:25:30 [INFO] httpx: HTTP Request: GET http://testserver/api/icon-workbench/sessions/icon-session/folders/folder-1/versions/version-1/image "HTTP/1.1 200 OK"
+2026-03-30 13:25:30 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/messages "HTTP/1.1 200 OK"
+2026-03-30 13:25:30 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/folders/folder-1/prompt "HTTP/1.1 200 OK"
+2026-03-30 13:25:30 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/folders/folder-1/select-version "HTTP/1.1 200 OK"
+2026-03-30 13:25:30 [INFO] httpx: HTTP Request: GET http://testserver/api/icon-workbench/config "HTTP/1.1 200 OK"
+2026-03-30 13:25:30 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/config "HTTP/1.1 200 OK"
+2026-03-30 13:25:30 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/config/presets "HTTP/1.1 200 OK"
+2026-03-30 13:25:30 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/config/presets/switch "HTTP/1.1 200 OK"
+2026-03-30 13:25:30 [INFO] httpx: HTTP Request: DELETE http://testserver/api/icon-workbench/config/presets/icon-preset-2 "HTTP/1.1 200 OK"
+2026-03-30 13:25:30 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/sessions/icon-session/targets "HTTP/1.1 200 OK"
+2026-03-30 13:25:30 [INFO] httpx: HTTP Request: DELETE http://testserver/api/icon-workbench/sessions/icon-session/targets/folder-1 "HTTP/1.1 200 OK"
+2026-03-30 13:25:30 [INFO] httpx: HTTP Request: GET http://testserver/api/icon-workbench/templates "HTTP/1.1 200 OK"
+2026-03-30 13:25:30 [INFO] httpx: HTTP Request: POST http://testserver/api/icon-workbench/templates "HTTP/1.1 200 OK"
+2026-03-30 13:25:30 [INFO] httpx: HTTP Request: PATCH http://testserver/api/icon-workbench/templates/user-template-1 "HTTP/1.1 200 OK"
+2026-03-30 13:25:30 [INFO] httpx: HTTP Request: DELETE http://testserver/api/icon-workbench/templates/user-template-1 "HTTP/1.1 200 OK"
+2026-03-30 14:48:13 [INFO] __main__: backend.starting host=127.0.0.1 port=8765 reload=False runtime_log=D:\3_Projects\Active\file-organizer-GUI-\logs\backend\runtime.log
+2026-03-30 14:48:13 [INFO] uvicorn.error: Started server process [65924]
+2026-03-30 14:48:13 [INFO] uvicorn.error: Waiting for application startup.
+2026-03-30 14:48:13 [INFO] uvicorn.error: Application startup complete.
+2026-03-30 14:48:13 [INFO] uvicorn.error: Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+2026-03-30 14:49:49 [INFO] file_organizer.app.session_service: session.created session_id=6751b278d90a44029128dc7686d71883 target_dir=d:/5_downloads/downloads/test for file stage=draft summary={"moves": 0, "unresolved": 0, "strategy": {"template_id": "study_materials", "naming_style": "zh", "caution_level": "balanced", "note": ""}}
+2026-03-30 14:49:49 [INFO] file_organizer.app.session_service: scan.started session_id=6751b278d90a44029128dc7686d71883 target_dir=d:/5_downloads/downloads/test for file stage=scanning summary={"moves": 0, "unresolved": 0}
+2026-03-30 14:50:02 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 14:50:11 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 14:50:24 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 14:50:24 [INFO] file_organizer.app.session_service: scan.completed session_id=6751b278d90a44029128dc7686d71883 target_dir=d:/5_downloads/downloads/test for file stage=planning summary={"moves": 0, "unresolved": 0, "entry_count": 5, "auto_plan_pending": true}
+2026-03-30 14:50:24 [INFO] file_organizer.app.session_service: plan.auto_started session_id=6751b278d90a44029128dc7686d71883 target_dir=d:/5_downloads/downloads/test for file stage=planning summary={"moves": 0, "unresolved": 0}
+2026-03-30 14:50:25 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 14:51:13 [INFO] file_organizer.organize.service: organizer.response_recorded round=1
+2026-03-30 14:51:13 [INFO] file_organizer.organize.service: organizer.response_recorded round=1
+2026-03-30 14:51:13 [INFO] file_organizer.app.session_service: plan.auto_completed session_id=6751b278d90a44029128dc7686d71883 target_dir=d:/5_downloads/downloads/test for file stage=planning summary={"moves": 5, "unresolved": 2, "summary": "已分类 3 项，调整 0 项，仍剩 2 项待定"}
+2026-03-30 14:52:01 [INFO] file_organizer.app.session_service: plan.unresolved_choices_submitted session_id=6751b278d90a44029128dc7686d71883 target_dir=d:/5_downloads/downloads/test for file stage=planning summary={"moves": 5, "unresolved": 2, "request_id": "unresolved_request_001", "resolution_count": 2}
+2026-03-30 14:52:01 [INFO] file_organizer.app.session_service: plan.updated session_id=6751b278d90a44029128dc7686d71883 target_dir=d:/5_downloads/downloads/test for file stage=ready_for_precheck summary={"moves": 5, "unresolved": 0, "source": "resolve_unresolved_choices"}
+2026-03-30 14:52:13 [INFO] file_organizer.app.session_service: precheck.started session_id=6751b278d90a44029128dc7686d71883 target_dir=d:/5_downloads/downloads/test for file stage=ready_for_precheck summary={"moves": 5, "unresolved": 0}
+2026-03-30 14:52:13 [INFO] file_organizer.app.session_service: precheck.completed session_id=6751b278d90a44029128dc7686d71883 target_dir=d:/5_downloads/downloads/test for file stage=ready_to_execute summary={"moves": 5, "unresolved": 0, "can_execute": true, "blocking_error_count": 0, "warning_count": 0}
+2026-03-30 14:58:57 [INFO] file_organizer.app.session_service: session.abandoned session_id=6751b278d90a44029128dc7686d71883 target_dir=d:/5_downloads/downloads/test for file stage=abandoned summary={"moves": 5, "unresolved": 0}
+2026-03-30 15:00:12 [INFO] file_organizer.app.session_service: session.created session_id=3446b61cbb5b42f990019243300909b9 target_dir=d:/5_downloads/downloads/test for file stage=draft summary={"moves": 0, "unresolved": 0, "strategy": {"template_id": "general_downloads", "naming_style": "zh", "caution_level": "balanced", "note": ""}}
+2026-03-30 15:00:12 [INFO] file_organizer.app.session_service: scan.started session_id=3446b61cbb5b42f990019243300909b9 target_dir=d:/5_downloads/downloads/test for file stage=scanning summary={"moves": 0, "unresolved": 0}
+2026-03-30 15:00:21 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 15:00:38 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 15:00:38 [INFO] file_organizer.app.session_service: scan.completed session_id=3446b61cbb5b42f990019243300909b9 target_dir=d:/5_downloads/downloads/test for file stage=planning summary={"moves": 0, "unresolved": 0, "entry_count": 5, "auto_plan_pending": true}
+2026-03-30 15:00:38 [INFO] file_organizer.app.session_service: plan.auto_started session_id=3446b61cbb5b42f990019243300909b9 target_dir=d:/5_downloads/downloads/test for file stage=planning summary={"moves": 0, "unresolved": 0}
+2026-03-30 15:00:39 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 15:01:09 [INFO] file_organizer.organize.service: organizer.response_recorded round=1
+2026-03-30 15:01:09 [INFO] file_organizer.organize.service: organizer.response_recorded round=1
+2026-03-30 15:01:09 [INFO] file_organizer.app.session_service: plan.auto_completed session_id=3446b61cbb5b42f990019243300909b9 target_dir=d:/5_downloads/downloads/test for file stage=ready_for_precheck summary={"moves": 5, "unresolved": 0, "summary": "已分类 5 项，调整 0 项，仍剩 0 项待定"}
+2026-03-30 15:10:53 [INFO] file_organizer.app.session_service: session.abandoned session_id=3446b61cbb5b42f990019243300909b9 target_dir=d:/5_downloads/downloads/test for file stage=abandoned summary={"moves": 5, "unresolved": 0}
+2026-03-30 16:37:08 [INFO] __main__: backend.starting host=127.0.0.1 port=8765 reload=False runtime_log=D:\3_Projects\Active\file-organizer-GUI-\logs\backend\runtime.log
+2026-03-30 16:37:09 [INFO] uvicorn.error: Started server process [67512]
+2026-03-30 16:37:09 [INFO] uvicorn.error: Waiting for application startup.
+2026-03-30 16:37:09 [INFO] uvicorn.error: Application startup complete.
+2026-03-30 16:37:09 [INFO] uvicorn.error: Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+2026-03-30 16:37:47 [ERROR] uvicorn.error: Exception in ASGI application
+Traceback (most recent call last):
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\uvicorn\protocols\http\h11_impl.py", line 410, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        self.scope, self.receive, self.send
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 60, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\fastapi\applications.py", line 1135, in __call__
+    await super().__call__(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\applications.py", line 107, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    raise exc
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+                                   ~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\QUPENG\miniconda3\Lib\contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\_utils.py", line 85, in collapse_excgroups
+    raise exc
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 404, in require_api_token
+    return await call_next(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\cors.py", line 93, in __call__
+    await self.simple_response(scope, receive, send, request_headers=headers)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\cors.py", line 144, in simple_response
+    await self.app(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\fastapi\routing.py", line 115, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\fastapi\routing.py", line 101, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\fastapi\routing.py", line 355, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\fastapi\routing.py", line 245, in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\concurrency.py", line 32, in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\anyio\to_thread.py", line 63, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        func, args, abandon_on_cancel=abandon_on_cancel, limiter=limiter
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\anyio\_backends\_asyncio.py", line 2502, in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\anyio\_backends\_asyncio.py", line 986, in run
+    result = context.run(func, *args)
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 439, in get_session
+    "session_snapshot": app.state.service.get_snapshot(session_id)
+                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\app\session_service.py", line 247, in get_snapshot
+    session = self._load_or_raise(session_id)
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\app\session_service.py", line 1336, in _load_or_raise
+    raise KeyError(f"Session {session_id} not found")
+KeyError: 'Session f7d9f05f3e554f74839b552d943a6a74 not found'
+2026-03-30 16:37:47 [ERROR] uvicorn.error: Exception in ASGI application
+Traceback (most recent call last):
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\uvicorn\protocols\http\h11_impl.py", line 410, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        self.scope, self.receive, self.send
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 60, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\fastapi\applications.py", line 1135, in __call__
+    await super().__call__(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\applications.py", line 107, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    raise exc
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+                                   ~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\QUPENG\miniconda3\Lib\contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\_utils.py", line 85, in collapse_excgroups
+    raise exc
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 404, in require_api_token
+    return await call_next(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\cors.py", line 93, in __call__
+    await self.simple_response(scope, receive, send, request_headers=headers)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\cors.py", line 144, in simple_response
+    await self.app(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\fastapi\routing.py", line 115, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\fastapi\routing.py", line 101, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\fastapi\routing.py", line 355, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\fastapi\routing.py", line 245, in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\concurrency.py", line 32, in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\anyio\to_thread.py", line 63, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        func, args, abandon_on_cancel=abandon_on_cancel, limiter=limiter
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\anyio\_backends\_asyncio.py", line 2502, in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\anyio\_backends\_asyncio.py", line 986, in run
+    result = context.run(func, *args)
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 439, in get_session
+    "session_snapshot": app.state.service.get_snapshot(session_id)
+                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\app\session_service.py", line 247, in get_snapshot
+    session = self._load_or_raise(session_id)
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\app\session_service.py", line 1336, in _load_or_raise
+    raise KeyError(f"Session {session_id} not found")
+KeyError: 'Session f7d9f05f3e554f74839b552d943a6a74 not found'
+2026-03-30 16:37:47 [ERROR] uvicorn.error: Exception in ASGI application
+  + Exception Group Traceback (most recent call last):
+  |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\_utils.py", line 79, in collapse_excgroups
+  |     yield
+  |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\responses.py", line 270, in __call__
+  |     async with anyio.create_task_group() as task_group:
+  |                ~~~~~~~~~~~~~~~~~~~~~~~^^
+  |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\anyio\_backends\_asyncio.py", line 783, in __aexit__
+  |     raise BaseExceptionGroup(
+  |         "unhandled errors in a TaskGroup", self._exceptions
+  |     ) from None
+  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
+  +-+---------------- 1 ----------------
+    | Traceback (most recent call last):
+    |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\uvicorn\protocols\http\h11_impl.py", line 410, in run_asgi
+    |     result = await app(  # type: ignore[func-returns-value]
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |         self.scope, self.receive, self.send
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     )
+    |     ^
+    |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 60, in __call__
+    |     return await self.app(scope, receive, send)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\fastapi\applications.py", line 1135, in __call__
+    |     await super().__call__(scope, receive, send)
+    |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\applications.py", line 107, in __call__
+    |     await self.middleware_stack(scope, receive, send)
+    |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    |     raise exc
+    |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    |     await self.app(scope, receive, _send)
+    |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\base.py", line 198, in __call__
+    |     raise app_exc
+    |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\cors.py", line 93, in __call__
+    |     await self.simple_response(scope, receive, send, request_headers=headers)
+    |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\cors.py", line 144, in simple_response
+    |     await self.app(scope, receive, send)
+    |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    |     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+    |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    |     raise exc
+    |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    |     await app(scope, receive, sender)
+    |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    |     await self.app(scope, receive, send)
+    |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\routing.py", line 716, in __call__
+    |     await self.middleware_stack(scope, receive, send)
+    |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\routing.py", line 736, in app
+    |     await route.handle(scope, receive, send)
+    |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\routing.py", line 290, in handle
+    |     await self.app(scope, receive, send)
+    |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\fastapi\routing.py", line 115, in app
+    |     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+    |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    |     raise exc
+    |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    |     await app(scope, receive, sender)
+    |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\fastapi\routing.py", line 102, in app
+    |     await response(scope, receive, send)
+    |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\responses.py", line 269, in __call__
+    |     with collapse_excgroups():
+    |          ~~~~~~~~~~~~~~~~~~^^
+    |   File "C:\Users\QUPENG\miniconda3\Lib\contextlib.py", line 162, in __exit__
+    |     self.gen.throw(value)
+    |     ~~~~~~~~~~~~~~^^^^^^^
+    |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\_utils.py", line 85, in collapse_excgroups
+    |     raise exc
+    |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\responses.py", line 273, in wrap
+    |     await func()
+    |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\responses.py", line 253, in stream_response
+    |     async for chunk in self.body_iterator:
+    |     ...<2 lines>...
+    |         await send({"type": "http.response.body", "body": chunk, "more_body": True})
+    |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\concurrency.py", line 55, in iterate_in_threadpool
+    |     yield await anyio.to_thread.run_sync(_next, as_iterator)
+    |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\anyio\to_thread.py", line 63, in run_sync
+    |     return await get_async_backend().run_sync_in_worker_thread(
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |         func, args, abandon_on_cancel=abandon_on_cancel, limiter=limiter
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     )
+    |     ^
+    |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\anyio\_backends\_asyncio.py", line 2502, in run_sync_in_worker_thread
+    |     return await future
+    |            ^^^^^^^^^^^^
+    |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\anyio\_backends\_asyncio.py", line 986, in run
+    |     result = context.run(func, *args)
+    |   File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\concurrency.py", line 44, in _next
+    |     return next(iterator)
+    |   File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 630, in stream
+    |     snapshot = app.state.service.get_snapshot(session_id)
+    |   File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\app\session_service.py", line 247, in get_snapshot
+    |     session = self._load_or_raise(session_id)
+    |   File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\app\session_service.py", line 1336, in _load_or_raise
+    |     raise KeyError(f"Session {session_id} not found")
+    | KeyError: 'Session f7d9f05f3e554f74839b552d943a6a74 not found'
+    +------------------------------------
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\uvicorn\protocols\http\h11_impl.py", line 410, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        self.scope, self.receive, self.send
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 60, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\fastapi\applications.py", line 1135, in __call__
+    await super().__call__(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\applications.py", line 107, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    raise exc
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\base.py", line 198, in __call__
+    raise app_exc
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\cors.py", line 93, in __call__
+    await self.simple_response(scope, receive, send, request_headers=headers)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\cors.py", line 144, in simple_response
+    await self.app(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\fastapi\routing.py", line 115, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\fastapi\routing.py", line 102, in app
+    await response(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\responses.py", line 269, in __call__
+    with collapse_excgroups():
+         ~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\QUPENG\miniconda3\Lib\contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\_utils.py", line 85, in collapse_excgroups
+    raise exc
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\responses.py", line 273, in wrap
+    await func()
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\responses.py", line 253, in stream_response
+    async for chunk in self.body_iterator:
+    ...<2 lines>...
+        await send({"type": "http.response.body", "body": chunk, "more_body": True})
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\concurrency.py", line 55, in iterate_in_threadpool
+    yield await anyio.to_thread.run_sync(_next, as_iterator)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\anyio\to_thread.py", line 63, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        func, args, abandon_on_cancel=abandon_on_cancel, limiter=limiter
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\anyio\_backends\_asyncio.py", line 2502, in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\anyio\_backends\_asyncio.py", line 986, in run
+    result = context.run(func, *args)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\concurrency.py", line 44, in _next
+    return next(iterator)
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 630, in stream
+    snapshot = app.state.service.get_snapshot(session_id)
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\app\session_service.py", line 247, in get_snapshot
+    session = self._load_or_raise(session_id)
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\app\session_service.py", line 1336, in _load_or_raise
+    raise KeyError(f"Session {session_id} not found")
+KeyError: 'Session f7d9f05f3e554f74839b552d943a6a74 not found'
+2026-03-30 16:37:47 [ERROR] uvicorn.error: Exception in ASGI application
+Traceback (most recent call last):
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\uvicorn\protocols\http\h11_impl.py", line 410, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        self.scope, self.receive, self.send
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 60, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\fastapi\applications.py", line 1135, in __call__
+    await super().__call__(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\applications.py", line 107, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    raise exc
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+                                   ~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\QUPENG\miniconda3\Lib\contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\_utils.py", line 85, in collapse_excgroups
+    raise exc
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 404, in require_api_token
+    return await call_next(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\cors.py", line 93, in __call__
+    await self.simple_response(scope, receive, send, request_headers=headers)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\cors.py", line 144, in simple_response
+    await self.app(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\fastapi\routing.py", line 115, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\fastapi\routing.py", line 101, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\fastapi\routing.py", line 355, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\fastapi\routing.py", line 245, in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\starlette\concurrency.py", line 32, in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\anyio\to_thread.py", line 63, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        func, args, abandon_on_cancel=abandon_on_cancel, limiter=limiter
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\anyio\_backends\_asyncio.py", line 2502, in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+  File "C:\Users\QUPENG\miniconda3\Lib\site-packages\anyio\_backends\_asyncio.py", line 986, in run
+    result = context.run(func, *args)
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\api\main.py", line 439, in get_session
+    "session_snapshot": app.state.service.get_snapshot(session_id)
+                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\app\session_service.py", line 247, in get_snapshot
+    session = self._load_or_raise(session_id)
+  File "D:\3_Projects\Active\file-organizer-GUI-\file_organizer\app\session_service.py", line 1336, in _load_or_raise
+    raise KeyError(f"Session {session_id} not found")
+KeyError: 'Session f7d9f05f3e554f74839b552d943a6a74 not found'
+2026-03-30 16:37:56 [INFO] file_organizer.app.session_service: session.created session_id=d827eeead86b4bb395ee5050a61c31f7 target_dir=d:/5_downloads/downloads/test for file stage=draft summary={"moves": 0, "unresolved": 0, "strategy": {"template_id": "general_downloads", "naming_style": "zh", "caution_level": "conservative", "note": ""}}
+2026-03-30 16:37:56 [INFO] file_organizer.app.session_service: scan.started session_id=d827eeead86b4bb395ee5050a61c31f7 target_dir=d:/5_downloads/downloads/test for file stage=scanning summary={"moves": 0, "unresolved": 0}
+2026-03-30 16:38:05 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 16:38:20 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 16:38:20 [INFO] file_organizer.app.session_service: scan.completed session_id=d827eeead86b4bb395ee5050a61c31f7 target_dir=d:/5_downloads/downloads/test for file stage=planning summary={"moves": 0, "unresolved": 0, "entry_count": 5, "auto_plan_pending": true}
+2026-03-30 16:38:20 [INFO] file_organizer.app.session_service: plan.auto_started session_id=d827eeead86b4bb395ee5050a61c31f7 target_dir=d:/5_downloads/downloads/test for file stage=planning summary={"moves": 0, "unresolved": 0}
+2026-03-30 16:38:21 [INFO] httpx: HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-30 16:39:02 [INFO] file_organizer.organize.service: organizer.response_recorded round=1
+2026-03-30 16:39:02 [INFO] file_organizer.organize.service: organizer.response_recorded round=1
+2026-03-30 16:39:02 [INFO] file_organizer.app.session_service: plan.auto_completed session_id=d827eeead86b4bb395ee5050a61c31f7 target_dir=d:/5_downloads/downloads/test for file stage=planning summary={"moves": 5, "unresolved": 1, "summary": "已分类 4 项，调整 1 项，仍剩 1 项待定"}
+2026-03-30 16:42:45 [INFO] file_organizer.app.session_service: plan.unresolved_choices_submitted session_id=d827eeead86b4bb395ee5050a61c31f7 target_dir=d:/5_downloads/downloads/test for file stage=planning summary={"moves": 5, "unresolved": 1, "request_id": "unresolved_papers", "resolution_count": 1}
+2026-03-30 16:42:45 [INFO] file_organizer.app.session_service: plan.updated session_id=d827eeead86b4bb395ee5050a61c31f7 target_dir=d:/5_downloads/downloads/test for file stage=ready_for_precheck summary={"moves": 5, "unresolved": 0, "source": "resolve_unresolved_choices"}
+2026-03-30 16:42:52 [INFO] file_organizer.app.session_service: precheck.started session_id=d827eeead86b4bb395ee5050a61c31f7 target_dir=d:/5_downloads/downloads/test for file stage=ready_for_precheck summary={"moves": 5, "unresolved": 0}
+2026-03-30 16:42:52 [INFO] file_organizer.app.session_service: precheck.completed session_id=d827eeead86b4bb395ee5050a61c31f7 target_dir=d:/5_downloads/downloads/test for file stage=planning summary={"moves": 5, "unresolved": 0, "can_execute": false, "blocking_error_count": 1, "warning_count": 0}
+2026-03-30 16:42:54 [INFO] file_organizer.app.session_service: precheck.started session_id=d827eeead86b4bb395ee5050a61c31f7 target_dir=d:/5_downloads/downloads/test for file stage=planning summary={"moves": 5, "unresolved": 0}
+2026-03-30 16:42:54 [INFO] file_organizer.app.session_service: precheck.completed session_id=d827eeead86b4bb395ee5050a61c31f7 target_dir=d:/5_downloads/downloads/test for file stage=planning summary={"moves": 5, "unresolved": 0, "can_execute": false, "blocking_error_count": 1, "warning_count": 0}
+2026-03-30 16:43:03 [INFO] file_organizer.app.session_service: precheck.started session_id=d827eeead86b4bb395ee5050a61c31f7 target_dir=d:/5_downloads/downloads/test for file stage=planning summary={"moves": 5, "unresolved": 0}
+2026-03-30 16:43:03 [INFO] file_organizer.app.session_service: precheck.completed session_id=d827eeead86b4bb395ee5050a61c31f7 target_dir=d:/5_downloads/downloads/test for file stage=planning summary={"moves": 5, "unresolved": 0, "can_execute": false, "blocking_error_count": 1, "warning_count": 0}
+2026-03-30 16:43:10 [INFO] file_organizer.app.session_service: precheck.started session_id=d827eeead86b4bb395ee5050a61c31f7 target_dir=d:/5_downloads/downloads/test for file stage=planning summary={"moves": 5, "unresolved": 0}
+2026-03-30 16:43:10 [INFO] file_organizer.app.session_service: precheck.completed session_id=d827eeead86b4bb395ee5050a61c31f7 target_dir=d:/5_downloads/downloads/test for file stage=planning summary={"moves": 5, "unresolved": 0, "can_execute": false, "blocking_error_count": 1, "warning_count": 0}
+2026-03-30 21:11:55 [INFO] __main__: backend.starting host=127.0.0.1 port=8765 reload=False runtime_log=D:\3_Projects\Active\file-organizer-GUI-\logs\backend\runtime.log
+2026-03-30 21:11:55 [INFO] uvicorn.error: Started server process [64124]
+2026-03-30 21:11:55 [INFO] uvicorn.error: Waiting for application startup.
+2026-03-30 21:11:55 [INFO] uvicorn.error: Application startup complete.
+2026-03-30 21:11:55 [INFO] uvicorn.error: Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+2026-03-30 21:18:20 [INFO] __main__: backend.starting host=127.0.0.1 port=8765 reload=False runtime_log=D:\3_Projects\Active\file-organizer-GUI-\logs\backend\runtime.log
+2026-03-30 21:18:21 [INFO] uvicorn.error: Started server process [50648]
+2026-03-30 21:18:21 [INFO] uvicorn.error: Waiting for application startup.
+2026-03-30 21:18:21 [INFO] uvicorn.error: Application startup complete.
+2026-03-30 21:18:21 [INFO] uvicorn.error: Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)

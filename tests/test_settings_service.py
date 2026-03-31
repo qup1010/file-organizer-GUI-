@@ -63,6 +63,8 @@ class SettingsServiceTests(unittest.TestCase):
         self.assertEqual(saved["icon_image_presets"]["default"]["image_model"]["api_key"], "image-secret")
         self.assertNotIn("OPENAI_API_KEY", saved["icon_image_presets"]["default"])
         self.assertEqual(runtime_icon["text_model"]["api_key"], "text-secret")
+        self.assertEqual(runtime_icon["analysis_concurrency_limit"], 1)
+        self.assertEqual(runtime_icon["image_concurrency_limit"], 1)
 
     def test_public_snapshot_never_exposes_plaintext_secrets(self):
         service = SettingsService(
@@ -110,6 +112,78 @@ class SettingsServiceTests(unittest.TestCase):
         self.assertEqual(snapshot["families"]["text"]["active_preset"]["secret_state"], "stored")
         self.assertEqual(snapshot["families"]["vision"]["active_preset"]["secret_state"], "stored")
         self.assertEqual(snapshot["families"]["icon_image"]["active_preset"]["image_model"]["secret_state"], "stored")
+        self.assertIn("analysis_concurrency_limit", snapshot["families"]["icon_image"]["active_preset"])
+        self.assertIn("image_concurrency_limit", snapshot["families"]["icon_image"]["active_preset"])
+
+    def test_icon_image_runtime_supports_split_concurrency_limits(self):
+        service = SettingsService(
+            config_path=self.config_path,
+            legacy_icon_config_path=self.legacy_icon_path,
+        )
+        service.update_settings(
+            {
+                "families": {
+                    "icon_image": {
+                        "preset": {
+                            "image_model": {
+                                "base_url": "https://image.example/v1",
+                                "model": "gpt-image-1",
+                            },
+                            "analysis_concurrency_limit": 4,
+                            "image_concurrency_limit": 2,
+                        },
+                        "secret": {"action": "replace", "value": "image-secret"},
+                    },
+                }
+            }
+        )
+
+        runtime = service.get_runtime_family_config("icon_image")
+        snapshot = service.get_settings_snapshot()
+
+        self.assertEqual(runtime["analysis_concurrency_limit"], 4)
+        self.assertEqual(runtime["image_concurrency_limit"], 2)
+        self.assertEqual(snapshot["families"]["icon_image"]["active_preset"]["analysis_concurrency_limit"], 4)
+        self.assertEqual(snapshot["families"]["icon_image"]["active_preset"]["image_concurrency_limit"], 2)
+
+    def test_icon_image_legacy_concurrency_limit_migrates_to_both_fields(self):
+        self.config_path.write_text(
+            json.dumps(
+                {
+                    "settings_version": 2,
+                    "global_config": {"DEBUG_MODE": False},
+                    "text_presets": {"default": {"name": "默认文本模型", "OPENAI_BASE_URL": "", "OPENAI_MODEL": "gpt", "OPENAI_API_KEY": ""}},
+                    "vision_presets": {"default": {"name": "默认图片模型", "IMAGE_ANALYSIS_NAME": "默认图片模型", "IMAGE_ANALYSIS_BASE_URL": "", "IMAGE_ANALYSIS_MODEL": "", "IMAGE_ANALYSIS_API_KEY": ""}},
+                    "icon_image_presets": {
+                        "default": {
+                            "name": "默认图标生图",
+                            "image_model": {"base_url": "", "model": "", "api_key": ""},
+                            "image_size": "1024x1024",
+                            "concurrency_limit": 3,
+                            "save_mode": "centralized",
+                        }
+                    },
+                    "active_text_preset_id": "default",
+                    "active_vision_preset_id": "default",
+                    "active_icon_image_preset_id": "default",
+                    "bg_removal": {"mode": "preset", "preset_id": "bria-rmbg-2.0", "custom": {"name": "自定义抠图", "model_id": "", "api_type": "gradio_space", "payload_template": "", "hf_api_token": ""}},
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        service = SettingsService(
+            config_path=self.config_path,
+            legacy_icon_config_path=self.legacy_icon_path,
+        )
+        runtime = service.get_runtime_family_config("icon_image")
+        saved = json.loads(self.config_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(runtime["analysis_concurrency_limit"], 3)
+        self.assertEqual(runtime["image_concurrency_limit"], 3)
+        self.assertEqual(saved["icon_image_presets"]["default"]["analysis_concurrency_limit"], 3)
+        self.assertEqual(saved["icon_image_presets"]["default"]["image_concurrency_limit"], 3)
 
     def test_failed_atomic_update_does_not_write_partial_changes(self):
         service = SettingsService(
@@ -158,6 +232,109 @@ class SettingsServiceTests(unittest.TestCase):
         self.assertEqual(before_file, after_file)
         self.assertEqual(before_runtime["model"], after_runtime["model"])
         self.assertEqual(after_runtime["api_key"], "stable-text-secret")
+
+    def test_bg_removal_snapshot_masks_secret_and_exposes_builtin_presets(self):
+        service = SettingsService(
+            config_path=self.config_path,
+            legacy_icon_config_path=self.legacy_icon_path,
+        )
+
+        service.update_settings(
+            {
+                "families": {
+                    "bg_removal": {
+                        "mode": "custom",
+                        "custom": {
+                            "name": "自定义抠图",
+                            "model_id": "custom/space",
+                            "api_type": "gradio_space",
+                            "payload_template": '{"data":[{"path":"{{uploaded_path}}"}]}',
+                        },
+                        "secret": {"action": "replace", "value": "hf-secret"},
+                    }
+                }
+            }
+        )
+
+        snapshot = service.get_settings_snapshot()
+        serialized = json.dumps(snapshot, ensure_ascii=False)
+
+        self.assertIn("bg_removal", snapshot["families"])
+        self.assertEqual(snapshot["families"]["bg_removal"]["mode"], "custom")
+        self.assertGreaterEqual(len(snapshot["families"]["bg_removal"]["builtin_presets"]), 4)
+        self.assertEqual(snapshot["families"]["bg_removal"]["custom"]["secret_state"], "stored")
+        self.assertNotIn("hf-secret", serialized)
+
+    def test_bg_removal_runtime_returns_selected_builtin_and_custom_config(self):
+        service = SettingsService(
+            config_path=self.config_path,
+            legacy_icon_config_path=self.legacy_icon_path,
+        )
+
+        service.update_settings(
+            {
+                "families": {
+                    "bg_removal": {
+                        "mode": "preset",
+                        "preset": {"preset_id": "bria-rmbg-1.4"},
+                    }
+                }
+            }
+        )
+        preset_runtime = service.get_runtime_family_config("bg_removal")
+        self.assertEqual(preset_runtime["model_id"], "briaai/BRIA-RMBG-1.4")
+        self.assertEqual(preset_runtime["api_type"], "gradio_space")
+
+        service.update_settings(
+            {
+                "families": {
+                    "bg_removal": {
+                        "mode": "custom",
+                        "custom": {
+                            "name": "自定义抠图",
+                            "model_id": "custom/rembg",
+                            "api_type": "gradio_space",
+                            "payload_template": '{"data":[{"path":"{{uploaded_path}}"}],"meta":"{{model_id}}"}',
+                        },
+                        "secret": {"action": "replace", "value": "custom-token"},
+                    }
+                }
+            }
+        )
+        custom_runtime = service.get_runtime_family_config("bg_removal")
+        self.assertEqual(custom_runtime["name"], "自定义抠图")
+        self.assertEqual(custom_runtime["model_id"], "custom/rembg")
+        self.assertEqual(custom_runtime["api_token"], "custom-token")
+        self.assertIn("{{uploaded_path}}", custom_runtime["payload_template"])
+
+    def test_bg_removal_missing_in_old_config_is_backfilled_on_load(self):
+        self.config_path.write_text(
+            json.dumps(
+                {
+                    "settings_version": 2,
+                    "global_config": {"DEBUG_MODE": False},
+                    "text_presets": {},
+                    "vision_presets": {},
+                    "icon_image_presets": {},
+                    "active_text_preset_id": "default",
+                    "active_vision_preset_id": "default",
+                    "active_icon_image_preset_id": "default",
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        service = SettingsService(
+            config_path=self.config_path,
+            legacy_icon_config_path=self.legacy_icon_path,
+        )
+        snapshot = service.get_settings_snapshot()
+        saved = json.loads(self.config_path.read_text(encoding="utf-8"))
+
+        self.assertIn("bg_removal", snapshot["families"])
+        self.assertIn("bg_removal", saved)
+        self.assertEqual(saved["bg_removal"]["mode"], "preset")
 
 
 if __name__ == "__main__":

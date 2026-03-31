@@ -41,15 +41,15 @@ export function IconWorkbenchFooterBar({
 
   return (
     <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 animate-slideUp">
-      <div className="flex items-center gap-4 rounded-[14px] border border-white/40 bg-white/72 p-2 shadow-[0_12px_40px_rgba(0,0,0,0.12)] backdrop-blur-xl">
+      <div className="flex items-center gap-4 rounded-[8px] border border-white/40 bg-white/72 p-1.5 shadow-[0_12px_44px_rgba(0,0,0,0.15)] backdrop-blur-xl">
         <div className="flex items-center gap-3.5 pl-4 pr-1">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[10px] bg-primary/10 text-primary shadow-[inset_0_0_15px_rgba(var(--primary-rgb),0.1)]">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[4px] bg-primary/10 text-primary shadow-[inset_0_0_15px_rgba(var(--primary-rgb),0.1)]">
             <FolderDown className="h-5.5 w-5.5" />
           </div>
           <div className="flex flex-col">
             <span className="whitespace-nowrap text-[15px] font-black tracking-tight text-on-surface">{targetCount} 个目标文件夹</span>
             <span className="max-w-[120px] truncate text-[11px] font-bold text-ui-muted">
-              {selectedTemplateName ? `风格：${selectedTemplateName}` : "准备就绪"}
+              {selectedTemplateName ? `模板：${selectedTemplateName}` : "准备就绪"}
             </span>
           </div>
         </div>
@@ -67,13 +67,13 @@ export function IconWorkbenchFooterBar({
                   onGenerate();
                 }}
                 disabled={Boolean(generateBlockedReason) || isGenerating || isApplying || isRemovingBgBatch}
-                className="h-11 shrink-0 rounded-[8px] px-6 text-[14px] font-black shadow-[0_4px_12px_rgba(var(--primary-rgb),0.2)] transition-all hover:scale-[1.02] active:scale-[0.98] focus:ring-0 whitespace-nowrap"
+                className="h-11 shrink-0 rounded-[4px] px-8 text-[14px] font-black shadow-[0_8px_16px_rgba(var(--primary-rgb),0.2)] transition-all active:scale-[0.98] focus:ring-0 whitespace-nowrap"
               >
                 {isGenerating ? <LoaderCircle className="h-4.5 w-4.5 animate-spin" /> : <Sparkles className="h-4.5 w-4.5" />}
-                <span className="ml-2">{isGenerating ? "正在生成..." : `开始生成 ${targetCount} 个图标`}</span>
+                <span className="ml-2">{isGenerating ? "正在生成..." : `生成 ${targetCount} 个预览`}</span>
               </Button>
 
-              <div className="flex items-center gap-1.5 rounded-[8px] bg-white/40 p-1 border border-white/20 shrink-0">
+              <div className="flex items-center gap-1.5 rounded-[4px] bg-white/40 p-1 border border-white/20 shrink-0">
                 <Button
                   variant="secondary"
                   size="md"
@@ -82,10 +82,10 @@ export function IconWorkbenchFooterBar({
                     onRemoveBgBatch();
                   }}
                   disabled={!canRemoveBgBatch || isGenerating || isApplying || isRemovingBgBatch}
-                  className="h-9 shrink-0 rounded-[6px] border-none bg-transparent px-4 text-[13px] font-bold text-on-surface hover:bg-white/80 transition-all disabled:opacity-30 whitespace-nowrap shadow-none"
+                  className="h-9 shrink-0 rounded-[4px] border-none bg-transparent px-4 text-[13px] font-bold text-on-surface hover:bg-white/90 transition-all disabled:opacity-30 whitespace-nowrap shadow-none"
                 >
                   {isRemovingBgBatch ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <span className="text-[14px] leading-none mb-0.5">✂</span>}
-                  <span className="ml-1.5">{isRemovingBgBatch ? "正在去背..." : "批量去背"}</span>
+                  <span className="ml-1.5">{isRemovingBgBatch ? "正在处理背景..." : "批量去除背景"}</span>
                 </Button>
 
                 <div className="h-4 w-px bg-on-surface/5" />
@@ -98,10 +98,10 @@ export function IconWorkbenchFooterBar({
                     onApplyBatch();
                   }}
                   disabled={!canApplyBatch || isGenerating || isApplying || isRemovingBgBatch}
-                  className="h-9 shrink-0 rounded-[6px] border-none bg-transparent px-4 text-[13px] font-bold text-on-surface hover:bg-white/80 transition-all disabled:opacity-30 whitespace-nowrap shadow-none"
+                  className="h-9 shrink-0 rounded-[4px] border-none bg-transparent px-4 text-[13px] font-bold text-on-surface hover:bg-white/90 transition-all disabled:opacity-30 whitespace-nowrap shadow-none"
                 >
                   {isApplying ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                  <span className="ml-1.5">{isApplying ? "正在应用..." : "批量应用"}</span>
+                  <span className="ml-1.5">{isApplying ? "正在应用..." : "批量应用图标"}</span>
                 </Button>
               </div>
             </div>
@@ -110,17 +110,17 @@ export function IconWorkbenchFooterBar({
               isGenerating || isRemovingBgBatch || isApplying ? "animate-pulse text-primary" : 
               generateBlockedReason ? "text-error/70" : "text-ui-muted"
             )}>
-              {isGenerating ? (generateProgressHint || "正在整理目标目录并提交生成任务...") :
-               isRemovingBgBatch ? "正在处理选中图标的背景..." :
-               isApplying ? "正在批量写入图标配置..." :
-               generateBlockedReason || "确认预览后可批量替换目标文件夹的显示图标。"}
+              {isGenerating ? (generateProgressHint || "正在分析目标文件夹并生成预览...") :
+               isRemovingBgBatch ? "正在处理已选预览的背景..." :
+               isApplying ? "正在把选中的预览应用到目标文件夹..." :
+               generateBlockedReason || "先确认预览结果，再批量应用图标。"}
             </p>
           </div>
 
           <div className="group relative ml-1">
             <Info className="h-4 w-4 cursor-help text-on-surface/25 transition-colors hover:text-on-surface/50" />
-            <div className="pointer-events-none absolute bottom-full left-1/2 mb-3 w-52 -translate-x-1/2 scale-95 rounded-[10px] border border-white/40 bg-white/95 p-4 text-[11px] font-medium leading-relaxed text-on-surface opacity-0 shadow-2xl backdrop-blur-md transition-all group-hover:scale-100 group-hover:opacity-100 italic">
-              生成结果先作为预览保留，点击“批量应用”后才会写入目标文件夹的图标配置。
+            <div className="pointer-events-none absolute bottom-full left-1/2 mb-3 w-52 -translate-x-1/2 scale-95 rounded-[4px] border border-white/40 bg-white/95 p-4 text-[11px] font-medium leading-relaxed text-on-surface opacity-0 shadow-2xl backdrop-blur-md transition-all group-hover:scale-100 group-hover:opacity-100 italic">
+              生成结果会先保留为预览。点击“批量应用图标”后，才会写入目标文件夹的图标设置。
             </div>
           </div>
         </div>

@@ -91,7 +91,8 @@ class FakeIconWorkbenchService:
                 "text_model": {"base_url": "https://text.example/v1", "api_key": "text", "model": "gpt-text"},
                 "image_model": {"base_url": "https://image.example/v1", "api_key": "image", "model": "gpt-image"},
                 "image_size": "512x512",
-                "concurrency_limit": 1,
+                "analysis_concurrency_limit": 1,
+                "image_concurrency_limit": 1,
             },
             "presets": list(self.icon_presets),
             "active_preset_id": self.active_icon_preset_id,
@@ -173,87 +174,21 @@ class FakeIconWorkbenchService:
             ],
         }
 
-    def send_message(self, session_id, content, *, selected_folder_ids=None, active_folder_id=None):
-        self.last_message_payload = {
-            "session_id": session_id,
-            "content": content,
-            "selected_folder_ids": list(selected_folder_ids or []),
-            "active_folder_id": active_folder_id,
-        }
-        return {
-            "session_id": session_id,
-            "target_paths": ["D:/Icons/Alpha"],
-            "folders": [],
-            "folder_count": 0,
-            "ready_count": 0,
-            "messages": [
-                {"message_id": "m1", "role": "user", "content": content, "tool_results": [], "action_ids": [], "created_at": "2026-01-01T00:00:00+00:00"},
-                {
-                    "message_id": "m2",
-                    "role": "assistant",
-                    "content": "已记录消息。",
-                    "tool_results": [],
-                    "action_ids": [],
-                    "created_at": "2026-01-01T00:00:01+00:00",
-                },
-            ],
-            "pending_actions": [],
-            "created_at": "2026-01-01T00:00:00+00:00",
-            "updated_at": "2026-01-01T00:00:01+00:00",
-            "chat_updated_at": "2026-01-01T00:00:01+00:00",
-        }
-
-    def confirm_pending_action(self, session_id, action_id):
-        return {
-            "session": self.get_session(session_id),
-            "client_execution": {
-                "command": "apply_ready_icons",
-                "action_type": "apply_icons",
-                "tasks": [
-                    {
-                        "folder_id": "folder-1",
-                        "folder_name": "Alpha",
-                        "folder_path": "D:/Icons/Alpha",
-                        "image_path": str(self.image_path),
-                    }
-                ],
-                "skipped_items": [],
-            },
-        }
-
-    def dismiss_pending_action(self, session_id, action_id):
-        return {
-            **self.get_session(session_id),
-            "messages": [
-                {
-                    "message_id": "dismiss-1",
-                    "role": "system",
-                    "content": f"已取消待执行操作：{action_id}",
-                    "tool_results": [],
-                    "action_ids": [],
-                    "created_at": "2026-01-01T00:00:02+00:00",
-                }
-            ],
-            "pending_actions": [],
-            "chat_updated_at": "2026-01-01T00:00:02+00:00",
-        }
-
     def report_client_action(self, session_id, payload):
         self.last_report_payload = payload
         return {
             **self.get_session(session_id),
-            "messages": [
-                {
-                    "message_id": "report-1",
-                    "role": "assistant",
-                    "content": "应用图标已完成：成功 1，失败 0，跳过 1。",
-                    "tool_results": [],
-                    "action_ids": [],
-                    "created_at": "2026-01-01T00:00:03+00:00",
-                }
-            ],
-            "pending_actions": [],
-            "chat_updated_at": "2026-01-01T00:00:03+00:00",
+            "last_client_action": {
+                "action_type": payload.get("action_type"),
+                "summary": {
+                    "success_count": 1,
+                    "failed_count": 0,
+                    "skipped_count": 1,
+                    "message": "应用图标已完成：成功 1，失败 0，跳过 1。",
+                },
+                "results": list(payload.get("results", [])) + list(payload.get("skipped_items", [])),
+                "updated_at": "2026-01-01T00:00:03+00:00",
+            },
         }
 
 
@@ -393,31 +328,20 @@ class ApiIconWorkbenchTests(unittest.TestCase):
         self.assertEqual(payload["tasks"][0]["folder_id"], "folder-1")
         self.assertEqual(payload["skipped_items"][0]["folder_id"], "folder-2")
 
-    def test_message_route_forwards_selection_context(self):
+    def test_removed_chat_routes_return_not_found(self):
         response = self.client.post(
             "/api/icon-workbench/sessions/icon-session/messages",
-            json={
-                "content": "分析当前选中项",
-                "selected_folder_ids": ["folder-1", "folder-2"],
-                "active_folder_id": "folder-2",
-            },
+            json={"content": "分析当前选中项"},
         )
+        self.assertEqual(response.status_code, 404)
 
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(payload["session"]["session_id"], "icon-session")
-        self.assertEqual(self.fake_service.last_message_payload["selected_folder_ids"], ["folder-1", "folder-2"])
-        self.assertEqual(self.fake_service.last_message_payload["active_folder_id"], "folder-2")
-
-    def test_confirm_dismiss_and_report_routes(self):
         response = self.client.post("/api/icon-workbench/sessions/icon-session/actions/action-1/confirm")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["client_execution"]["command"], "apply_ready_icons")
+        self.assertEqual(response.status_code, 404)
 
         response = self.client.post("/api/icon-workbench/sessions/icon-session/actions/action-1/dismiss")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["session"]["messages"][0]["role"], "system")
+        self.assertEqual(response.status_code, 404)
 
+    def test_report_route_keeps_client_summary(self):
         response = self.client.post(
             "/api/icon-workbench/sessions/icon-session/client-actions/report",
             json={
@@ -443,7 +367,7 @@ class ApiIconWorkbenchTests(unittest.TestCase):
             },
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["session"]["messages"][0]["role"], "assistant")
+        self.assertEqual(response.json()["session"]["last_client_action"]["summary"]["success_count"], 1)
         self.assertEqual(self.fake_service.last_report_payload["action_type"], "apply_icons")
         self.assertEqual(self.fake_service.last_report_payload["skipped_items"][0]["status"], "skipped")
 

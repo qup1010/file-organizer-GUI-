@@ -54,10 +54,13 @@ interface TreeNode {
   children: Record<string, TreeNode>;
   hasUnresolved?: boolean;
   hasReview?: boolean;
+  isNew?: boolean;
 }
 
-function buildFileTree(groups: PlanGroup[]): TreeNode {
+function buildFileTree(groups: PlanGroup[], mkdirPreview: string[] = []): TreeNode {
   const root: TreeNode = { name: "Root", path: "", items: [], children: {} };
+
+  const normalizedMkdir = mkdirPreview.map(p => p.replace(/\\/g, "/").toLowerCase());
 
   groups.forEach((group) => {
     const parts = group.directory.replace(/\\/g, "/").split("/").filter(Boolean);
@@ -71,6 +74,7 @@ function buildFileTree(groups: PlanGroup[]): TreeNode {
           path: path,
           items: [],
           children: {},
+          isNew: normalizedMkdir.includes(path.toLowerCase()),
         };
       }
       current = current.children[part];
@@ -87,6 +91,7 @@ function buildFileTree(groups: PlanGroup[]): TreeNode {
       propagateStatus(child);
       if (child.hasUnresolved) node.hasUnresolved = true;
       if (child.hasReview) node.hasReview = true;
+      if (child.isNew) node.isNew = true; // Still marked if any child is new? No, usually folder itself is new
     });
   };
 
@@ -138,8 +143,9 @@ function buildSourceTree(items: PlanItem[]): TreeNode {
   return root;
 }
 
-function buildTargetTree(items: PlanItem[]): TreeNode {
+function buildTargetTree(items: PlanItem[], mkdirPreview: string[] = []): TreeNode {
   const root: TreeNode = { name: "Root", path: "", items: [], children: {} };
+  const normalizedMkdir = mkdirPreview.map(p => p.replace(/\\/g, "/").toLowerCase());
 
   items.forEach((item) => {
     const rawTarget = item.target_relpath || item.source_relpath || "";
@@ -159,6 +165,7 @@ function buildTargetTree(items: PlanItem[]): TreeNode {
           path,
           items: [],
           children: {},
+          isNew: normalizedMkdir.includes(path.toLowerCase()),
         };
       }
       current = current.children[part];
@@ -280,10 +287,16 @@ function FolderNode({
         </div>
         <span className={cn(
           "flex-1 truncate text-[12px] font-semibold tracking-tight text-on-surface/75",
-          (node.hasUnresolved || node.hasReview) && "text-on-surface"
+          (node.hasUnresolved || node.hasReview) && "text-on-surface",
+          node.isNew && "text-emerald-600/90"
         )}>
           {node.name}
         </span>
+        {node.isNew && (
+          <span className="flex items-center gap-1 shrink-0 px-1 py-0.5 rounded bg-emerald-500/10 text-emerald-600/80 text-[10px] font-bold tracking-wider leading-none">
+            NEW
+          </span>
+        )}
         
         <div className="flex items-center gap-1 pr-1">
           {node.hasUnresolved && <span className="h-1.5 w-1.5 rounded-full bg-warning" title="包含待确认项" />}
@@ -402,6 +415,12 @@ function FileItem({
               <span className="rounded-[5px] bg-primary px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white">待确认</span>
             )}
           </div>
+          {item.source_relpath && item.target_relpath && item.source_relpath !== item.target_relpath && (
+            <div className="line-clamp-1 text-[11px] font-medium leading-relaxed text-on-surface-variant/40 flex items-center gap-1">
+              <span className="shrink-0">原本位于:</span>
+              <span className="truncate italic">{item.source_relpath}</span>
+            </div>
+          )}
           {item.suggested_purpose && (
             <div className="line-clamp-1 text-[12px] leading-5 text-on-surface-variant/60">
               {item.suggested_purpose}
@@ -452,6 +471,7 @@ export function PreviewPanel({
   readOnly = false,
   onRunPrecheck,
   onUpdateItem,
+  precheckSummary,
 }: PreviewPanelProps) {
   const [viewMode, setViewMode] = useState<"before" | "after">("after");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -472,7 +492,8 @@ export function PreviewPanel({
     setEditValue("");
   };
 
-  const afterTree = plan.groups.length > 0 ? buildFileTree(plan.groups) : buildTargetTree(plan.items);
+  const mkdirPreview = precheckSummary?.mkdir_preview || [];
+  const afterTree = plan.groups.length > 0 ? buildFileTree(plan.groups, mkdirPreview) : buildTargetTree(plan.items, mkdirPreview);
   const beforeTree = buildSourceTree(plan.items);
   const currentTree = viewMode === "after" ? afterTree : beforeTree;
   const isViewOnly = viewMode === "before" || readOnly;
@@ -552,7 +573,7 @@ export function PreviewPanel({
                       plan.unresolved_items.length > 0 ? "text-warning" : "text-ui-muted opacity-50"
                     )}>待确认</span>
                     <span className={cn(
-                      "text-[15px] font-black tabular-nums",
+                      "text-[15px] font-bold tabular-nums",
                       plan.unresolved_items.length > 0 ? "text-warning" : "text-on-surface"
                     )}>{plan.unresolved_items.length}</span>
                   </div>
@@ -560,7 +581,7 @@ export function PreviewPanel({
 
                 {plan.summary && (
                   <div className="ml-auto flex items-center gap-2.5 rounded-[10px] bg-primary/[0.04] pl-3 py-1 pr-1.5 border border-primary/10">
-                    <p className="text-[12px] font-black text-primary/85 leading-none">
+                    <p className="text-[12px] font-bold text-primary/85 leading-none">
                       {plan.summary}
                     </p>
                     <div className="h-4 w-[1px] bg-primary/15" />
@@ -577,13 +598,13 @@ export function PreviewPanel({
                   <Layers className="h-3.5 w-3.5" /> 结构预览
                 </h3>
                 
-                <div className="flex rounded-[9px] bg-surface-container-low p-0.5">
+                <div className="flex rounded-[9px] bg-on-surface/[0.03] p-0.5 border border-on-surface/[0.04]">
                   <button
                     onClick={() => setViewMode("before")}
                     className={cn(
-                      "rounded-[7px] px-3 py-1 text-[11px] font-black transition-all",
-                      viewMode === "before" 
-                        ? "bg-white text-on-surface shadow-sm" 
+                      "rounded-[7px] px-3 py-1 text-[11px] font-bold transition-all",
+                      viewMode === "before"
+                        ? "bg-white text-on-surface shadow-sm ring-1 ring-on-surface/5"
                         : "text-on-surface-variant/40 hover:text-on-surface"
                     )}
                   >
@@ -592,9 +613,9 @@ export function PreviewPanel({
                   <button
                     onClick={() => setViewMode("after")}
                     className={cn(
-                      "rounded-[7px] px-3 py-1 text-[11px] font-black transition-all",
-                      viewMode === "after" 
-                        ? "bg-white text-on-surface shadow-sm" 
+                      "rounded-[7px] px-3 py-1 text-[11px] font-bold transition-all",
+                      viewMode === "after"
+                        ? "bg-primary text-white shadow-md shadow-primary/20"
                         : "text-on-surface-variant/40 hover:text-on-surface"
                     )}
                   >
@@ -718,4 +739,5 @@ interface PreviewPanelProps {
   readOnly?: boolean;
   onRunPrecheck: () => void;
   onUpdateItem: (itemId: string, payload: { target_dir?: string; move_to_review?: boolean }) => void;
+  precheckSummary?: any;
 }

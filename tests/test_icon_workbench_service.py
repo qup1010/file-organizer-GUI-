@@ -1,16 +1,23 @@
 import shutil
+import threading
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
 
-from file_organizer.icon_workbench.models import IconAnalysisResult, IconPreviewVersion, IconWorkbenchConfig, ModelConfig
+from file_organizer.icon_workbench.models import (
+    IconAnalysisResult,
+    IconPreviewVersion,
+    IconWorkbenchConfig,
+    ModelConfig,
+)
 from file_organizer.icon_workbench.service import IconWorkbenchService
 from file_organizer.icon_workbench.store import IconWorkbenchStore
 
 
 class StubTextClient:
-    def analyze_folder(self, config, folder_name, tree_lines):
+    def analyze_folder(self, config, folder_path, folder_name, tree_lines):
         return IconAnalysisResult(
             category="项目目录",
             visual_subject=f"{folder_name} badge",
@@ -29,36 +36,56 @@ class StubImageClient:
         )
 
 
-class StubChatAgent:
+class RecordingConcurrentTextClient:
     def __init__(self):
-        self.outputs = []
+        self.lock = threading.Lock()
+        self.active = 0
+        self.max_active = 0
         self.calls = []
 
-    def queue(self, response, actions=None):
-        self.outputs.append({"response": response, "actions": list(actions or [])})
+    def analyze_folder(self, config, folder_path, folder_name, tree_lines):
+        with self.lock:
+            self.active += 1
+            self.max_active = max(self.max_active, self.active)
+        try:
+            time.sleep(0.05)
+            with self.lock:
+                self.calls.append(folder_name)
+            return IconAnalysisResult(
+                category="项目目录",
+                visual_subject=f"{folder_name} badge",
+                summary="并发分析测试。",
+                suggested_prompt=f"Prompt for {folder_name}",
+            )
+        finally:
+            with self.lock:
+                self.active -= 1
 
-    def process_message(
-        self,
-        config,
-        session,
-        user_message,
-        templates,
-        *,
-        selected_folder_ids=None,
-        active_folder_id=None,
-    ):
-        self.calls.append(
-            {
-                "session_id": session.session_id,
-                "user_message": user_message,
-                "selected_folder_ids": list(selected_folder_ids or []),
-                "active_folder_id": active_folder_id,
-                "template_count": len(templates),
-            }
-        )
-        if self.outputs:
-            return self.outputs.pop(0)
-        return {"response": "已记录。", "actions": []}
+
+class RecordingConcurrentImageClient:
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.active = 0
+        self.max_active = 0
+        self.prompts = []
+
+    def generate_png(self, config, prompt, size):
+        with self.lock:
+            self.active += 1
+            self.max_active = max(self.max_active, self.active)
+        try:
+            time.sleep(0.05)
+            with self.lock:
+                self.prompts.append(prompt)
+            return (
+                b"\x89PNG\r\n\x1a\n"
+                b"\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
+                b"\x00\x00\x00\x0dIDATx\x9cc\xf8\xcf\xc0\xf0\x1f\x00\x05\x00\x01\xff\x89\x99=\x1d"
+                b"\x00\x00\x00\x00IEND\xaeB`\x82"
+            )
+        finally:
+            with self.lock:
+                self.active -= 1
 
 
 class IconWorkbenchServiceTests(unittest.TestCase):
@@ -107,12 +134,10 @@ class IconWorkbenchServiceTests(unittest.TestCase):
                 }
             )
         )
-        self.chat_agent = StubChatAgent()
         self.service = IconWorkbenchService(
             store=self.store,
             text_client=StubTextClient(),
             image_client=StubImageClient(),
-            chat_agent=self.chat_agent,
         )
 
     def tearDown(self):
@@ -125,7 +150,8 @@ class IconWorkbenchServiceTests(unittest.TestCase):
         self.assertEqual(session["folder_count"], 2)
         self.assertEqual([item["folder_name"] for item in session["folders"]], ["Alpha", "Beta"])
         self.assertEqual(session["target_paths"], [str(self.alpha_dir), str(self.beta_dir)])
-        self.assertEqual(session["messages"][0]["role"], "assistant")
+        self.assertNotIn("messages", session)
+        self.assertNotIn("pending_actions", session)
 
     def test_update_and_remove_session_targets(self):
         session = self.service.create_session([str(self.alpha_dir)])
@@ -276,99 +302,7 @@ class IconWorkbenchServiceTests(unittest.TestCase):
         self.assertEqual(prepared["skipped_items"][0]["folder_id"], folder_b)
         self.assertEqual(prepared["skipped_items"][0]["message"], "当前版本未就绪")
 
-    def test_send_message_auto_executes_low_risk_action(self):
-        session = self.service.create_session([str(self.alpha_dir), str(self.beta_dir)])
-        folder_id = session["folders"][0]["folder_id"]
-        self.chat_agent.queue(
-            "我已经先分析当前选中的文件夹。",
-            actions=[{"type": "analyze_folders", "folder_ids": [folder_id]}],
-        )
-
-        updated = self.service.send_message(
-            session["session_id"],
-            "先分析一下当前文件夹",
-            selected_folder_ids=[folder_id],
-            active_folder_id=folder_id,
-        )
-
-        folder = next(item for item in updated["folders"] if item["folder_id"] == folder_id)
-        self.assertEqual(folder["analysis_status"], "ready")
-        self.assertEqual(updated["messages"][-1]["role"], "assistant")
-        self.assertEqual(updated["messages"][-1]["tool_results"][0]["tool_name"], "analyze_folders")
-        self.assertEqual(self.chat_agent.calls[0]["selected_folder_ids"], [folder_id])
-        self.assertEqual(self.chat_agent.calls[0]["active_folder_id"], folder_id)
-
-    def test_send_message_generates_pending_action(self):
-        session = self.service.create_session([str(self.alpha_dir), str(self.beta_dir)])
-        folder_id = session["folders"][0]["folder_id"]
-        self.chat_agent.queue(
-            "我已经整理好预览生成任务，等你确认。",
-            actions=[{"type": "generate_previews", "folder_ids": [folder_id]}],
-        )
-
-        updated = self.service.send_message(session["session_id"], "生成预览", selected_folder_ids=[folder_id])
-
-        self.assertEqual(len(updated["pending_actions"]), 1)
-        pending_action = updated["pending_actions"][0]
-        self.assertEqual(pending_action["action_type"], "generate_previews")
-        self.assertEqual(updated["messages"][-1]["action_ids"], [pending_action["action_id"]])
-        self.assertEqual(updated["messages"][-1]["tool_results"][0]["tool_name"], "generate_previews")
-
-    def test_confirm_generate_previews_executes_server_side_action(self):
-        session = self.service.create_session([str(self.alpha_dir), str(self.beta_dir)])
-        folder_id = session["folders"][0]["folder_id"]
-        self.service.analyze_folders(session["session_id"], [folder_id])
-        self.chat_agent.queue(
-            "预览任务已准备好。",
-            actions=[{"type": "generate_previews", "folder_ids": [folder_id]}],
-        )
-        pending = self.service.send_message(session["session_id"], "给这个文件夹生成预览")
-        action_id = pending["pending_actions"][0]["action_id"]
-
-        confirmed = self.service.confirm_pending_action(session["session_id"], action_id)
-
-        confirmed_session = confirmed["session"]
-        folder = next(item for item in confirmed_session["folders"] if item["folder_id"] == folder_id)
-        self.assertEqual(len(folder["versions"]), 1)
-        self.assertEqual(confirmed_session["pending_actions"], [])
-        self.assertIn("已按确认生成", confirmed_session["messages"][-1]["content"])
-
-    def test_confirm_apply_icons_returns_client_execution(self):
-        session = self.service.create_session([str(self.alpha_dir), str(self.beta_dir)])
-        folder_id = session["folders"][0]["folder_id"]
-        self.service.analyze_folders(session["session_id"], [folder_id])
-        self.service.generate_previews(session["session_id"], [folder_id])
-        self.chat_agent.queue(
-            "应用任务已准备好。",
-            actions=[{"type": "apply_icons", "folder_ids": [folder_id]}],
-        )
-        pending = self.service.send_message(session["session_id"], "应用当前图标")
-        action_id = pending["pending_actions"][0]["action_id"]
-
-        confirmed = self.service.confirm_pending_action(session["session_id"], action_id)
-
-        self.assertEqual(confirmed["client_execution"]["command"], "apply_ready_icons")
-        self.assertEqual(len(confirmed["client_execution"]["tasks"]), 1)
-        self.assertEqual(confirmed["client_execution"]["tasks"][0]["folder_id"], folder_id)
-        self.assertIn("已确认应用图标", confirmed["session"]["messages"][-1]["content"])
-
-    def test_dismiss_pending_action_removes_it_and_records_message(self):
-        session = self.service.create_session([str(self.alpha_dir), str(self.beta_dir)])
-        folder_id = session["folders"][0]["folder_id"]
-        self.chat_agent.queue(
-            "恢复任务已准备好。",
-            actions=[{"type": "restore_icons", "folder_ids": [folder_id]}],
-        )
-        pending = self.service.send_message(session["session_id"], "恢复图标")
-        action_id = pending["pending_actions"][0]["action_id"]
-
-        dismissed = self.service.dismiss_pending_action(session["session_id"], action_id)
-
-        self.assertEqual(dismissed["pending_actions"], [])
-        self.assertEqual(dismissed["messages"][-1]["role"], "system")
-        self.assertIn("已取消待执行操作", dismissed["messages"][-1]["content"])
-
-    def test_report_client_action_appends_summary_message(self):
+    def test_report_client_action_updates_last_summary(self):
         session = self.service.create_session([str(self.alpha_dir), str(self.beta_dir)])
 
         updated = self.service.report_client_action(
@@ -402,9 +336,81 @@ class IconWorkbenchServiceTests(unittest.TestCase):
             },
         )
 
-        self.assertIn("成功 1，失败 1，跳过 1", updated["messages"][-1]["content"])
-        self.assertEqual(len(updated["messages"][-1]["tool_results"]), 3)
-        self.assertEqual(updated["messages"][-1]["tool_results"][0]["payload"]["status"], "applied")
+        self.assertEqual(updated["last_client_action"]["action_type"], "apply_icons")
+        self.assertEqual(updated["last_client_action"]["summary"]["success_count"], 1)
+        self.assertEqual(updated["last_client_action"]["summary"]["failed_count"], 1)
+        self.assertEqual(updated["last_client_action"]["summary"]["skipped_count"], 1)
+        self.assertEqual(updated["last_client_action"]["results"][0]["status"], "applied")
+        self.assertEqual(updated["last_client_action"]["results"][2]["status"], "skipped")
+
+    def test_analyze_folders_uses_configured_analysis_concurrency_limit(self):
+        concurrent_text_client = RecordingConcurrentTextClient()
+        service = IconWorkbenchService(
+            store=self.store,
+            text_client=concurrent_text_client,
+            image_client=StubImageClient(),
+        )
+        self.store.config_store.save(
+            IconWorkbenchConfig.from_dict(
+                {
+                    "text_model": {
+                        "base_url": "https://text.example/v1",
+                        "api_key": "text-key",
+                        "model": "gpt-text",
+                    },
+                    "image_model": {
+                        "base_url": "https://image.example/v1",
+                        "api_key": "image-key",
+                        "model": "gpt-image",
+                    },
+                    "image_size": "512x512",
+                    "analysis_concurrency_limit": 2,
+                    "image_concurrency_limit": 1,
+                }
+            )
+        )
+        session = service.create_session([str(self.alpha_dir), str(self.beta_dir), str(self.gamma_dir)])
+
+        updated = service.analyze_folders(session["session_id"])
+
+        self.assertEqual(sorted(concurrent_text_client.calls), ["Alpha", "Beta", "Gamma"])
+        self.assertGreaterEqual(concurrent_text_client.max_active, 2)
+        self.assertTrue(all(folder["analysis_status"] == "ready" for folder in updated["folders"]))
+
+    def test_generate_previews_uses_configured_image_concurrency_limit(self):
+        concurrent_image_client = RecordingConcurrentImageClient()
+        service = IconWorkbenchService(
+            store=self.store,
+            text_client=StubTextClient(),
+            image_client=concurrent_image_client,
+        )
+        self.store.config_store.save(
+            IconWorkbenchConfig.from_dict(
+                {
+                    "text_model": {
+                        "base_url": "https://text.example/v1",
+                        "api_key": "text-key",
+                        "model": "gpt-text",
+                    },
+                    "image_model": {
+                        "base_url": "https://image.example/v1",
+                        "api_key": "image-key",
+                        "model": "gpt-image",
+                    },
+                    "image_size": "512x512",
+                    "analysis_concurrency_limit": 1,
+                    "image_concurrency_limit": 2,
+                }
+            )
+        )
+        session = service.create_session([str(self.alpha_dir), str(self.beta_dir), str(self.gamma_dir)])
+        service.analyze_folders(session["session_id"])
+
+        updated = service.generate_previews(session["session_id"])
+
+        self.assertEqual(len(concurrent_image_client.prompts), 3)
+        self.assertGreaterEqual(concurrent_image_client.max_active, 2)
+        self.assertTrue(all(len(folder["versions"]) == 1 for folder in updated["folders"]))
 
 
 if __name__ == "__main__":

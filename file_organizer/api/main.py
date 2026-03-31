@@ -75,8 +75,10 @@ class SettingsSecretPayload(BaseModel):
 
 class SettingsFamilyUpdatePayload(BaseModel):
     preset: dict[str, Any] | None = None
+    custom: dict[str, Any] | None = None
     secret: SettingsSecretPayload | None = None
     enabled: bool | None = None
+    mode: str | None = None
 
 
 class SettingsUpdatePayload(BaseModel):
@@ -142,12 +144,6 @@ class IconWorkbenchTemplateUpdatePayload(BaseModel):
 class IconWorkbenchApplyTemplatePayload(BaseModel):
     template_id: str
     folder_ids: list[str] = Field(default_factory=list)
-
-
-class IconWorkbenchMessagePayload(BaseModel):
-    content: str
-    selected_folder_ids: list[str] = Field(default_factory=list)
-    active_folder_id: str | None = None
 
 
 class IconWorkbenchClientActionResultPayload(BaseModel):
@@ -339,7 +335,13 @@ def _build_icon_image_test_runtime(payload: SettingsTestPayload, settings_servic
     runtime["name"] = str(preset.get("name", runtime.get("name", "")) or "").strip()
     runtime["image_model"] = image_model
     runtime["image_size"] = str(preset.get("image_size", runtime.get("image_size", "1024x1024")) or "1024x1024").strip()
-    runtime["concurrency_limit"] = int(preset.get("concurrency_limit", runtime.get("concurrency_limit", 1)) or 1)
+    legacy_limit = int(preset.get("concurrency_limit", runtime.get("image_concurrency_limit", 1)) or 1)
+    runtime["analysis_concurrency_limit"] = int(
+        preset.get("analysis_concurrency_limit", runtime.get("analysis_concurrency_limit", legacy_limit)) or 1
+    )
+    runtime["image_concurrency_limit"] = int(
+        preset.get("image_concurrency_limit", runtime.get("image_concurrency_limit", legacy_limit)) or 1
+    )
     runtime["save_mode"] = str(preset.get("save_mode", runtime.get("save_mode", "centralized")) or "centralized")
     return runtime
 
@@ -378,12 +380,12 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
     app.state.icon_workbench_service = IconWorkbenchService()
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://127.0.0.1:3000",
-            "http://localhost:3000",
-            "tauri://localhost",
-            "http://tauri.localhost",
-        ],
+        allow_origins=["*"],
+
+
+
+
+
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -838,38 +840,6 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail="ICON_FOLDER_NOT_FOUND")
 
-    @app.post("/api/icon-workbench/sessions/{session_id}/messages")
-    def send_icon_workbench_message(session_id: str, payload: IconWorkbenchMessagePayload):
-        try:
-            session = app.state.icon_workbench_service.send_message(
-                session_id,
-                payload.content,
-                selected_folder_ids=payload.selected_folder_ids,
-                active_folder_id=payload.active_folder_id,
-            )
-            return {"session": session}
-        except FileNotFoundError:
-            raise HTTPException(status_code=404, detail="ICON_SESSION_NOT_FOUND")
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc))
-
-    @app.post("/api/icon-workbench/sessions/{session_id}/actions/{action_id}/confirm")
-    def confirm_icon_workbench_action(session_id: str, action_id: str):
-        try:
-            return app.state.icon_workbench_service.confirm_pending_action(session_id, action_id)
-        except FileNotFoundError:
-            raise HTTPException(status_code=404, detail="ICON_ACTION_NOT_FOUND")
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc))
-
-    @app.post("/api/icon-workbench/sessions/{session_id}/actions/{action_id}/dismiss")
-    def dismiss_icon_workbench_action(session_id: str, action_id: str):
-        try:
-            session = app.state.icon_workbench_service.dismiss_pending_action(session_id, action_id)
-            return {"session": session}
-        except FileNotFoundError:
-            raise HTTPException(status_code=404, detail="ICON_ACTION_NOT_FOUND")
-
     @app.post("/api/icon-workbench/sessions/{session_id}/client-actions/report")
     def report_icon_workbench_client_action(session_id: str, payload: IconWorkbenchClientActionReportPayload):
         try:
@@ -1004,6 +974,11 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
     def get_settings():
         from file_organizer.shared.config_manager import config_manager
         return config_manager.service.get_settings_snapshot()
+
+    @app.get("/api/settings/runtime/{family}")
+    def get_settings_runtime_family(family: str):
+        from file_organizer.shared.config_manager import config_manager
+        return config_manager.service.get_runtime_family_config(family)
 
     @app.patch("/api/settings")
     def update_settings(payload: SettingsUpdatePayload):

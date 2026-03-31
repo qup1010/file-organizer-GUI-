@@ -1,4 +1,4 @@
-export type SettingsFamily = "text" | "vision" | "icon_image";
+export type SettingsFamily = "text" | "vision" | "icon_image" | "bg_removal";
 export type SecretState = "empty" | "stored";
 export type SecretAction = "keep" | "replace" | "clear";
 
@@ -32,8 +32,31 @@ export interface SafeModelConfig {
 export interface IconImageSettingsPreset extends PresetSummary {
   image_model: SafeModelConfig;
   image_size: string;
-  concurrency_limit: number;
+  analysis_concurrency_limit: number;
+  image_concurrency_limit: number;
   save_mode: "in_folder" | "centralized";
+}
+
+export interface BgRemovalBuiltinPreset {
+  id: string;
+  name: string;
+  model_id: string;
+  api_type: string;
+  payload_template: string;
+}
+
+export interface BgRemovalSettingsPreset {
+  name: string;
+  model_id: string;
+  api_type: string;
+  payload_template: string;
+  secret_state: SecretState;
+}
+
+export interface BgRemovalDraft {
+  mode: "preset" | "custom";
+  preset_id: string | null;
+  custom: BgRemovalSettingsPreset;
 }
 
 export interface SettingsSnapshot {
@@ -63,11 +86,21 @@ export interface SettingsSnapshot {
       };
       presets: IconImageSettingsPreset[];
     };
+    bg_removal: {
+      family: "bg_removal";
+      configured: boolean;
+      mode: "preset" | "custom";
+      preset_id: string | null;
+      active_preset: BgRemovalSettingsPreset;
+      builtin_presets: BgRemovalBuiltinPreset[];
+      custom: BgRemovalSettingsPreset;
+    };
   };
   status: {
     text_configured: boolean;
     vision_configured: boolean;
     icon_image_configured: boolean;
+    bg_removal_configured: boolean;
   };
 }
 
@@ -93,8 +126,23 @@ export interface IconImageSettingsPresetPatch {
   name?: string;
   image_model?: Partial<SafeModelConfig>;
   image_size?: string;
-  concurrency_limit?: number;
+  analysis_concurrency_limit?: number;
+  image_concurrency_limit?: number;
   save_mode?: "in_folder" | "centralized";
+}
+
+export interface BgRemovalSettingsPatch {
+  mode?: "preset" | "custom";
+  preset?: {
+    preset_id?: string;
+  };
+  custom?: {
+    name?: string;
+    model_id?: string;
+    api_type?: string;
+    payload_template?: string;
+  };
+  secret?: SettingsSecretInput;
 }
 
 export interface SettingsUpdatePayload {
@@ -113,6 +161,7 @@ export interface SettingsUpdatePayload {
       preset?: IconImageSettingsPresetPatch;
       secret?: SettingsSecretInput;
     };
+    bg_removal: BgRemovalSettingsPatch;
   }>;
 }
 

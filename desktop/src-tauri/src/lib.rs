@@ -38,6 +38,50 @@ fn pick_directories() -> Option<Vec<String>> {
     })
 }
 
+#[tauri::command]
+fn save_file_as(source_path: String, filename: String) -> Result<bool, String> {
+    let save_path = rfd::FileDialog::new()
+        .set_file_name(&filename)
+        .add_filter("PNG Image", &["png"])
+        .save_file();
+
+    if let Some(dest) = save_path {
+        fs::copy(&source_path, &dest).map_err(|e| e.to_string())?;
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}
+
+#[tauri::command]
+fn open_directory(path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        // On Windows, using /select opens the parent folder and highlights the item
+        let _ = std::process::Command::new("explorer")
+            .arg("/select,")
+            .arg(&path)
+            .spawn();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        // On macOS, -R flag in open command reveals it in Finder
+        let _ = std::process::Command::new("open")
+            .arg("-R")
+            .arg(&path)
+            .spawn();
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        // For linux, just open the parent for now if it's a folder, or the path directly
+        let _ = std::process::Command::new("xdg-open")
+            .arg(&path)
+            .spawn();
+    }
+    Ok(())
+}
+
+
 struct DesktopState {
     project_root: PathBuf,
     backend_child: Mutex<Option<Child>>,
@@ -151,13 +195,16 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             pick_directory,
             pick_directories,
+            open_directory,
+            save_file_as,
             apply_folder_icon,
             apply_ready_icons,
             clear_folder_icon,
             can_restore_folder_icon,
             restore_last_folder_icon,
             restore_ready_icons,
-            crate::bg_removal::remove_background_for_image
+            crate::bg_removal::remove_background_for_image,
+            crate::bg_removal::test_bg_removal_connection
         ])
         .setup(|app| {
             bootstrap_backend(app).map_err(Into::into)

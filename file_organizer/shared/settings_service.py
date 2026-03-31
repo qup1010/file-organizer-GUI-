@@ -19,7 +19,8 @@ SETTINGS_VERSION = 2
 TEXT_FAMILY = "text"
 VISION_FAMILY = "vision"
 ICON_IMAGE_FAMILY = "icon_image"
-SETTINGS_FAMILIES = {TEXT_FAMILY, VISION_FAMILY, ICON_IMAGE_FAMILY}
+BG_REMOVAL_FAMILY = "bg_removal"
+SETTINGS_FAMILIES = {TEXT_FAMILY, VISION_FAMILY, ICON_IMAGE_FAMILY, BG_REMOVAL_FAMILY}
 
 TEXT_SECRET_KEY = "OPENAI_API_KEY"
 VISION_SECRET_KEY = "IMAGE_ANALYSIS_API_KEY"
@@ -67,8 +68,55 @@ DEFAULT_ICON_IMAGE_PRESET = {
         "api_key": "",
     },
     "image_size": "1024x1024",
-    "concurrency_limit": 1,
+    "analysis_concurrency_limit": 1,
+    "image_concurrency_limit": 1,
     "save_mode": "centralized",
+}
+
+DEFAULT_BG_REMOVAL_CUSTOM = {
+    "name": "自定义抠图",
+    "model_id": "",
+    "api_type": "gradio_space",
+    "payload_template": "",
+    "hf_api_token": "",
+}
+
+DEFAULT_BG_REMOVAL_PRESET_ID = "bria-rmbg-2.0"
+BG_REMOVAL_BUILTIN_PRESETS = [
+    {
+        "id": "bria-rmbg-2.0",
+        "name": "BRIA RMBG 2.0",
+        "model_id": "briaai/BRIA-RMBG-2.0",
+        "api_type": "gradio_space",
+        "payload_template": '{"data":[{"path":"{{uploaded_path}}","meta":{"_type":"gradio.FileData"}}],"fn_index":0}',
+    },
+    {
+        "id": "bria-rmbg-1.4",
+        "name": "BRIA RMBG 1.4",
+        "model_id": "briaai/BRIA-RMBG-1.4",
+        "api_type": "gradio_space",
+        "payload_template": '{"data":[{"path":"{{uploaded_path}}","meta":{"_type":"gradio.FileData"}}],"fn_index":0}',
+    },
+    {
+        "id": "not-lain/background-removal",
+        "name": "not-lain/background-removal",
+        "model_id": "not-lain/background-removal",
+        "api_type": "gradio_space",
+        "payload_template": '{"data":[{"path":"{{uploaded_path}}","meta":{"_type":"gradio.FileData"}}],"fn_index":0}',
+    },
+    {
+        "id": "kenjiedec/rembg",
+        "name": "KenjieDec/RemBG",
+        "model_id": "KenjieDec/RemBG",
+        "api_type": "gradio_space",
+        "payload_template": '{"data":[{"path":"{{uploaded_path}}","meta":{"_type":"gradio.FileData"}}],"fn_index":0}',
+    },
+]
+
+DEFAULT_BG_REMOVAL_CONFIG = {
+    "mode": "preset",
+    "preset_id": DEFAULT_BG_REMOVAL_PRESET_ID,
+    "custom": copy.deepcopy(DEFAULT_BG_REMOVAL_CUSTOM),
 }
 
 
@@ -95,6 +143,7 @@ class SettingsService:
         self._text_presets = {DEFAULT_PRESET_ID: copy.deepcopy(DEFAULT_TEXT_PRESET)}
         self._vision_presets = {DEFAULT_PRESET_ID: copy.deepcopy(DEFAULT_VISION_PRESET)}
         self._icon_image_presets = {DEFAULT_PRESET_ID: copy.deepcopy(DEFAULT_ICON_IMAGE_PRESET)}
+        self._bg_removal = copy.deepcopy(DEFAULT_BG_REMOVAL_CONFIG)
         self._active_text_preset_id = DEFAULT_PRESET_ID
         self._active_vision_preset_id = DEFAULT_PRESET_ID
         self._active_icon_image_preset_id = DEFAULT_PRESET_ID
@@ -135,10 +184,15 @@ class SettingsService:
     def _sanitize_icon_image_preset(self, payload: dict[str, Any] | None) -> dict[str, Any]:
         data = dict(payload or {})
         image_model = dict(data.get("image_model") or {})
+        legacy_limit = data.get("concurrency_limit", DEFAULT_ICON_IMAGE_PRESET["image_concurrency_limit"])
         try:
-            concurrency_limit = int(data.get("concurrency_limit", DEFAULT_ICON_IMAGE_PRESET["concurrency_limit"]) or 1)
+            analysis_concurrency_limit = int(data.get("analysis_concurrency_limit", legacy_limit) or 1)
         except (TypeError, ValueError):
-            concurrency_limit = 1
+            analysis_concurrency_limit = 1
+        try:
+            image_concurrency_limit = int(data.get("image_concurrency_limit", legacy_limit) or 1)
+        except (TypeError, ValueError):
+            image_concurrency_limit = 1
         return {
             "name": str(data.get("name") or DEFAULT_ICON_IMAGE_PRESET["name"]).strip() or DEFAULT_ICON_IMAGE_PRESET["name"],
             "image_model": {
@@ -147,8 +201,34 @@ class SettingsService:
                 "api_key": str(image_model.get("api_key", "") or ""),
             },
             "image_size": str(data.get("image_size") or DEFAULT_ICON_IMAGE_PRESET["image_size"]).strip() or DEFAULT_ICON_IMAGE_PRESET["image_size"],
-            "concurrency_limit": max(1, min(concurrency_limit, 6)),
+            "analysis_concurrency_limit": max(1, min(analysis_concurrency_limit, 6)),
+            "image_concurrency_limit": max(1, min(image_concurrency_limit, 6)),
             "save_mode": "in_folder" if str(data.get("save_mode", "")).strip().lower() == "in_folder" else "centralized",
+        }
+
+    def _sanitize_bg_removal_custom(self, payload: dict[str, Any] | None) -> dict[str, Any]:
+        data = dict(payload or {})
+        return {
+            "name": str(data.get("name") or DEFAULT_BG_REMOVAL_CUSTOM["name"]).strip() or DEFAULT_BG_REMOVAL_CUSTOM["name"],
+            "model_id": str(data.get("model_id") or "").strip(),
+            "api_type": str(data.get("api_type") or DEFAULT_BG_REMOVAL_CUSTOM["api_type"]).strip() or DEFAULT_BG_REMOVAL_CUSTOM["api_type"],
+            "payload_template": str(data.get("payload_template") or "").strip(),
+            "hf_api_token": str(data.get("hf_api_token", "") or ""),
+        }
+
+    def _sanitize_bg_removal_config(self, payload: dict[str, Any] | None) -> dict[str, Any]:
+        data = dict(payload or {})
+        preset_ids = {str(item["id"]) for item in BG_REMOVAL_BUILTIN_PRESETS}
+        preset_id = str(data.get("preset_id") or DEFAULT_BG_REMOVAL_PRESET_ID).strip() or DEFAULT_BG_REMOVAL_PRESET_ID
+        if preset_id not in preset_ids:
+            preset_id = DEFAULT_BG_REMOVAL_PRESET_ID
+        mode = str(data.get("mode") or "preset").strip().lower()
+        if mode not in {"preset", "custom"}:
+            mode = "preset"
+        return {
+            "mode": mode,
+            "preset_id": preset_id,
+            "custom": self._sanitize_bg_removal_custom(data.get("custom")),
         }
 
     def _ensure_defaults(self) -> None:
@@ -164,6 +244,7 @@ class SettingsService:
             self._active_vision_preset_id = DEFAULT_PRESET_ID
         if self._active_icon_image_preset_id not in self._icon_image_presets:
             self._active_icon_image_preset_id = DEFAULT_PRESET_ID
+        self._bg_removal = self._sanitize_bg_removal_config(self._bg_removal)
 
     def _sync_from_env(self) -> None:
         flat = {
@@ -215,6 +296,7 @@ class SettingsService:
             str(preset_id): self._sanitize_icon_image_preset(preset)
             for preset_id, preset in dict(data.get("icon_image_presets", {}) or {}).items()
         }
+        self._bg_removal = self._sanitize_bg_removal_config(data.get("bg_removal"))
         self._active_text_preset_id = str(data.get("active_text_preset_id") or DEFAULT_PRESET_ID)
         self._active_vision_preset_id = str(data.get("active_vision_preset_id") or DEFAULT_PRESET_ID)
         self._active_icon_image_preset_id = str(data.get("active_icon_image_preset_id") or DEFAULT_PRESET_ID)
@@ -252,6 +334,15 @@ class SettingsService:
             data = json.loads(self._config_path.read_text(encoding="utf-8"))
             if int(data.get("settings_version", 0) or 0) >= SETTINGS_VERSION:
                 self._load_new_schema(data)
+                if "bg_removal" not in data:
+                    needs_save = True
+                raw_icon_presets = dict(data.get("icon_image_presets", {}) or {})
+                if any(
+                    "analysis_concurrency_limit" not in dict(preset or {})
+                    or "image_concurrency_limit" not in dict(preset or {})
+                    for preset in raw_icon_presets.values()
+                ):
+                    needs_save = True
             else:
                 self._load_old_root_schema(data)
                 needs_save = True
@@ -289,6 +380,7 @@ class SettingsService:
             "text_presets": copy.deepcopy(self._text_presets),
             "vision_presets": copy.deepcopy(self._vision_presets),
             "icon_image_presets": copy.deepcopy(self._icon_image_presets),
+            "bg_removal": copy.deepcopy(self._bg_removal),
             "active_text_preset_id": self._active_text_preset_id,
             "active_vision_preset_id": self._active_vision_preset_id,
             "active_icon_image_preset_id": self._active_icon_image_preset_id,
@@ -335,7 +427,8 @@ class SettingsService:
                 "secret_state": _secret_state(str(image_model.get("api_key", "") or "")),
             },
             "image_size": str(preset.get("image_size") or DEFAULT_ICON_IMAGE_PRESET["image_size"]),
-            "concurrency_limit": int(preset.get("concurrency_limit", DEFAULT_ICON_IMAGE_PRESET["concurrency_limit"]) or 1),
+            "analysis_concurrency_limit": int(preset.get("analysis_concurrency_limit", DEFAULT_ICON_IMAGE_PRESET["analysis_concurrency_limit"]) or 1),
+            "image_concurrency_limit": int(preset.get("image_concurrency_limit", DEFAULT_ICON_IMAGE_PRESET["image_concurrency_limit"]) or 1),
             "save_mode": "in_folder" if str(preset.get("save_mode", "")).strip().lower() == "in_folder" else "centralized",
         }
 
@@ -347,6 +440,34 @@ class SettingsService:
             "model": str(active.get("OPENAI_MODEL") or "").strip(),
             "secret_state": _secret_state(str(active.get(TEXT_SECRET_KEY, "") or "")),
             "configured": self.is_text_configured(),
+        }
+
+    def _get_bg_removal_builtin_preset(self, preset_id: str) -> dict[str, Any]:
+        for preset in BG_REMOVAL_BUILTIN_PRESETS:
+            if str(preset["id"]) == str(preset_id):
+                return copy.deepcopy(preset)
+        return copy.deepcopy(BG_REMOVAL_BUILTIN_PRESETS[0])
+
+    def _bg_removal_custom_to_public(self) -> dict[str, Any]:
+        custom = self._sanitize_bg_removal_custom(self._bg_removal.get("custom"))
+        return {
+            "name": custom["name"],
+            "model_id": custom["model_id"],
+            "api_type": custom["api_type"],
+            "payload_template": custom["payload_template"],
+            "secret_state": _secret_state(custom.get("hf_api_token", "")),
+        }
+
+    def _bg_removal_active_to_public(self) -> dict[str, Any]:
+        if self._bg_removal.get("mode") == "custom":
+            return self._bg_removal_custom_to_public()
+        preset = self._get_bg_removal_builtin_preset(str(self._bg_removal.get("preset_id") or DEFAULT_BG_REMOVAL_PRESET_ID))
+        return {
+            "name": preset["name"],
+            "model_id": preset["model_id"],
+            "api_type": preset["api_type"],
+            "payload_template": preset["payload_template"],
+            "secret_state": _secret_state(str(self._bg_removal.get("custom", {}).get("hf_api_token", "") or "")),
         }
 
     def get_settings_snapshot(self) -> dict[str, Any]:
@@ -390,11 +511,21 @@ class SettingsService:
                         for preset_id, preset in self._icon_image_presets.items()
                     ],
                 },
+                BG_REMOVAL_FAMILY: {
+                    "family": BG_REMOVAL_FAMILY,
+                    "configured": self.is_bg_removal_configured(),
+                    "mode": self._bg_removal["mode"],
+                    "preset_id": self._bg_removal["preset_id"] if self._bg_removal["mode"] == "preset" else None,
+                    "active_preset": self._bg_removal_active_to_public(),
+                    "builtin_presets": [copy.deepcopy(preset) for preset in BG_REMOVAL_BUILTIN_PRESETS],
+                    "custom": self._bg_removal_custom_to_public(),
+                },
             },
             "status": {
                 "text_configured": self.is_text_configured(),
                 "vision_configured": self.is_vision_configured(),
                 "icon_image_configured": self.is_icon_image_configured(),
+                "bg_removal_configured": self.is_bg_removal_configured(),
             },
         }
 
@@ -436,6 +567,12 @@ class SettingsService:
         image_model = dict(preset.get("image_model") or {})
         return bool(image_model.get("base_url") and image_model.get("model") and image_model.get("api_key"))
 
+    def is_bg_removal_configured(self) -> bool:
+        if self._bg_removal.get("mode") == "preset":
+            return True
+        custom = self._sanitize_bg_removal_custom(self._bg_removal.get("custom"))
+        return bool(custom.get("model_id") and custom.get("api_type") and custom.get("payload_template"))
+
     def get_runtime_family_config(self, family: str) -> dict[str, Any]:
         if family == TEXT_FAMILY:
             preset = self._get_active_text_preset()
@@ -465,9 +602,28 @@ class SettingsService:
                     "api_key": str(image_model.get("api_key", "") or ""),
                 },
                 "image_size": preset["image_size"],
-                "concurrency_limit": preset["concurrency_limit"],
+                "analysis_concurrency_limit": preset["analysis_concurrency_limit"],
+                "image_concurrency_limit": preset["image_concurrency_limit"],
                 "save_mode": preset["save_mode"],
                 "text_model": self.get_runtime_family_config(TEXT_FAMILY),
+            }
+        if family == BG_REMOVAL_FAMILY:
+            if self._bg_removal.get("mode") == "custom":
+                custom = self._sanitize_bg_removal_custom(self._bg_removal.get("custom"))
+                return {
+                    "name": custom["name"],
+                    "model_id": custom["model_id"],
+                    "api_type": custom["api_type"],
+                    "payload_template": custom["payload_template"],
+                    "api_token": custom["hf_api_token"],
+                }
+            preset = self._get_bg_removal_builtin_preset(str(self._bg_removal.get("preset_id") or DEFAULT_BG_REMOVAL_PRESET_ID))
+            return {
+                "name": preset["name"],
+                "model_id": preset["model_id"],
+                "api_type": preset["api_type"],
+                "payload_template": preset["payload_template"],
+                "api_token": str(self._bg_removal.get("custom", {}).get("hf_api_token", "") or ""),
             }
         raise ValueError("不支持的设置族")
 
@@ -486,6 +642,7 @@ class SettingsService:
         next_text = copy.deepcopy(self._text_presets)
         next_vision = copy.deepcopy(self._vision_presets)
         next_icon = copy.deepcopy(self._icon_image_presets)
+        next_bg_removal = copy.deepcopy(self._bg_removal)
 
         if "global_config" in payload:
             next_global = self._sanitize_global({**next_global, **dict(payload.get("global_config") or {})})
@@ -533,10 +690,32 @@ class SettingsService:
             current["image_model"] = image_model
             next_icon[self._active_icon_image_preset_id] = self._sanitize_icon_image_preset(current)
 
+        if BG_REMOVAL_FAMILY in families:
+            family_payload = dict(families.get(BG_REMOVAL_FAMILY) or {})
+            current = self._sanitize_bg_removal_config(next_bg_removal)
+            if "mode" in family_payload:
+                requested_mode = str(family_payload.get("mode") or "preset").strip().lower()
+                current["mode"] = "custom" if requested_mode == "custom" else "preset"
+            if "preset" in family_payload:
+                preset_payload = dict(family_payload.get("preset") or {})
+                current["preset_id"] = str(preset_payload.get("preset_id") or current.get("preset_id") or DEFAULT_BG_REMOVAL_PRESET_ID)
+            if "custom" in family_payload:
+                custom_payload = dict(family_payload.get("custom") or {})
+                current["custom"] = self._sanitize_bg_removal_custom({
+                    **dict(current.get("custom") or {}),
+                    **custom_payload,
+                    "hf_api_token": dict(current.get("custom") or {}).get("hf_api_token", ""),
+                })
+            custom = dict(current.get("custom") or {})
+            custom["hf_api_token"] = self._apply_secret_action(str(custom.get("hf_api_token", "") or ""), family_payload.get("secret"))
+            current["custom"] = self._sanitize_bg_removal_custom(custom)
+            next_bg_removal = self._sanitize_bg_removal_config(current)
+
         self._global_config = next_global
         self._text_presets = next_text
         self._vision_presets = next_vision
         self._icon_image_presets = next_icon
+        self._bg_removal = next_bg_removal
         self._ensure_defaults()
         self._apply_to_env()
         self.save()

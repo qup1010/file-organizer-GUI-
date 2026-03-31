@@ -3,7 +3,8 @@
 import React, { ReactNode } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { LayoutGrid, History, ChevronRight, Settings, Palette } from "lucide-react";
+import { LayoutGrid, History, ChevronRight, Settings, Palette, X, Minus, Square } from "lucide-react";
+import { WindowControls } from "./ui/window-controls";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
@@ -49,7 +50,7 @@ function getBaseModuleLabel(pathname: string, searchParams: URLSearchParams) {
   if (pathname === "/icons") {
     return {
       title: "图标工坊",
-      detail: "分析文件夹并生成 Windows 图标",
+      detail: "选择目标文件夹并生成图标",
     };
   }
   if (pathname.startsWith("/workspace")) {
@@ -62,7 +63,7 @@ function getBaseModuleLabel(pathname: string, searchParams: URLSearchParams) {
       detail: "当前整理任务",
     };
   }
-  return { title: "新建任务", detail: "选择目录并启动新的整理任务" };
+  return { title: "开始整理", detail: "选择目录并开始新的整理任务" };
 }
 
 function getStoredModuleLabel(pathname: string, searchParams: URLSearchParams) {
@@ -84,7 +85,7 @@ function getStoredModuleLabel(pathname: string, searchParams: URLSearchParams) {
     const stored = readStoredContext(ICONS_CONTEXT_KEY);
     return {
       title: "图标工坊",
-      detail: stored?.detail || "分析文件夹并生成 Windows 图标",
+      detail: stored?.detail || "选择目标文件夹并生成图标",
     };
   }
   if (pathname.startsWith("/workspace")) {
@@ -96,7 +97,7 @@ function getStoredModuleLabel(pathname: string, searchParams: URLSearchParams) {
       detail: stored?.stage || "当前整理任务",
     };
   }
-  return { title: "新建任务", detail: "选择目录并启动新的整理任务" };
+  return { title: "开始整理", detail: "选择目录并开始新的整理任务" };
 }
 
 function getWorkspaceRoute(pathname: string, searchParams: URLSearchParams) {
@@ -156,7 +157,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [isHydrated, pathname, searchParams]);
 
   const navItems = [
-    { href: workspaceRoute, icon: LayoutGrid, label: workspaceRoute === "/" ? "新建任务" : "当前任务" },
+    { href: workspaceRoute, icon: LayoutGrid, label: workspaceRoute === "/" ? "开始整理" : "当前任务" },
     { href: "/history", icon: History, label: "整理历史" },
     { href: "/icons", icon: Palette, label: "图标工坊" },
     { href: "/settings", icon: Settings, label: "设置" },
@@ -171,36 +172,31 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-surface text-on-surface font-sans">
-      <header className="z-50 grid h-[60px] shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center border-b border-on-surface/7 bg-surface-container-lowest/96 px-3 backdrop-blur sm:px-4">
-        <div className="flex shrink-0 items-center gap-3 pr-3 lg:pr-5">
-          <Link href="/" className="flex items-center gap-3 group">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-[10px] bg-transparent transition-all group-active:scale-95">
-              <img
-                src="/app-icon.png"
-                alt="FilePilot"
-                className="h-full w-full object-cover"
-              />
-            </div>
-            <div className="hidden min-w-0 md:block">
-              <p className="truncate text-[15px] font-black tracking-tighter text-on-surface">FilePilot</p>
-            </div>
-          </Link>
+      <div className="premium-bg" aria-hidden="true" />
+      <header 
+        data-tauri-drag-region
+        className="z-50 grid h-[46px] shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center border-b border-on-surface/5 bg-surface-container-lowest px-2 backdrop-blur sm:px-3"
+      >
+        <div className="flex shrink-0 items-center gap-3 pr-4 select-none pointer-events-none">
+           <img src="/app-icon.png" alt="FilePilot" className="h-[18px] w-[18px]" />
+           <span className="text-[12px] font-black tracking-[0.05em] text-on-surface/90 uppercase">File Pilot</span>
+           <div className="ml-2 h-4 w-[1px] bg-on-surface/15" />
         </div>
 
-        <div className="flex min-w-0 flex-1 items-center gap-3 border-none px-2 lg:px-4">
+        <div className="flex min-w-0 flex-1 items-center gap-3 border-none px-1 overflow-hidden pointer-events-none">
           <div className="flex min-w-0 items-center">
             <div className="flex flex-col">
-              <div className="flex items-center gap-2">
-                <p className="truncate text-[16px] font-black tracking-tight text-on-surface">{moduleCopy.title}</p>
-                <ChevronRight className="h-3 w-3 shrink-0 text-on-surface/20" />
-                <p className="truncate text-[12px] font-bold text-ui-muted/80">{moduleCopy.detail}</p>
+              <div className="flex items-center gap-2.5">
+                <p className="truncate text-[13px] font-medium tracking-tight text-on-surface/60">{moduleCopy.title}</p>
+                <ChevronRight className="h-3 w-3 shrink-0 opacity-20" />
+                <p className="truncate text-[10px] font-bold uppercase tracking-widest text-on-surface/30">{moduleCopy.detail}</p>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-1.5 sm:gap-2">
-          <nav className="flex items-center rounded-[10px] border border-on-surface/6 bg-surface-container p-0.5 sm:p-1">
+        <div className="flex items-center justify-end gap-1 sm:gap-2">
+          <nav className="flex items-center rounded-[6px] bg-on-surface/[0.04] p-1 shadow-[inset_0_1px_2px_rgba(0,0,0,0.02)]">
             {navItems.map((item) => {
               const isActive = isNavActive(item.href);
               return (
@@ -208,16 +204,20 @@ export function AppShell({ children }: { children: ReactNode }) {
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "inline-flex items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-[12px] font-bold transition-all sm:px-3.5",
-                    isActive ? "bg-surface text-on-surface shadow-[inset_0_0_0_1px_rgba(0,0,0,0.04)]" : "text-ui-muted hover:text-on-surface",
+                    "inline-flex items-center gap-2.5 rounded-[4px] px-3.5 py-1.5 text-[12px] font-black tracking-tight transition-all duration-200",
+                    isActive
+                      ? "bg-white text-on-surface shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04),inset_0_0_0_1px_rgba(0,0,0,0.04)]"
+                      : "text-on-surface/40 hover:bg-on-surface/5 hover:text-on-surface",
                   )}
                 >
-                  <item.icon className={cn("h-4 w-4", isActive ? "text-primary" : "text-current")} />
+                  <item.icon className={cn("h-3.5 w-3.5", isActive ? "text-primary" : "text-current")} />
                   <span className="hidden md:inline">{item.label}</span>
                 </Link>
               );
             })}
           </nav>
+          
+          <WindowControls />
         </div>
       </header>
 

@@ -127,7 +127,7 @@ export function IconWorkbenchFolderCard({
           <X className="h-4 w-4" />
         </button>
 
-        <div className="flex h-8 w-8 items-center justify-center rounded-full text-ui-muted transition-colors group-hover:bg-on-surface/4">
+        <div className="flex h-8 w-8 items-center justify-center rounded-[4px] text-ui-muted transition-colors group-hover:bg-on-surface/4">
           {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </div>
       </div>
@@ -171,9 +171,9 @@ export function IconWorkbenchFolderCard({
             ) : null}
 
             {isActiveProcessing ? (
-              <div className="flex items-center gap-2 rounded-xl border border-primary/12 bg-primary/6 px-3 py-2 text-[12px] font-medium text-primary">
+              <div className="flex items-center gap-2 rounded-[4px] border border-primary/12 bg-primary/6 px-3 py-2 text-[12px] font-black text-primary">
                 <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                <span>这个文件夹正在生成新预览，完成后会自动刷新到当前列表。</span>
+                <span>正在生成预览，完成后将刷新列表...</span>
               </div>
             ) : null}
 

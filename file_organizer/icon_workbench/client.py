@@ -55,6 +55,20 @@ def _extract_json_block(raw_text: str) -> str:
     return text.strip()
 
 
+def _meaningful_parent_name(folder_path: str, folder_name: str) -> str:
+    current = str(folder_name or "").strip()
+    try:
+        path = Path(folder_path).resolve()
+    except OSError:
+        path = Path(folder_path)
+    parent_name = path.parent.name.strip() if path.parent else ""
+    if not parent_name:
+        return ""
+    if parent_name.lower() == current.lower():
+        return ""
+    return parent_name
+
+
 def _request_json(
     url: str,
     *,
@@ -118,8 +132,21 @@ class IconWorkbenchTextClient:
         content = _extract_text_content(choices[0].get("message", {}).get("content", ""))
         return json.loads(_extract_json_block(content))
 
-    def analyze_folder(self, config: ModelConfig, folder_name: str, tree_lines: list[str]) -> IconAnalysisResult:
-        user_prompt = f"文件夹名称: {folder_name}\n\n目录树摘要:\n" + ("\n".join(tree_lines) if tree_lines else "(空文件夹)")
+    def analyze_folder(
+        self,
+        config: ModelConfig,
+        folder_path: str,
+        folder_name: str,
+        tree_lines: list[str],
+    ) -> IconAnalysisResult:
+        parent_name = _meaningful_parent_name(folder_path, folder_name)
+        parent_line = f"父级文件夹名称: {parent_name}\n" if parent_name else "父级文件夹名称: (无明显上级语义)\n"
+        user_prompt = (
+            f"{parent_line}"
+            f"当前文件夹名称: {folder_name}\n\n"
+            "目录树摘要:\n"
+            + ("\n".join(tree_lines) if tree_lines else "(空文件夹)")
+        )
         parsed = self.complete_json(config, TEXT_ANALYSIS_SYSTEM_PROMPT, user_prompt, temperature=0.4)
         visual_subject = str(parsed.get("visual_subject", "") or "").strip()
         return IconAnalysisResult(
