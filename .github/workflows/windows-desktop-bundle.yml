@@ -120,6 +120,30 @@ jobs:
 
           powershell -ExecutionPolicy Bypass -File scripts\smoke_desktop_bundle.ps1 -AppPath $app
 
+      - name: Dump desktop smoke diagnostics on failure
+        if: failure()
+        shell: pwsh
+        run: |
+          $runtimeRoot = Join-Path $env:APPDATA 'com.fileorganizer.desktop'
+          Write-Output "runtimeRoot=$runtimeRoot"
+          if (Test-Path -LiteralPath $runtimeRoot) {
+            Get-ChildItem $runtimeRoot -Recurse -Force | Select-Object FullName, Length | Format-Table -AutoSize | Out-String -Width 240 | Write-Output
+          }
+
+          $runtimeFile = Join-Path $runtimeRoot 'output\runtime\backend.json'
+          if (Test-Path -LiteralPath $runtimeFile) {
+            Write-Output '=== backend.json ==='
+            Get-Content -LiteralPath $runtimeFile -Raw -Encoding utf8 | Write-Output
+          }
+
+          $logFile = Join-Path $runtimeRoot 'logs\backend\runtime.log'
+          if (Test-Path -LiteralPath $logFile) {
+            Write-Output '=== runtime.log ==='
+            Get-Content -LiteralPath $logFile -Encoding utf8 | Select-Object -Last 120 | Write-Output
+          }
+
+          Get-Process -Name 'file_organizer_api' -ErrorAction SilentlyContinue | Format-Table Id, ProcessName, Path -AutoSize | Out-String -Width 240 | Write-Output
+
       - name: Upload Windows bundle artifact
         uses: actions/upload-artifact@v6
         with:

@@ -76,6 +76,16 @@ function Get-RuntimePath {
     Join-Path $runtimeRoot "output\runtime\backend.json"
 }
 
+function Get-BackendLogPath {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Identifier
+    )
+
+    $runtimeRoot = Join-Path $env:APPDATA $Identifier
+    Join-Path $runtimeRoot "logs\backend\runtime.log"
+}
+
 function Read-RuntimeConfig {
     param(
         [Parameter(Mandatory = $true)]
@@ -99,11 +109,41 @@ function Wait-ForRuntimeConfig {
         [string]$RuntimePath,
 
         [Parameter(Mandatory = $true)]
-        [int]$TimeoutSeconds
+        [int]$TimeoutSeconds,
+
+        [System.Diagnostics.Process]$Process,
+
+        [string]$PreviousInstanceId = "",
+
+        [string]$PreviousStartedAt = ""
     )
 
     Wait-Until -TimeoutSeconds $TimeoutSeconds -FailureMessage "Runtime file was not ready in time: $RuntimePath" -Condition {
-        Read-RuntimeConfig -RuntimePath $RuntimePath
+        if ($Process -and $Process.HasExited) {
+            throw "Desktop app exited before runtime was ready. ExitCode=$($Process.ExitCode)"
+        }
+
+        $config = Read-RuntimeConfig -RuntimePath $RuntimePath
+        if (-not $config) {
+            return $null
+        }
+
+        $isFresh = $false
+        if ($PreviousInstanceId -and "$($config.instance_id)" -ne $PreviousInstanceId) {
+            $isFresh = $true
+        }
+        if ($PreviousStartedAt -and "$($config.started_at)" -ne $PreviousStartedAt) {
+            $isFresh = $true
+        }
+        if (-not $PreviousInstanceId -and -not $PreviousStartedAt) {
+            $isFresh = $true
+        }
+
+        if ($isFresh) {
+            return $config
+        }
+
+        return $null
     }
 }
 
@@ -113,11 +153,16 @@ function Wait-ForHealth {
         [pscustomobject]$Config,
 
         [Parameter(Mandatory = $true)]
-        [int]$TimeoutSeconds
+        [int]$TimeoutSeconds,
+
+        [System.Diagnostics.Process]$Process
     )
 
     $healthUrl = "$($Config.base_url)/api/health"
     Wait-Until -TimeoutSeconds $TimeoutSeconds -FailureMessage "Backend health check did not pass: $healthUrl" -Condition {
+        if ($Process -and $Process.HasExited) {
+            throw "Desktop app exited before backend became healthy. ExitCode=$($Process.ExitCode)"
+        }
         try {
             $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 5
             if ($response.StatusCode -eq 200) {
@@ -201,9 +246,21 @@ function Start-AndValidateApp {
         [switch]$SkipDynamicPortCheck
     )
 
+    $previous = Read-RuntimeConfig -RuntimePath $RuntimePath
     $process = Start-Process -FilePath $ExecutablePath -PassThru
-    $config = Wait-ForRuntimeConfig -RuntimePath $RuntimePath -TimeoutSeconds $StartupTimeoutSeconds
-    Wait-ForHealth -Config $config -TimeoutSeconds $StartupTimeoutSeconds
+    $previousInstanceId = ""
+    $previousStartedAt = ""
+    if ($previous) {
+        $previousInstanceId = [string]($previous.instance_id)
+        $previousStartedAt = [string]($previous.started_at)
+    }
+    $config = Wait-ForRuntimeConfig `
+        -RuntimePath $RuntimePath `
+        -TimeoutSeconds $StartupTimeoutSeconds `
+        -Process $process `
+        -PreviousInstanceId $previousInstanceId `
+        -PreviousStartedAt $previousStartedAt
+    Wait-ForHealth -Config $config -TimeoutSeconds $StartupTimeoutSeconds -Process $process
 
     if (-not $SkipDynamicPortCheck -and [int]$config.port -eq 8765) {
         throw "Bundled desktop app should not use fixed port 8765."
@@ -217,10 +274,13 @@ function Start-AndValidateApp {
 
 $resolvedAppPath = (Resolve-Path -LiteralPath $AppPath).Path
 $runtimePath = Get-RuntimePath -Identifier $AppIdentifier
+$backendLogPath = Get-BackendLogPath -Identifier $AppIdentifier
 $primary = $null
 $secondary = $null
 
 try {
+    Get-Process -Name $BackendProcessName -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
     $primary = Start-AndValidateApp -ExecutablePath $resolvedAppPath -RuntimePath $runtimePath -StartupTimeoutSeconds $StartupTimeoutSeconds -SkipDynamicPortCheck:$SkipDynamicPortCheck
     Assert-SingleInstance -ExecutablePath $resolvedAppPath
 
@@ -233,6 +293,14 @@ try {
 
     Write-Output "Smoke test passed for $resolvedAppPath"
 } finally {
+    if ($runtimePath -and (Test-Path -LiteralPath $runtimePath)) {
+        Write-Output "Runtime file: $runtimePath"
+        Get-Content -LiteralPath $runtimePath -Raw -Encoding utf8 | Write-Output
+    }
+    if ($backendLogPath -and (Test-Path -LiteralPath $backendLogPath)) {
+        Write-Output "Backend log tail: $backendLogPath"
+        Get-Content -LiteralPath $backendLogPath -Encoding utf8 | Select-Object -Last 60 | Write-Output
+    }
     if ($secondary -and $secondary.Process -and -not $secondary.Process.HasExited) {
         Stop-Process -Id $secondary.Process.Id -Force -ErrorAction SilentlyContinue
     }
