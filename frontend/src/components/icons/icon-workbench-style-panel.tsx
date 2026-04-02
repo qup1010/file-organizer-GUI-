@@ -74,7 +74,7 @@ export function IconWorkbenchStylePanel({
                   "group relative flex flex-col rounded-[12px] border p-4 text-left transition-all duration-300 active:scale-[0.98]",
                   isSelected
                     ? "border-primary/30 bg-primary/5 shadow-xl ring-1 ring-primary/20"
-                    : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/20 hover:bg-white hover:shadow-lg",
+                    : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-lowest hover:shadow-lg",
                 )}
               >
                 {/* 封面预览 */}

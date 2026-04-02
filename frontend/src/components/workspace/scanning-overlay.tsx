@@ -122,7 +122,7 @@ export function ScanningOverlay({
       <motion.div
         initial={{ opacity: 0, scale: 0.98 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="flex h-full max-h-[860px] w-full max-w-[1400px] flex-col overflow-hidden rounded-[14px] border border-black/5 bg-white shadow-2xl"
+        className="flex h-full max-h-[860px] w-full max-w-[1400px] flex-col overflow-hidden rounded-[14px] border border-black/5 bg-surface-container-lowest shadow-2xl"
       >
         {/* 顶部状态栏 */}
         <div className="border-b border-black/[0.04] bg-surface-container-low/40 px-6 py-5">
@@ -185,7 +185,7 @@ export function ScanningOverlay({
                   <span className="text-[11px] font-black uppercase tracking-[0.2em] text-primary">正在分析当前文件</span>
                 </div>
                 <div className="flex items-start gap-4">
-                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[10px] bg-white shadow-md ring-1 ring-black/[0.05]">
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[10px] bg-surface-container-lowest shadow-md ring-1 ring-black/[0.05]">
                     <Search className="h-7 w-7 text-primary animate-pulse" />
                   </div>
                   <div className="min-w-0 flex-1">
@@ -209,7 +209,7 @@ export function ScanningOverlay({
                   <Activity className="h-4 w-4 text-primary" />
                   <span className="text-[12px] font-black uppercase tracking-widest text-on-surface">实时分析记录</span>
                 </div>
-                <span className="text-[11px] font-bold text-emerald-500 animate-pulse">● LIVE</span>
+                <span className="text-[11px] font-bold text-success-dim animate-pulse">● LIVE</span>
               </div>
 
               <div className="mt-4 flex-1 overflow-y-auto space-y-3 pr-2 scrollbar-thin">
@@ -273,7 +273,7 @@ export function ScanningOverlay({
                     <div className="flex flex-col items-center">
                       <div className={cn(
                         "flex h-8 w-8 items-center justify-center rounded-full border transition-colors",
-                        isDone ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600" :
+                        isDone ? "border-success/30 bg-success/10 text-success-dim" :
                           isActive ? "border-primary/20 bg-primary text-white shadow-lg shadow-primary/20" :
                             "border-black/5 bg-black/5 text-on-surface/30"
                       )}>

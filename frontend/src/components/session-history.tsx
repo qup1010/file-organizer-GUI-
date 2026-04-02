@@ -148,7 +148,7 @@ export function SessionHistory({ maxItems }: { maxItems?: number }) {
                     handleContinue(item);
                   }
                 }}
-                className="group cursor-pointer overflow-hidden rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-3 py-2.5 transition-colors hover:border-primary/18 hover:bg-white"
+                className="group cursor-pointer overflow-hidden rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-3 py-2.5 transition-colors hover:border-primary/18 hover:bg-surface-container-lowest"
               >
                 <div className="flex items-start gap-2.5">
                   <div className={cn(
@@ -156,7 +156,7 @@ export function SessionHistory({ maxItems }: { maxItems?: number }) {
                     isRolledBack 
                       ? "bg-surface-container text-on-surface-variant/70" 
                       : isCompleted
-                        ? "bg-emerald-500/10 text-emerald-600"
+                        ? "bg-success/10 text-success-dim"
                         : "bg-primary/10 text-primary"
                   )}>
                     {isRolledBack ? <Undo2 className="h-4 w-4" /> : isCompleted ? <CheckCircle2 className="h-4 w-4" /> : <Activity className="h-4 w-4" />}

@@ -4,6 +4,7 @@ import { Suspense } from "react";
 
 import "./globals.css";
 import { AppShell } from "../components/app-shell";
+import { ThemeProvider } from "@/lib/theme";
 
 export const metadata: Metadata = {
   title: "FilePilot",
@@ -19,7 +20,9 @@ export default function RootLayout({
     <html lang="zh-CN" suppressHydrationWarning>
       <body className="min-h-screen bg-surface font-sans antialiased text-on-surface overflow-hidden">
         <Suspense fallback={<main className="flex min-h-screen bg-surface" />}>
-          <AppShell>{children}</AppShell>
+          <ThemeProvider>
+            <AppShell>{children}</AppShell>
+          </ThemeProvider>
         </Suspense>
       </body>
     </html>

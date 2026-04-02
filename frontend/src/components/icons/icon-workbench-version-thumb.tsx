@@ -56,7 +56,7 @@ export function IconWorkbenchVersionThumb({
       )}
     >
       {/* 图片预览 */}
-      <div className="relative aspect-square overflow-hidden rounded-lg border border-on-surface/4 bg-white">
+      <div className="relative aspect-square overflow-hidden rounded-lg border border-on-surface/4 bg-surface-container-lowest">
         {isReady ? (
           <img
             src={imgSrc}

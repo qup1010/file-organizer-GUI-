@@ -82,7 +82,7 @@ export function ConfirmDialog({
                 variant="secondary" 
                 onClick={handleCancel} 
                 disabled={loading} 
-                className="flex-1 bg-white"
+                className="flex-1"
               >
                 {cancelLabel}
               </Button>

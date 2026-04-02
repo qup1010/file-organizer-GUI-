@@ -62,17 +62,22 @@ function IconWorkbenchGuideBar({
   const ActionIcon = primaryActionKind === "style" ? Palette : primaryActionKind === "generate" ? Sparkles : FolderPlus;
 
   return (
-    <div className="border-b border-on-surface/6 bg-surface-container-low/55 px-6 py-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="min-w-0 flex-1 text-[13px] font-semibold leading-6 text-on-surface">{statusText}</p>
+    <div className="border-b border-primary/10 bg-primary/4 px-6 py-3.5 backdrop-blur-xl">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <ActionIcon className="h-4 w-4" />
+          </div>
+          <p className="truncate text-[13.5px] font-bold tracking-tight text-on-surface leading-none pt-0.5">{statusText}</p>
+        </div>
         <Button
           variant="primary"
           size="md"
           onClick={onPrimaryAction}
           disabled={primaryCtaDisabled}
-          className="shrink-0 px-5"
+          className="shrink-0 px-6 h-9 rounded-full shadow-[0_8px_20px_-4px_rgba(var(--primary-rgb),0.25)]"
         >
-          <ActionIcon className="h-4.5 w-4.5" />
+          <ActionIcon className="h-4 w-4" />
           {primaryCtaLabel}
         </Button>
       </div>
@@ -557,10 +562,10 @@ export default function IconWorkbenchV2() {
   }, [notice]);
 
   const statusRail = (error || shouldShowNotice) ? (
-    <div className="space-y-3 border-b border-on-surface/6 bg-white/36 px-6 py-3 backdrop-blur-sm">
+    <div className="space-y-3 border-b border-on-surface/6 bg-surface-container-low/40 px-6 py-3 backdrop-blur-sm">
       {error ? <ErrorAlert message={error} onClose={() => setError(null)} /> : null}
       {shouldShowNotice ? (
-        <div className="flex items-center gap-3 rounded-2xl border border-primary/10 bg-primary/4 px-4 py-3 text-[13px] text-primary">
+        <div className="flex items-center gap-3 rounded-2xl border border-primary/15 bg-primary/5 px-4 py-3 text-[13px] text-primary">
           <p className="flex-1 font-bold">{notice}</p>
           {lastAppliedFolderPath && notice?.includes("图标已应用") && (
             <button 
@@ -581,29 +586,29 @@ export default function IconWorkbenchV2() {
   ) : null;
 
   const processingBanner = generatePresentation ? (
-    <div className="border-b border-primary/10 bg-primary/6 px-6 py-4">
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="border-b border-primary/15 bg-primary/8 px-6 py-4">
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 space-y-1">
-            <div className="flex items-center gap-2 text-primary">
-              <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-              <p className="text-[13px] font-black">{generatePresentation.title}</p>
+            <div className="flex items-center gap-2.5 text-primary">
+              <LoaderCircle className="h-4 w-4 animate-spin" />
+              <p className="text-[14px] font-black tracking-tight">{generatePresentation.title}</p>
             </div>
-            <p className="text-[12px] font-medium text-primary/80">{generatePresentation.detail}</p>
+            <p className="text-[12px] font-bold text-primary/70">{generatePresentation.detail} ...</p>
           </div>
-          <div className="rounded-full border border-primary/12 bg-white/70 px-3 py-1 text-[11px] font-bold text-primary shadow-sm">
+          <div className="rounded-full border border-primary/20 bg-surface-container-lowest/80 px-3.5 py-1 text-[11px] font-black tabular-nums text-primary shadow-sm">
             {generateProgress?.completedFolders ?? 0} / {generateProgress?.totalFolders ?? 0}
           </div>
         </div>
 
-        <div className="space-y-2">
-          <div className="h-2 overflow-hidden rounded-full bg-primary/10">
+        <div className="space-y-2.5">
+          <div className="h-1.5 overflow-hidden rounded-full bg-primary/15">
             <div
-              className="h-full rounded-full bg-primary transition-all duration-500"
+              className="h-full rounded-full bg-primary shadow-[0_0_8px_rgba(var(--primary-rgb),0.4)] transition-all duration-700"
               style={{ width: `${generatePresentation.percent}%` }}
             />
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2.5">
             {generateStageSteps.map((step, index) => {
               const currentStage = generateProgress?.stage;
               const stageOrder: GenerateFlowStage[] = ["analyzing", "applying_template", "generating"];
@@ -615,12 +620,12 @@ export default function IconWorkbenchV2() {
                 <div
                   key={step.key}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold transition-colors",
+                    "flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-black transition-all",
                     completed
-                      ? "border-primary/16 bg-primary/10 text-primary"
+                      ? "border-primary/20 bg-primary/15 text-primary shadow-sm"
                       : active
-                        ? "border-primary/20 bg-white text-primary shadow-sm"
-                        : "border-on-surface/8 bg-white/45 text-ui-muted",
+                        ? "border-primary/30 bg-surface-container-lowest text-primary shadow-md scale-105"
+                        : "border-on-surface/8 bg-surface-container-low/50 text-ui-muted opacity-60",
                   )}
                 >
                   {completed ? (
@@ -628,11 +633,11 @@ export default function IconWorkbenchV2() {
                   ) : active ? (
                     <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
                   ) : (
-                    <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full border border-current/20 text-[10px]">
+                    <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full border border-current/30 text-[9px] font-black">
                       {index + 1}
                     </span>
                   )}
-                  <span>{step.label}</span>
+                  <span className="tracking-tight">{step.label}</span>
                 </div>
               );
             })}
@@ -641,8 +646,8 @@ export default function IconWorkbenchV2() {
       </div>
     </div>
   ) : actionLabel ? (
-    <div className="flex items-center gap-3 bg-primary/10 px-6 py-2 text-[12px] font-bold text-primary">
-      <LoaderCircle className="h-3 w-3 animate-spin" />
+    <div className="flex items-center gap-3 bg-primary/12 px-6 py-2.5 text-[12px] font-black text-primary border-b border-primary/10">
+      <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
       <span>{actionLabel}</span>
     </div>
   ) : null;

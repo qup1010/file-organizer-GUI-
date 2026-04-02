@@ -76,7 +76,7 @@ export function PrecheckView({ summary, isBusy, readOnly = false, onRequestExecu
                             </div>
                             <div className="flex gap-1.5">
                                 {!hasErrors && !hasWarnings ? (
-                                    <span className="flex items-center gap-1.5 rounded-full bg-emerald-500/8 px-2.5 py-0.5 text-[10px] font-black tracking-tight text-emerald-600/80">
+                                    <span className="flex items-center gap-1.5 rounded-full bg-success/8 px-2.5 py-0.5 text-[10px] font-black tracking-tight text-success-dim/80">
                                         <CheckCircle2 className="h-3 w-3" /> 指标正常
                                     </span>
                                 ) : (
@@ -112,7 +112,7 @@ export function PrecheckView({ summary, isBusy, readOnly = false, onRequestExecu
                                     ? "border-error/10 bg-error/5 text-error"
                                     : summaryTone === "warning"
                                         ? "border-warning/20 bg-warning/5 text-warning"
-                                        : "border-emerald-500/10 bg-emerald-500/5 text-emerald-600",
+                                        : "border-success/10 bg-success/5 text-success-dim",
                             )}>
                                 {summaryTone === "danger" ? (
                                     <ShieldAlert className="h-3.5 w-3.5" />
@@ -173,7 +173,7 @@ export function PrecheckView({ summary, isBusy, readOnly = false, onRequestExecu
                         <div className="flex items-center gap-4">
                             <div className={cn(
                                 "flex h-10 w-10 shrink-0 items-center justify-center rounded-[6px] group-hover:scale-105 transition-transform",
-                                reviewCount > 0 ? "bg-warning/15 text-warning" : "bg-emerald-500/8 text-emerald-600"
+                                reviewCount > 0 ? "bg-warning/15 text-warning" : "bg-success/8 text-success-dim"
                             )}>
                                 {reviewCount > 0 ? <AlertCircle className="h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" />}
                             </div>
@@ -232,7 +232,7 @@ export function PrecheckView({ summary, isBusy, readOnly = false, onRequestExecu
                                     className={cn(
                                         "rounded-[4px] px-5 py-2.2 text-[13px] font-black tracking-tight transition-all",
                                         filter === btn.id
-                                            ? "bg-white text-primary shadow-sm shadow-on-surface/5"
+                                            ? "bg-surface-container-lowest text-primary shadow-sm shadow-on-surface/5"
                                             : "text-ui-muted hover:text-on-surface",
                                     )}
                                 >
@@ -308,7 +308,7 @@ export function PrecheckView({ summary, isBusy, readOnly = false, onRequestExecu
                             type="button"
                             onClick={onBack}
                             disabled={isBusy}
-                            className="inline-flex items-center justify-center rounded-[4px] border border-on-surface/10 bg-white px-8 py-3.5 text-[14px] font-black text-on-surface/70 transition-all hover:bg-on-surface/[0.02] hover:text-on-surface hover:shadow-md active:scale-95 disabled:opacity-40"
+                            className="inline-flex items-center justify-center rounded-[4px] border border-on-surface/10 bg-surface-container-lowest px-8 py-3.5 text-[14px] font-black text-on-surface/70 transition-all hover:bg-on-surface/[0.02] hover:text-on-surface hover:shadow-md active:scale-95 disabled:opacity-40"
                         >
                             返回修改方案
                         </button>

@@ -243,7 +243,7 @@ export default function HistoryPage() {
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="搜索目录、状态或记录 ID"
-                  className="w-full rounded-[4px] border border-on-surface/8 bg-white py-2.5 pl-[2.625rem] pr-4 text-[14px] text-on-surface outline-none transition-all placeholder:text-ui-muted focus:border-primary/40 focus:ring-4 focus:ring-primary/[0.02]"
+                  className="w-full rounded-[4px] border border-on-surface/8 bg-surface-container-lowest py-2.5 pl-[2.625rem] pr-4 text-[14px] text-on-surface outline-none transition-all placeholder:text-ui-muted focus:border-primary/40 focus:ring-4 focus:ring-primary/[0.02]"
                 />
               </div>
 
@@ -262,7 +262,7 @@ export default function HistoryPage() {
                       "rounded-[4px] border px-3 py-1.5 text-[12px] font-black uppercase tracking-tight transition-all",
                       filter === item.id
                         ? "border-primary bg-primary text-white"
-                        : "border-on-surface/8 bg-white text-ui-muted hover:border-primary/15 hover:text-on-surface",
+                        : "border-on-surface/8 bg-surface-container-lowest text-ui-muted hover:border-primary/15 hover:text-on-surface",
                     )}
                   >
                     {item.label}
@@ -284,7 +284,7 @@ export default function HistoryPage() {
 
             {loading ? (
               <div className="flex h-full min-h-[16rem] flex-col items-center justify-center gap-4">
-                <div className="flex h-14 w-14 items-center justify-center rounded-[4px] border border-on-surface/6 bg-white text-primary">
+                <div className="flex h-14 w-14 items-center justify-center rounded-[4px] border border-on-surface/6 bg-surface-container-lowest text-primary">
                   <Activity className="h-6 w-6 animate-spin" />
                 </div>
                 <p className="text-ui-body font-medium text-ui-muted">正在载入历史记录...</p>
@@ -314,7 +314,7 @@ export default function HistoryPage() {
                         "group relative overflow-hidden rounded-[4px] border transition-all duration-300 cursor-pointer",
                         active
                           ? "border-primary/25 bg-primary/[0.04] shadow-[inset_0_0_0_1px_rgba(var(--primary-rgb),0.05),0_12px_24px_-8px_rgba(0,0,0,0.06)]"
-                          : "border-on-surface/5 bg-surface-container-lowest hover:border-primary/15 hover:bg-white hover:shadow-lg hover:shadow-black/[0.02]",
+                          : "border-on-surface/5 bg-surface-container-lowest hover:border-primary/15 hover:bg-surface-container-lowest hover:shadow-lg hover:shadow-black/[0.02]",
                       )}
                     >
                       {/* Floating Accent Indicator */}
@@ -338,15 +338,15 @@ export default function HistoryPage() {
                                 "inline-flex items-center gap-1.5 rounded-[4px] border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider",
                                 sessionLike
                                   ? active
-                                    ? "border-primary/20 bg-white text-primary"
+                                    ? "border-primary/20 bg-surface-container-lowest text-primary"
                                     : "border-primary/15 bg-primary/10 text-primary"
                                   : entry.status === "rolled_back"
                                     ? "border-on-surface/8 bg-surface-container-high text-on-surface/70"
-                                    : "border-emerald-500/15 bg-emerald-500/10 text-emerald-700",
+                                    : "border-success/15 bg-success/10 text-success-dim",
                               )}>
                                 <span className={cn(
                                   "h-1.5 w-1.5 rounded-full",
-                                  sessionLike ? "bg-primary" : entry.status === "rolled_back" ? "bg-on-surface/45" : "bg-emerald-600",
+                                  sessionLike ? "bg-primary" : entry.status === "rolled_back" ? "bg-on-surface/45" : "bg-success",
                                 )} />
                                 {sessionLike ? "进行中会话" : entry.status === "rolled_back" ? "已回退" : "执行结果"}
                               </span>
@@ -368,7 +368,7 @@ export default function HistoryPage() {
                             }}
                             className={cn(
                               "rounded-[4px] border p-2 text-ui-muted transition-all hover:border-error/20 hover:text-error hover:bg-error/5 active:scale-95",
-                              active ? "border-on-surface/8 bg-white/85" : "border-on-surface/8 bg-white",
+                              active ? "border-on-surface/8 bg-surface-container-lowest/85" : "border-on-surface/8 bg-surface-container-lowest",
                             )}
                             title="删除记录"
                           >
@@ -383,7 +383,7 @@ export default function HistoryPage() {
                           </div>
                           <div className={cn(
                             "rounded-[4px] px-2.5 py-1.5 font-bold tabular-nums text-[11px]",
-                            active ? "bg-white/80 text-primary" : "bg-on-surface/4 text-ui-muted",
+                            active ? "bg-surface-container-lowest/80 text-primary" : "bg-on-surface/4 text-ui-muted",
                           )}>
                             {entry.item_count || 0} 个项目
                           </div>
@@ -397,7 +397,7 @@ export default function HistoryPage() {
               <div className="flex h-full min-h-[16rem] flex-col items-center justify-center px-10 text-center">
                 <div className="relative">
                   <div className="absolute inset-0 animate-ping rounded-full bg-primary/5 opacity-40" />
-                  <div className="relative flex h-16 w-16 items-center justify-center rounded-[6px] bg-white text-primary/45 border border-on-surface/8 shadow-sm">
+                  <div className="relative flex h-16 w-16 items-center justify-center rounded-[6px] bg-surface-container-lowest text-primary/45 border border-on-surface/8 shadow-sm">
                     <HistoryIcon className="h-8 w-8" />
                   </div>
                 </div>
@@ -454,11 +454,11 @@ export default function HistoryPage() {
                           ? "border-primary/15 bg-primary/8 text-primary"
                           : journal?.status === "rolled_back"
                             ? "border-on-surface/10 bg-surface-container-high text-on-surface/60"
-                            : "border-emerald-500/15 bg-emerald-500/10 text-emerald-700",
+                            : "border-success/15 bg-success/10 text-success-dim",
                       )}>
                         <span className={cn(
                           "h-2 w-2 rounded-full shadow-sm",
-                          isSelectedSession ? "bg-primary" : journal?.status === "rolled_back" ? "bg-on-surface/40" : "bg-emerald-500",
+                          isSelectedSession ? "bg-primary" : journal?.status === "rolled_back" ? "bg-on-surface/40" : "bg-success",
                         )} />
                         {isSelectedSession ? getFriendlyStage(sessionDetail?.stage) : journal?.status === "rolled_back" ? "回退已完成" : "执行结果"}
                       </div>
@@ -476,7 +476,7 @@ export default function HistoryPage() {
                 <div className="flex-1 overflow-y-auto bg-surface-container-low px-4 py-4 scrollbar-thin lg:px-5 lg:py-5">
                   {journalLoading ? (
                     <div className="flex min-h-[20rem] flex-col items-center justify-center gap-4">
-                      <div className="flex h-14 w-14 items-center justify-center rounded-[8px] border border-on-surface/6 bg-white text-primary">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-[8px] border border-on-surface/6 bg-surface-container-lowest text-primary">
                         <Activity className="h-6 w-6 animate-spin" />
                       </div>
                       <p className="text-ui-body text-ui-muted">正在载入详细内容...</p>
@@ -484,7 +484,7 @@ export default function HistoryPage() {
                   ) : isSelectedSession ? (
                     <div className="space-y-3">
                       <div className="grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(260px,0.85fr)]">
-                        <div className="rounded-[8px] border border-on-surface/6 bg-white p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]">
+                        <div className="rounded-[8px] border border-on-surface/6 bg-surface-container-lowest p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]">
                           <div className="flex items-start justify-between gap-4">
                             <div>
                               <p className="text-ui-meta text-ui-muted">当前状态</p>
@@ -502,13 +502,13 @@ export default function HistoryPage() {
                         </div>
 
                         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-                          <div className="rounded-[8px] border border-on-surface/6 bg-white p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]">
+                          <div className="rounded-[8px] border border-on-surface/6 bg-surface-container-lowest p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]">
                             <p className="text-ui-meta text-ui-muted">最近更新时间</p>
                             <p className="mt-2.5 text-[1.25rem] font-bold tracking-tight text-on-surface">
                               {formatDisplayDate(sessionDetail?.updated_at || selectedEntry.created_at)}
                             </p>
                           </div>
-                          <div className="rounded-[8px] border border-on-surface/6 bg-white p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]">
+                          <div className="rounded-[8px] border border-on-surface/6 bg-surface-container-lowest p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]">
                             <p className="text-ui-meta text-ui-muted">计划条目</p>
                             <p className="mt-2.5 text-[1.25rem] font-bold tracking-tight text-on-surface">
                               {sessionDetail?.plan_snapshot?.stats?.move_count || 0}
@@ -517,7 +517,7 @@ export default function HistoryPage() {
                         </div>
                       </div>
 
-                      <div className="rounded-[12px] border border-on-surface/6 bg-white p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]">
+                      <div className="rounded-[12px] border border-on-surface/6 bg-surface-container-lowest p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]">
                         <div className="space-y-4">
                           <div>
                             <p className="text-ui-meta text-ui-muted">状态说明</p>
@@ -551,10 +551,10 @@ export default function HistoryPage() {
                         <motion.div
                           initial={{ opacity: 0, scale: 0.98 }}
                           animate={{ opacity: 1, scale: 1 }}
-                          className="rounded-[12px] border border-emerald-500/12 bg-white p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]"
+                          className="rounded-[12px] border border-success/12 bg-surface-container-lowest p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]"
                         >
                           <div className="flex items-start gap-4">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-[9px] bg-emerald-500/12 text-emerald-700">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-[9px] bg-success/12 text-success-dim">
                               <Undo2 className="h-5 w-5" />
                             </div>
                             <div>
@@ -568,19 +568,19 @@ export default function HistoryPage() {
                       ) : null}
 
                       <div className="grid gap-3 sm:grid-cols-3">
-                        <div className="rounded-[8px] border border-on-surface/6 bg-white p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]">
+                        <div className="rounded-[8px] border border-on-surface/6 bg-surface-container-lowest p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]">
                           <p className="text-ui-meta text-ui-muted">处理条目</p>
                           <p className="mt-2.5 text-[1.35rem] font-bold tracking-tight text-on-surface tabular-nums">
                             {journal?.item_count || 0}
                           </p>
                         </div>
-                        <div className="rounded-[8px] border border-on-surface/6 bg-white p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]">
+                        <div className="rounded-[8px] border border-on-surface/6 bg-surface-container-lowest p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]">
                           <p className="text-ui-meta text-ui-muted">成功项目</p>
                           <p className="mt-2.5 text-[1.35rem] font-bold tracking-tight text-on-surface tabular-nums">
                             {journal?.success_count || 0}
                           </p>
                         </div>
-                        <div className="rounded-[8px] border border-on-surface/6 bg-white p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]">
+                        <div className="rounded-[8px] border border-on-surface/6 bg-surface-container-lowest p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]">
                           <p className="text-ui-meta text-ui-muted">失败项目</p>
                           <p className="mt-2.5 text-[1.35rem] font-bold tracking-tight text-on-surface tabular-nums">
                             {journal?.failure_count || 0}
@@ -588,7 +588,7 @@ export default function HistoryPage() {
                         </div>
                       </div>
 
-                      <div className="rounded-[12px] border border-on-surface/6 bg-white p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]">
+                      <div className="rounded-[12px] border border-on-surface/6 bg-surface-container-lowest p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]">
                         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
                           <div>
                             <p className="text-ui-meta text-ui-muted">路径变化记录</p>
@@ -622,7 +622,7 @@ export default function HistoryPage() {
                                 <th className="px-4 py-3.5">路径变化</th>
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-on-surface/6 bg-white">
+                            <tbody className="divide-y divide-on-surface/6 bg-surface-container-lowest">
                               {moveRows.length ? (
                                 moveRows.map((item, index) => (
                                   <tr key={index} className="transition-colors hover:bg-surface-container-low/28">
@@ -661,7 +661,7 @@ export default function HistoryPage() {
               </motion.div>
             ) : (
               <div className="flex h-full min-h-[24rem] flex-col items-center justify-center px-8 text-center">
-                <div className="flex h-16 w-16 items-center justify-center rounded-[10px] bg-white text-primary/45 border border-on-surface/6">
+                <div className="flex h-16 w-16 items-center justify-center rounded-[10px] bg-surface-container-lowest text-primary/45 border border-on-surface/6">
                   <HistoryIcon className="h-8 w-8" />
                 </div>
                 <h3 className="mt-6 text-[1.35rem] font-bold font-headline tracking-tight text-on-surface">

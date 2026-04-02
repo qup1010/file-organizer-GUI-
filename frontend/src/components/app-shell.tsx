@@ -3,8 +3,9 @@
 import React, { ReactNode } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { LayoutGrid, History, ChevronRight, Settings, Palette, X, Minus, Square } from "lucide-react";
+import { LayoutGrid, History, ChevronRight, Settings, Palette, Sun, Moon, Monitor } from "lucide-react";
 import { WindowControls } from "./ui/window-controls";
+import { useTheme } from "@/lib/theme";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
@@ -111,6 +112,29 @@ function getWorkspaceRoute(pathname: string, searchParams: URLSearchParams) {
   return window.localStorage.getItem(ACTIVE_WORKSPACE_ROUTE_KEY) || "/";
 }
 
+function ThemeToggle() {
+  const { mode, setMode } = useTheme();
+
+  const cycle = () => {
+    const next = mode === "light" ? "dark" : mode === "dark" ? "system" : "light";
+    setMode(next);
+  };
+
+  const Icon = mode === "light" ? Sun : mode === "dark" ? Moon : Monitor;
+  const label = mode === "light" ? "浅色" : mode === "dark" ? "深色" : "跟随系统";
+
+  return (
+    <button
+      type="button"
+      onClick={cycle}
+      title={`当前：${label}，点击切换`}
+      className="flex h-7 w-7 items-center justify-center rounded-[4px] text-on-surface-variant/50 transition-colors hover:bg-on-surface/5 hover:text-on-surface active:scale-90"
+    >
+      <Icon className="h-3.5 w-3.5" />
+    </button>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -206,7 +230,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   className={cn(
                     "inline-flex items-center gap-2.5 rounded-[4px] px-3.5 py-1.5 text-[12px] font-black tracking-tight transition-all duration-200",
                     isActive
-                      ? "bg-white text-on-surface shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04),inset_0_0_0_1px_rgba(0,0,0,0.04)]"
+                      ? "bg-surface-container-lowest text-on-surface shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04),inset_0_0_0_1px_rgba(0,0,0,0.04)]"
                       : "text-on-surface/40 hover:bg-on-surface/5 hover:text-on-surface",
                   )}
                 >
@@ -216,7 +240,8 @@ export function AppShell({ children }: { children: ReactNode }) {
               );
             })}
           </nav>
-          
+
+          <ThemeToggle />
           <WindowControls />
         </div>
       </header>

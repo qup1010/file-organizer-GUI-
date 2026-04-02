@@ -198,7 +198,7 @@ function statusBadge(status: DirectoryTreeLeafStatus | undefined) {
   if (status === "success") {
     return {
       label: "已完成",
-      className: "border-emerald-500/20 bg-emerald-500/10 text-emerald-600 font-bold",
+      className: "border-success/20 bg-success/10 text-success-dim font-bold",
     };
   }
   // No badge for pending - it's the default state
@@ -237,7 +237,9 @@ function DirectoryTreePanel({ column, filter = "all" }: { column: DirectoryTreeC
           ) : (
             <File className="h-4 w-4 shrink-0 text-on-surface-variant/40 group-hover:text-primary/60 transition-colors" />
           )}
-          <span className={cn(
+          <span 
+            title={node.name}
+            className={cn(
             "min-w-0 flex-1 truncate text-[13.5px] transition-colors",
             isReviewFile ? "text-warning font-medium" : "text-on-surface/80 group-hover:text-on-surface"
           )}>
@@ -272,7 +274,7 @@ function DirectoryTreePanel({ column, filter = "all" }: { column: DirectoryTreeC
           ) : (
             <Folder className="h-4 w-4 shrink-0 text-primary" />
           )}
-          <span className="min-w-0 flex-1 truncate font-medium text-on-surface">{node.name}</span>
+          <span title={node.name} className="min-w-0 flex-1 truncate font-medium text-on-surface">{node.name}</span>
           <span className="shrink-0 text-[12px] font-medium text-on-surface-variant/60">
             {node.descendantFileCount} 项
           </span>

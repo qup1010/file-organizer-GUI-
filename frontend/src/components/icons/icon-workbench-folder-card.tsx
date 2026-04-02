@@ -92,12 +92,12 @@ export function IconWorkbenchFolderCard({
       className={cn(
         "group flex flex-col overflow-hidden rounded-[10px] border transition-all duration-200",
         isExpanded
-          ? "border-primary/20 bg-white shadow-[0_12px_32px_rgba(0,0,0,0.08)]"
-          : "border-on-surface/8 bg-surface-container-low/40 hover:border-primary/14 hover:bg-white",
+          ? "border-primary/20 bg-surface-container-lowest shadow-[0_12px_32px_rgba(0,0,0,0.08)]"
+          : "border-on-surface/8 bg-surface-container-low/40 hover:border-primary/14 hover:bg-surface-container-lowest",
       )}
     >
       <div className="flex cursor-pointer items-center gap-3 px-4 py-3" onClick={onToggleExpand}>
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-on-surface/6 bg-white">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-on-surface/6 bg-surface-container-lowest">
           {currentPreview ? (
             <img src={buildImageSrc(currentPreview, baseUrl, apiToken)} alt="preview" className="h-full w-full object-cover" />
           ) : (
@@ -198,10 +198,13 @@ export function IconWorkbenchFolderCard({
                 ))}
               </div>
             ) : (
-              <div className="flex h-[100px] flex-col items-center justify-center rounded-xl border border-dashed border-on-surface/10 bg-white/50">
-                <p className="px-4 text-center text-[13px] leading-6 text-ui-muted">
+              <div className="flex h-[110px] flex-col items-center justify-center rounded-xl border border-dashed border-on-surface/10 bg-on-surface/[0.02]">
+                <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-primary/8 text-primary/40">
+                  <RefreshCw className="h-4 w-4" />
+                </div>
+                <p className="px-5 text-center text-[12.5px] font-medium leading-relaxed text-ui-muted opacity-80">
                   {!hasSelectedStyle
-                    ? "先选择风格后，才能为这个目标文件夹生成第一版图标。"
+                    ? "先选择风格模板后，才能为这个目标文件夹生成第一版图标。"
                     : "可以直接为这个目标文件夹生成第一版图标。"}
                 </p>
               </div>
@@ -210,11 +213,11 @@ export function IconWorkbenchFolderCard({
 
           {folder.analysis ? (
             <div className="mt-4 grid grid-cols-2 gap-3">
-              <div className="rounded-xl border border-on-surface/6 bg-white p-3 shadow-sm">
+              <div className="rounded-xl border border-on-surface/6 bg-surface-container-lowest p-3 shadow-sm">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-ui-muted">识别主题</span>
                 <p className="mt-1 font-semibold text-on-surface">{folder.analysis.visual_subject}</p>
               </div>
-              <div className="rounded-xl border border-on-surface/6 bg-white p-3 shadow-sm">
+              <div className="rounded-xl border border-on-surface/6 bg-surface-container-lowest p-3 shadow-sm">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-ui-muted">类别</span>
                 <p className="mt-1 font-semibold text-on-surface">{folder.analysis.category}</p>
               </div>

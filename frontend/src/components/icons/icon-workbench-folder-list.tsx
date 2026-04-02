@@ -66,14 +66,14 @@ export function IconWorkbenchFolderList({
 
       <div className="flex-1 overflow-y-auto px-6 py-4 scrollbar-thin">
         {!hasSelectedStyle && folders.length > 0 && (
-          <div className="ui-panel mb-6 flex animate-in fade-in slide-in-from-top-2 duration-500 flex-col items-center gap-4 p-8 text-center bg-white/40 border-dashed">
-            <div className="flex h-14 w-14 items-center justify-center rounded-[16px] bg-primary/10 text-primary shadow-sm">
-              <Palette className="h-7 w-7" />
+          <div className="mb-6 flex animate-in fade-in slide-in-from-top-2 duration-500 flex-col items-center gap-4 rounded-xl border border-dashed border-primary/20 bg-primary/2 p-10 text-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-[20px] bg-primary/10 text-primary shadow-sm ring-1 ring-primary/20">
+              <Palette className="h-8 w-8" />
             </div>
-            <div className="max-w-[320px] space-y-2">
-              <p className="text-[17px] font-black tracking-tight text-on-surface">先选择风格模板</p>
-              <p className="text-[13px] leading-relaxed text-ui-muted">
-                你已经选择了目标文件夹。先点击顶部的<b>“选择风格模板”</b>，再开始生成预览。
+            <div className="max-w-[360px] space-y-2">
+              <p className="text-[18px] font-black tracking-tight text-on-surface">请先选择风格模板</p>
+              <p className="text-[14px] leading-relaxed text-ui-muted opacity-80">
+                你已经选择了目标文件夹。请先点击顶部的<b>“选择风格模板”</b>，系统将根据选定风格为你生成第一版图标。
               </p>
             </div>
           </div>

@@ -255,7 +255,7 @@ export function IconWorkbenchPreviewModal({
                onClick={() => setShowMockup(false)}
                className={cn(
                  "flex h-9 items-center gap-2 rounded-full px-4 text-[12px] font-black transition-all",
-                 !showMockup ? "bg-white text-black" : "text-white/60 hover:text-white"
+                 !showMockup ? "bg-surface-container-lowest text-black" : "text-white/60 hover:text-white"
                )}
              >
                <Maximize2 className="h-3.5 w-3.5" />
@@ -265,7 +265,7 @@ export function IconWorkbenchPreviewModal({
                onClick={() => setShowMockup(true)}
                className={cn(
                  "flex h-9 items-center gap-2 rounded-full px-4 text-[12px] font-black transition-all",
-                 showMockup ? "bg-white text-black" : "text-white/60 hover:text-white"
+                 showMockup ? "bg-surface-container-lowest text-black" : "text-white/60 hover:text-white"
                )}
              >
                <Monitor className="h-3.5 w-3.5" />
@@ -306,7 +306,7 @@ export function IconWorkbenchPreviewModal({
                          <p className="text-[10px] font-bold text-white/30 uppercase">状态</p>
                          <p className={cn(
                            "mt-1 text-[13px] font-black",
-                           isApplied ? "text-emerald-500" : "text-emerald-500/60"
+                           isApplied ? "text-success-dim" : "text-success-dim/60"
                          )}>
                             {isApplied ? "已应用" : "已就绪"}
                          </p>
@@ -334,7 +334,7 @@ export function IconWorkbenchPreviewModal({
                   className={cn(
                     "h-14 w-full rounded-[12px] text-[15px] font-black text-white shadow-lg transition-all",
                     isApplied 
-                      ? "bg-emerald-600 shadow-emerald-500/20 hover:bg-emerald-500" 
+                      ? "bg-success shadow-success/20 hover:bg-success" 
                       : "bg-primary shadow-primary/20 hover:bg-primary/90"
                   )}
                 >

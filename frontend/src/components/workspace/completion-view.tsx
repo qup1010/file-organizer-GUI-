@@ -110,7 +110,7 @@ export function CompletionView({
               <div
                 className={cn(
                   "inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-widest",
-                  isPartial ? "bg-error-container/40 text-error border border-error/20" : "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20",
+                  isPartial ? "bg-error-container/40 text-error border border-error/20" : "bg-success/10 text-success-dim border border-success/20",
                 )}
               >
                 {isPartial ? <AlertTriangle className="h-3.5 w-3.5" /> : <ShieldCheck className="h-3.5 w-3.5" />}
@@ -134,10 +134,10 @@ export function CompletionView({
         <div className="grid gap-2.5 p-4 sm:grid-cols-2 xl:grid-cols-4 lg:px-5 lg:pb-5">
           <div className="rounded-[12px] border border-on-surface/8 bg-surface-container-lowest px-5 py-5 shadow-sm">
             <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-ui-muted opacity-60">
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+              <CheckCircle2 className="h-3.5 w-3.5 text-success-dim" />
               成功移动
             </div>
-            <p className="mt-2 text-[2.2rem] font-bold font-headline tracking-tighter text-emerald-600 leading-none">{journal.success_count || 0}</p>
+            <p className="mt-2 text-[2.2rem] font-bold font-headline tracking-tighter text-success-dim leading-none">{journal.success_count || 0}</p>
           </div>
           <div className={cn(
             "rounded-[12px] border px-5 py-5 transition-colors shadow-sm",
@@ -186,7 +186,7 @@ export function CompletionView({
                 className={cn(
                   "rounded-[9px] px-5 py-2.2 text-[13px] font-bold transition-all",
                   filter === btn.id
-                    ? "bg-white text-primary shadow-md shadow-on-surface/5"
+                    ? "bg-surface-container-lowest text-primary shadow-md shadow-on-surface/5"
                     : "text-on-surface-variant/60 hover:text-on-surface",
                 )}
               >

@@ -267,10 +267,10 @@ function FolderNode({
   }
 
   return (
-    <div className={cn("flex flex-col", level > 0 && "ml-3 border-l border-on-surface/6 pl-1.5")}>
+    <div className={cn("flex flex-col min-w-0", level > 0 && "ml-3 border-l border-on-surface/6 pl-1.5")}>
       <div 
         className={cn(
-          "group flex cursor-pointer items-center gap-2 rounded-[8px] px-2 py-1.5 transition-all",
+          "group flex cursor-pointer items-center gap-2 rounded-[8px] px-2 py-1.5 transition-all min-w-0",
           isExpanded ? "bg-surface-container-low/30" : "hover:bg-on-surface/2"
         )}
         onClick={() => onToggle(node.path)}
@@ -285,15 +285,17 @@ function FolderNode({
           />
           <Folder className={cn("h-3.5 w-3.5 text-on-surface/25", isExpanded && "text-primary/45")} />
         </div>
-        <span className={cn(
-          "flex-1 truncate text-[12px] font-semibold tracking-tight text-on-surface/75",
+        <span 
+          title={node.name}
+          className={cn(
+          "flex-1 min-w-0 truncate text-[12px] font-semibold tracking-tight text-on-surface/75",
           (node.hasUnresolved || node.hasReview) && "text-on-surface",
-          node.isNew && "text-emerald-600/90"
+          node.isNew && "text-success-dim/90"
         )}>
           {node.name}
         </span>
         {node.isNew && (
-          <span className="flex items-center gap-1 shrink-0 px-1 py-0.5 rounded bg-emerald-500/10 text-emerald-600/80 text-[10px] font-bold tracking-wider leading-none">
+          <span className="flex items-center gap-1 shrink-0 px-1 py-0.5 rounded bg-success/10 text-success-dim/80 text-[10px] font-bold tracking-wider leading-none">
             NEW
           </span>
         )}
@@ -387,6 +389,7 @@ function FileItem({
   const isUnresolved = item.status === "unresolved";
   const isReview = item.status === "review";
   const hoverDetails = [
+    item.display_name,
     item.suggested_purpose ? `用途：${item.suggested_purpose}` : "",
     item.content_summary ? `内容：${item.content_summary}` : "",
   ].filter(Boolean);
@@ -395,17 +398,17 @@ function FileItem({
   return (
     <div 
       className={cn(
-        "group/item relative my-0.5 flex flex-col rounded-[8px] py-1 pr-1 transition-all",
+        "group/item relative my-0.5 flex flex-col rounded-[8px] py-1 pr-1 transition-all min-w-0",
         isUnresolved ? "bg-warning/5 hover:bg-warning/10" : isReview ? "bg-primary/5 hover:bg-primary/10" : "hover:bg-on-surface/2"
       )}
       style={{ paddingLeft: `${level * 12 + 20}px` }}
       title={tooltipText || undefined}
     >
-      <div className="flex items-center gap-2 text-[13px] text-on-surface-variant/75 transition-colors hover:text-on-surface">
+      <div className="flex items-center gap-2 text-[13px] text-on-surface-variant/75 transition-colors hover:text-on-surface min-w-0">
         <Icon className="h-3.5 w-3.5 shrink-0" />
         <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-          <div className="flex items-center gap-2">
-            <span className="truncate tracking-tight">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="flex-1 truncate tracking-tight min-w-0">
               {item.display_name}
             </span>
             {isUnresolved && (
@@ -540,7 +543,7 @@ export function PreviewPanel({
       <div className="flex-1 overflow-y-auto p-4 lg:p-6 scrollbar-thin">
         <div className="mx-auto max-w-[1360px] space-y-4">
           {/* 计划整合容器 */}
-          <div className="flex flex-col rounded-[16px] border border-on-surface/8 bg-surface-container-lowest shadow-[0_24px_56px_-12px_rgba(0,0,0,0.06)] overflow-hidden">
+          <div className="flex flex-col rounded-[16px] border border-on-surface/8 bg-surface-container-lowest shadow-[0_24px_56px_-12px_rgba(0,0,0,0.06)] overflow-hidden min-w-0">
             {/* Header: Title + Stats + Summary */}
             <div className="border-b border-on-surface/6 bg-surface-container-low/15 px-5 py-4">
               <div className="flex items-center justify-between gap-4 mb-3.5">
@@ -592,7 +595,7 @@ export function PreviewPanel({
             </div>
 
             {/* Tree Section */}
-            <div className="flex flex-col">
+            <div className="flex flex-col min-w-0">
               <div className="flex items-center justify-between px-5 py-3 border-b border-on-surface/[0.04]">
                 <h3 className="flex items-center gap-2 text-[12px] font-bold text-on-surface/50">
                   <Layers className="h-3.5 w-3.5" /> 结构预览
@@ -604,7 +607,7 @@ export function PreviewPanel({
                     className={cn(
                       "rounded-[7px] px-3 py-1 text-[11px] font-bold transition-all",
                       viewMode === "before"
-                        ? "bg-white text-on-surface shadow-sm ring-1 ring-on-surface/5"
+                        ? "bg-surface-container-lowest text-on-surface shadow-sm ring-1 ring-on-surface/5"
                         : "text-on-surface-variant/40 hover:text-on-surface"
                     )}
                   >
@@ -624,7 +627,7 @@ export function PreviewPanel({
                 </div>
               </div>
 
-              <div className="min-h-[280px] max-h-[55vh] overflow-y-auto p-2 scrollbar-thin">
+              <div className="min-h-[280px] max-h-[55vh] overflow-y-auto overflow-x-hidden p-2 scrollbar-thin">
                 {(!hasTreeContent && stage === "planning") ? (
                   <div className="flex h-64 flex-col items-center justify-center gap-4 text-center">
                     <div className="relative">
@@ -670,7 +673,7 @@ export function PreviewPanel({
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {plan.change_highlights.slice(0, 4).map((highlight, idx) => (
                 <div key={idx} className="flex items-center gap-3 rounded-[12px] border border-on-surface/5 bg-surface-container-low/30 px-3.5 py-2.5">
-                  <Check className="h-3.5 w-3.5 shrink-0 text-emerald-500/50" />
+                  <Check className="h-3.5 w-3.5 shrink-0 text-success-dim/50" />
                   <span className="text-[12px] font-bold text-on-surface/70 leading-tight">{highlight}</span>
                 </div>
               ))}

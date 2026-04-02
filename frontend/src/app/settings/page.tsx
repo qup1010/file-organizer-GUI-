@@ -669,24 +669,24 @@ export default function SettingsPage() {
         className={cn(
           "flex items-start gap-4 rounded-[12px] border px-5 py-4 transition-all",
           isOk
-            ? "border-emerald-500/20 bg-emerald-500/[0.03] shadow-[0_4px_24px_rgba(16,185,129,0.08)]"
+            ? "border-success/20 bg-success[0.03] shadow-[0_4px_24px_rgba(16,185,129,0.08)]"
             : "border-error/20 bg-error/[0.03] shadow-[0_4px_24px_rgba(196,49,75,0.08)]",
         )}
       >
         <div className={cn(
            "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border",
-           isOk ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-600" : "border-error/20 bg-error/10 text-error"
+           isOk ? "border-success/20 bg-success/10 text-success-dim" : "border-error/20 bg-error/10 text-error"
         )}>
           {isOk ? <CheckCircle2 className="h-5 w-5" /> : <AlertCircle className="h-5 w-5" />}
         </div>
         <div className="min-w-0 flex-1 space-y-1.5">
           <div className="flex items-center justify-between gap-4">
-             <h4 className={cn("text-[14px] font-black tracking-tight", isOk ? "text-emerald-800" : "text-error-dim")}>
+             <h4 className={cn("text-[14px] font-black tracking-tight", isOk ? "text-success-dim" : "text-error-dim")}>
                 {isOk ? "服务已成功对齐" : "连接遭到拦截"}
              </h4>
              {isOk && (
-                <div className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-emerald-600">
-                   <div className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                <div className="flex items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-success-dim">
+                   <div className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
                    Stable
                 </div>
              )}
@@ -716,7 +716,7 @@ export default function SettingsPage() {
                 {state === "stored" ? "已保存" : "未保存"}
               </span>
               {secret.action === "replace" && secret.value.trim() ? (
-                <span className="rounded-[4px] border border-emerald-500/12 bg-emerald-500/5 px-2.5 py-1 text-[11px] font-bold text-emerald-700">待替换</span>
+                <span className="rounded-[4px] border border-success/12 bg-success/5 px-2.5 py-1 text-[11px] font-bold text-success-dim">待替换</span>
               ) : null}
               {secret.action === "clear" ? (
                 <span className="rounded-[4px] border border-error/12 bg-error/5 px-2.5 py-1 text-[11px] font-bold text-error">待清空</span>
@@ -831,7 +831,7 @@ export default function SettingsPage() {
                 className={cn(
                   "flex w-full items-center gap-3.5 rounded-[4px] border px-4 py-3 text-left transition-all duration-200",
                   activeTab === cat.id
-                    ? "border-primary/10 bg-white text-primary shadow-sm ring-1 ring-primary/5"
+                    ? "border-primary/10 bg-surface-container-lowest text-primary shadow-sm ring-1 ring-primary/5"
                     : "border-transparent text-on-surface/60 hover:bg-on-surface/[0.03] hover:text-on-surface",
                 )}
               >
@@ -867,9 +867,9 @@ export default function SettingsPage() {
                        <span className="truncate text-[12px] font-bold text-on-surface/50">{item.label}</span>
                     </div>
                     {item.pass ? (
-                       <div className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2 py-0.5 pr-2.5">
-                          <div className="h-1 w-1 rounded-full bg-emerald-600" />
-                          <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600/80">Active</span>
+                       <div className="flex items-center gap-1.5 rounded-full bg-success/10 px-2 py-0.5 pr-2.5">
+                          <div className="h-1 w-1 rounded-full bg-success" />
+                          <span className="text-[10px] font-black uppercase tracking-widest text-success-dim/80">Active</span>
                        </div>
                     ) : (
                        <div className="flex items-center gap-1.5 rounded-full bg-on-surface/5 px-2 py-0.5 pr-2.5">
@@ -882,7 +882,7 @@ export default function SettingsPage() {
              </div>
              <div className="mt-6 border-t border-on-surface/5 pt-4">
                 <p className="text-[11px] font-bold leading-relaxed text-on-surface/30">
-                   建议在开始大规模整理任务前，确保所有显示为 <span className="text-emerald-600/60">Active</span> 的模型均已通过端到端连接测试。
+                   建议在开始大规模整理任务前，确保所有显示为 <span className="text-success-dim/60">Active</span> 的模型均已通过端到端连接测试。
                 </p>
              </div>
           </div>
@@ -897,7 +897,7 @@ export default function SettingsPage() {
               </div>
             )}
             {success && (
-              <div className="mb-6 flex items-center gap-3 rounded-[6px] border border-emerald-500/10 bg-emerald-500/5 px-5 py-4 text-[13px] font-bold text-emerald-700 animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="mb-6 flex items-center gap-3 rounded-[6px] border border-success/10 bg-success/5 px-5 py-4 text-[13px] font-bold text-success-dim animate-in fade-in slide-in-from-top-2 duration-300">
                 <CheckCircle2 className="h-5 w-5" />
                 {success}
               </div>
@@ -1243,7 +1243,7 @@ export default function SettingsPage() {
                             custom: { ...current.custom, payload_template: event.target.value },
                           }))
                         }
-                        className="min-h-32 w-full resize-y rounded-[10px] border border-on-surface/8 bg-white px-4 py-3 font-mono text-[13px] leading-6 text-on-surface outline-none transition-all placeholder:text-on-surface-variant/35 focus:border-primary focus:ring-4 focus:ring-primary/5"
+                        className="min-h-32 w-full resize-y rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-4 py-3 font-mono text-[13px] leading-6 text-on-surface outline-none transition-all placeholder:text-on-surface-variant/35 focus:border-primary focus:ring-4 focus:ring-primary/5"
                         placeholder='{"data":[{"path":"{{uploaded_path}}","meta":{"_type":"gradio.FileData"}}],"fn_index":0}'
                       />
                     </FieldGroup>
@@ -1305,7 +1305,7 @@ export default function SettingsPage() {
                     <textarea
                       value={draft.global_config.LAUNCH_DEFAULT_NOTE ?? ""}
                       onChange={(event) => updateGlobal("LAUNCH_DEFAULT_NOTE", event.target.value.slice(0, 200))}
-                      className="min-h-28 w-full resize-none rounded-[10px] border border-on-surface/8 bg-white px-4 py-3 text-[14px] leading-7 text-on-surface outline-none transition-all placeholder:text-on-surface-variant/35 focus:border-primary focus:ring-4 focus:ring-primary/5"
+                      className="min-h-28 w-full resize-none rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-4 py-3 text-[14px] leading-7 text-on-surface outline-none transition-all placeholder:text-on-surface-variant/35 focus:border-primary focus:ring-4 focus:ring-primary/5"
                       placeholder="例如：拿不准的先放 Review，课程资料尽量按学期整理。"
                     />
                   </FieldGroup>
@@ -1385,7 +1385,7 @@ export default function SettingsPage() {
                 })();
               }
             }}
-            className="w-full rounded-[10px] border border-on-surface/8 bg-white px-4 py-3 text-[14px] font-semibold text-on-surface outline-none transition-all placeholder:text-on-surface-variant/35 focus:border-primary focus:ring-4 focus:ring-primary/5"
+            className="w-full rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-4 py-3 text-[14px] font-semibold text-on-surface outline-none transition-all placeholder:text-on-surface-variant/35 focus:border-primary focus:ring-4 focus:ring-primary/5"
             placeholder="例如：Tongyi 生图备用"
           />
         </div>

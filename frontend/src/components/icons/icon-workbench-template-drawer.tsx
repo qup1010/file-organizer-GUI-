@@ -121,10 +121,10 @@ export function IconWorkbenchTemplateDrawer({
                             "flex items-center gap-3 rounded-[12px] border px-3 py-3 text-left transition-colors",
                             isSelected
                               ? "border-primary/18 bg-primary/5"
-                              : "border-transparent bg-transparent hover:border-on-surface/8 hover:bg-white",
+                              : "border-transparent bg-transparent hover:border-on-surface/8 hover:bg-surface-container-lowest",
                           )}
                         >
-                          <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-[10px] border border-on-surface/6 bg-white">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-[10px] border border-on-surface/6 bg-surface-container-lowest">
                             {template.cover_image ? (
                               <img src={template.cover_image} alt={template.name} className="h-full w-full object-cover" />
                             ) : (
@@ -151,7 +151,7 @@ export function IconWorkbenchTemplateDrawer({
 
                     <button
                       onClick={() => onSelectTemplate("")}
-                      className="flex items-center gap-3 rounded-[12px] border border-dashed border-primary/18 bg-white px-3 py-3 text-left text-primary transition-colors hover:bg-primary/5"
+                      className="flex items-center gap-3 rounded-[12px] border border-dashed border-primary/18 bg-surface-container-lowest px-3 py-3 text-left text-primary transition-colors hover:bg-primary/5"
                     >
                       <div className="flex h-11 w-11 items-center justify-center rounded-[10px] bg-primary/8">
                         <Plus className="h-4 w-4" />
@@ -186,7 +186,7 @@ export function IconWorkbenchTemplateDrawer({
                         value={templateNameDraft}
                         onChange={(e: React.ChangeEvent<HTMLInputElement>) => onTemplateNameChange(e.target.value)}
                         placeholder="例如：3D 粘土风格"
-                        className="h-11 w-full rounded-[10px] border border-on-surface/10 bg-white px-4 text-[14px] outline-none transition-all focus:border-primary/20 focus:ring-4 focus:ring-primary/4"
+                        className="h-11 w-full rounded-[10px] border border-on-surface/10 bg-surface-container-lowest px-4 text-[14px] outline-none transition-all focus:border-primary/20 focus:ring-4 focus:ring-primary/4"
                       />
                     </div>
 
@@ -197,7 +197,7 @@ export function IconWorkbenchTemplateDrawer({
                         onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onTemplateDescriptionChange(e.target.value)}
                         placeholder="描述这种风格的视觉特征..."
                         rows={3}
-                        className="w-full resize-none rounded-[10px] border border-on-surface/10 bg-white px-4 py-3 text-[14px] outline-none transition-all focus:border-primary/20 focus:ring-4 focus:ring-primary/4"
+                        className="w-full resize-none rounded-[10px] border border-on-surface/10 bg-surface-container-lowest px-4 py-3 text-[14px] outline-none transition-all focus:border-primary/20 focus:ring-4 focus:ring-primary/4"
                       />
                     </div>
 
@@ -208,7 +208,7 @@ export function IconWorkbenchTemplateDrawer({
                         onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onTemplatePromptChange(e.target.value)}
                         placeholder="Apple style app icon of {visual_subject}, 3d render..."
                         rows={10}
-                        className="w-full resize-none rounded-[10px] border border-on-surface/10 bg-white px-4 py-3 font-mono text-[13px] leading-6 outline-none transition-all focus:border-primary/20 focus:ring-4 focus:ring-primary/4"
+                        className="w-full resize-none rounded-[10px] border border-on-surface/10 bg-surface-container-lowest px-4 py-3 font-mono text-[13px] leading-6 outline-none transition-all focus:border-primary/20 focus:ring-4 focus:ring-primary/4"
                       />
                       <p className="text-[11px] leading-5 text-ui-muted">使用 <code>{`{visual_subject}`}</code> 作为文件夹内容主题的占位符。</p>
                     </div>

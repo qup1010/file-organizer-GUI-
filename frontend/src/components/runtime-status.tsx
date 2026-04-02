@@ -29,7 +29,7 @@ export function RuntimeStatus() {
           </div>
           <div>
             <div className="flex items-center gap-2 text-[14px] font-semibold text-on-surface">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              <span className="h-2 w-2 rounded-full bg-success" />
               本地服务已连接
             </div>
             <p className="text-[12px] text-ui-muted">{baseUrl}</p>

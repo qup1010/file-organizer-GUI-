@@ -683,7 +683,7 @@ export default function WorkspaceClient() {
     <div ref={containerRef} className="relative flex min-h-0 flex-1 overflow-hidden bg-surface">
       <ErrorBoundary fallbackTitle="页面加载出错了" className="flex-1">
         {layoutReady ? (
-          <div className="flex flex-1 min-h-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.45),rgba(255,255,255,0))]">
+          <div className="flex flex-1 min-h-0 bg-transparent">
             {showConversationPane ? (
               <section
                 ref={leftPaneRef}
@@ -728,7 +728,7 @@ export default function WorkspaceClient() {
 
             <section
               style={{ width: showConversationPane ? `${100 - leftWidth}%` : "100%" }}
-              className="flex h-full min-h-0 min-w-[320px] flex-col overflow-hidden bg-[linear-gradient(180deg,rgba(248,249,250,0.82),rgba(242,244,245,0.55))]"
+              className="flex h-full min-h-0 min-w-[320px] flex-col overflow-hidden bg-surface-container-lowest/30"
             >
               <div className="flex-1 min-h-0">{renderPreviewContent()}</div>
             </section>

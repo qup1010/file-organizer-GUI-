@@ -27,6 +27,11 @@
 
   --color-warning: var(--warning);
   --color-warning-container: var(--warning-container);
+  --color-warning-dim: var(--warning-dim);
+
+  --color-success: var(--success);
+  --color-success-dim: var(--success-dim);
+  --color-success-container: var(--success-container);
 
   @keyframes spin-slow {
     from {
@@ -76,33 +81,43 @@
     --error-container: #fce4e8;
 
     --warning: #9a6700;
+    --warning-dim: #785200;
     --warning-container: #fef3cd;
+
+    --success: #16a34a;
+    --success-dim: #15803d;
+    --success-container: #dcfce7;
   }
 
   .dark {
-    --surface: #121212;
-    --surface-container: #1e1e1e;
-    --surface-container-low: #252525;
-    --surface-container-high: #2c2c2c;
-    --surface-container-highest: #383838;
-    --surface-container-lowest: #000000;
+    --surface: #1e2022;
+    --surface-container: #26282a;
+    --surface-container-low: #212325;
+    --surface-container-high: #2c2e30;
+    --surface-container-highest: #383a3c;
+    --surface-container-lowest: #16181a;
 
-    --primary: #5caade;
-    --primary-dim: #4a96cc;
-    --primary-container: #1a3a52;
-    --primary-rgb: 92 170 222;
+    --primary: #60a5fa;
+    --primary-dim: #3b82f6;
+    --primary-container: #1e293b;
+    --primary-rgb: 96 165 250;
 
-    --on-surface: #e0e0e0;
-    --on-surface-variant: #b0b0b0;
+    --on-surface: #e5e7eb;
+    --on-surface-variant: #9ca3af;
 
-    --outline: #888888;
-    --outline-variant: #555555;
+    --outline: #4b5563;
+    --outline-variant: #374151;
 
-    --error: #e5566b;
-    --error-container: #93000a;
+    --error: #f87171;
+    --error-container: #450a0a;
 
-    --warning: #ffb74d;
-    --warning-container: #5d4037;
+    --warning: #fbbf24;
+    --warning-dim: #f59e0b;
+    --warning-container: #451a03;
+
+    --success: #34d399;
+    --success-dim: #10b981;
+    --success-container: #064e3b;
   }
 
   body {
@@ -198,9 +213,22 @@
   backdrop-filter: blur(8px);
 }
 
-.dark .glass-surface {
-  background: rgba(0, 0, 0, 0.7);
-}
+  .dark .glass-surface {
+    background: rgba(0, 0, 0, 0.7);
+  }
+
+  .dark .premium-bg::before {
+    background: radial-gradient(
+      circle at 25% 20%,
+      rgba(92, 170, 222, 0.06) 0%,
+      transparent 45%
+    ),
+    radial-gradient(
+      circle at 75% 65%,
+      rgba(0, 120, 212, 0.04) 0%,
+      transparent 55%
+    );
+  }
 
 .ui-page {
   width: 100%;
@@ -276,7 +304,7 @@
 .ui-field-shell:focus-within {
   border-color: color-mix(in srgb, var(--primary) 28%, transparent);
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 8%, transparent);
-  background: white;
+  background: var(--surface-container-lowest);
 }
 
 .ui-metric {
