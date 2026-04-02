@@ -14,10 +14,10 @@
       {
         "label": "main",
         "title": "FilePilot",
-        "width": 1200,
-        "height": 780,
-        "minWidth": 1100,
-        "minHeight": 760,
+        "width": 1100,
+        "height": 720,
+        "minWidth": 960,
+        "minHeight": 640,
         "center": true,
         "resizable": true,
         "decorations": false

@@ -7,6 +7,8 @@
 - 开发态拉起本地 `python -m file_organizer.api`
 - 打包态拉起随应用分发的 `file_organizer_api.exe`
 - 打包态后端以后台方式启动，不向用户显示额外终端窗口
+- 打包态默认使用动态空闲端口，避免和固定 `8765` 冲突
+- 仅允许单实例运行，重复启动时激活已有窗口
 - 通过 `output/runtime/backend.json` 发现并校验后端实例
 - 向前端注入 `window.__FILE_ORGANIZER_RUNTIME__`
 - 提供目录选择、批量目录选择、文件夹图标应用 / 恢复、抠图测试等原生命令
@@ -41,6 +43,7 @@ npm run tauri:dev
   - 安装根目录 `requirements.txt`、`fastapi`、`uvicorn`、`pyinstaller`
   - 构建 `file_organizer_api.exe`
   - 执行 `npm run tauri:build`
+  - 静默安装 MSI 并执行安装包 smoke test
   - 上传 Windows bundle 产物为 `filepilot-windows-bundle` artifact
 
 Tauri 启动后会：
@@ -49,6 +52,22 @@ Tauri 启动后会：
 2. 等待 `output/runtime/backend.json`
 3. 通过 `/api/health` 校验实例归属与健康状态
 4. 向前端注入运行时对象
+
+## 安装包 Smoke 验证
+
+本地在已安装桌面应用后，可以直接对安装目录中的 `FilePilot.exe` 运行 smoke 脚本：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\smoke_desktop_bundle.ps1 -AppPath "C:\Users\<User>\AppData\Local\Programs\FilePilot\FilePilot.exe"
+```
+
+脚本会验证：
+
+1. 启动后能生成运行时文件并通过 `/api/health`
+2. 安装包态默认未落在固定端口 `8765`
+3. 重复启动时不会常驻第二个桌面实例
+4. 关闭桌面应用后，`file_organizer_api.exe` 会退出
+5. 再次启动后仍能恢复正常工作
 
 前端读取入口固定为：
 

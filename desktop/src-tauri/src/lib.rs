@@ -6,7 +6,6 @@ mod bg_removal;
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Child;
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -85,7 +84,7 @@ fn open_directory(path: String) -> Result<(), String> {
 struct DesktopState {
     project_root: PathBuf,
     backend_executable: Option<PathBuf>,
-    backend_child: Mutex<Option<Child>>,
+    backend_process: Mutex<Option<backend::ManagedBackendProcess>>,
     runtime_script: Mutex<Option<String>>,
 }
 
@@ -94,14 +93,14 @@ impl DesktopState {
         Self {
             project_root,
             backend_executable,
-            backend_child: Mutex::new(None),
+            backend_process: Mutex::new(None),
             runtime_script: Mutex::new(None),
         }
     }
 
-    fn set_backend_child(&self, child: Child) {
-        let mut guard = self.backend_child.lock().expect("backend child lock");
-        *guard = Some(child);
+    fn set_backend_process(&self, process: backend::ManagedBackendProcess) {
+        let mut guard = self.backend_process.lock().expect("backend process lock");
+        *guard = Some(process);
     }
 
     fn set_runtime_script(&self, script: String) {
@@ -114,9 +113,8 @@ impl DesktopState {
     }
 
     fn stop_backend(&self) {
-        if let Some(mut child) = self.backend_child.lock().expect("backend child lock").take() {
-            let _ = child.kill();
-            let _ = child.wait();
+        if let Some(mut process) = self.backend_process.lock().expect("backend process lock").take() {
+            let _ = backend::terminate_backend_process(&mut process);
         }
     }
 }
@@ -193,11 +191,11 @@ fn bootstrap_backend(app: &App) -> Result<(), String> {
     let expected_pid = if state.backend_executable.is_some() {
         None
     } else {
-        Some(launch.child.id())
+        Some(launch.process.id())
     };
     let expected_instance_id = launch.instance_id.clone();
     let api_token = launch.api_token.clone();
-    let mut child = launch.child;
+    let mut process = launch.process;
     let config = match runtime::wait_for_runtime_config(
         &runtime_path,
         Duration::from_secs(20),
@@ -206,13 +204,13 @@ fn bootstrap_backend(app: &App) -> Result<(), String> {
     ) {
         Ok(config) => config,
         Err(error) => {
-            let _ = child.kill();
+            let _ = backend::terminate_backend_process(&mut process);
             return Err(error);
         }
     };
 
     let script = runtime::build_runtime_injection_script(&config, &api_token);
-    state.set_backend_child(child);
+    state.set_backend_process(process);
     state.set_runtime_script(script.clone());
 
     if let Some(window) = app.get_webview_window("main") {
@@ -229,9 +227,60 @@ fn rehydrate_runtime(webview: &tauri::Webview) {
     }
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+struct SecondaryLaunchAction {
+    should_show: bool,
+    should_unminimize: bool,
+    should_focus: bool,
+}
+
+impl SecondaryLaunchAction {
+    fn from_window_state(window_exists: bool, is_minimized: bool) -> Self {
+        Self {
+            should_show: window_exists,
+            should_unminimize: window_exists && is_minimized,
+            should_focus: window_exists,
+        }
+    }
+}
+
+fn focus_existing_main_window(app_handle: &tauri::AppHandle) {
+    let Some(window) = app_handle.get_webview_window("main") else {
+        return;
+    };
+
+    let action = SecondaryLaunchAction::from_window_state(true, window.is_minimized().unwrap_or(false));
+    if action.should_show {
+        let _ = window.show();
+    }
+    if action.should_unminimize {
+        let _ = window.unminimize();
+    }
+    if action.should_focus {
+        let _ = window.set_focus();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SecondaryLaunchAction;
+
+    #[test]
+    fn secondary_launch_marks_existing_window_for_focus() {
+        let action = SecondaryLaunchAction::from_window_state(true, true);
+
+        assert!(action.should_show);
+        assert!(action.should_unminimize);
+        assert!(action.should_focus);
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            focus_existing_main_window(app);
+        }))
         .invoke_handler(tauri::generate_handler![
             pick_directory,
             pick_directories,
