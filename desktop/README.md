@@ -55,10 +55,10 @@ Tauri 启动后会：
 
 ## 安装包 Smoke 验证
 
-本地在已安装桌面应用后，可以直接对安装目录中的 `FilePilot.exe` 运行 smoke 脚本：
+本地在已安装桌面应用后，可以直接对安装目录中的桌面可执行文件运行 smoke 脚本。当前构建产物中的可执行文件名通常与 Rust 包名一致，例如 `file-organizer-desktop.exe`：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\smoke_desktop_bundle.ps1 -AppPath "C:\Users\<User>\AppData\Local\Programs\FilePilot\FilePilot.exe"
+powershell -ExecutionPolicy Bypass -File scripts\smoke_desktop_bundle.ps1 -AppPath "C:\Users\<User>\AppData\Local\Programs\FilePilot\file-organizer-desktop.exe"
 ```
 
 脚本会验证：

@@ -78,6 +78,14 @@ jobs:
       - name: Smoke test installed desktop bundle
         shell: pwsh
         run: |
+          $builtExe = Get-ChildItem 'desktop/src-tauri/target/release' -Filter *.exe |
+            Where-Object { $_.Name -ne 'file_organizer_api.exe' } |
+            Select-Object -First 1
+          if (-not $builtExe) {
+            throw "Built desktop executable was not found."
+          }
+          $desktopExeName = $builtExe.Name
+
           $msi = Get-ChildItem 'desktop/src-tauri/target/release/bundle/msi' -Recurse -Filter *.msi | Select-Object -First 1
           if (-not $msi) {
             throw "MSI bundle was not found."
@@ -89,16 +97,16 @@ jobs:
           }
 
           $candidates = @(
-            (Join-Path $env:LOCALAPPDATA 'Programs\FilePilot\FilePilot.exe'),
-            (Join-Path $env:ProgramFiles 'FilePilot\FilePilot.exe'),
-            (Join-Path ${env:ProgramFiles(x86)} 'FilePilot\FilePilot.exe')
+            (Join-Path $env:LOCALAPPDATA "Programs\FilePilot\$desktopExeName"),
+            (Join-Path $env:ProgramFiles "FilePilot\$desktopExeName"),
+            (Join-Path ${env:ProgramFiles(x86)} "FilePilot\$desktopExeName")
           ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
 
           $app = $candidates | Select-Object -First 1
           if (-not $app) {
             $searchRoots = @($env:LOCALAPPDATA, $env:ProgramFiles, ${env:ProgramFiles(x86)}) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
             foreach ($root in $searchRoots) {
-              $match = Get-ChildItem $root -Recurse -Filter FilePilot.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+              $match = Get-ChildItem $root -Recurse -Filter $desktopExeName -ErrorAction SilentlyContinue | Select-Object -First 1
               if ($match) {
                 $app = $match.FullName
                 break
@@ -107,7 +115,7 @@ jobs:
           }
 
           if (-not $app) {
-            throw "Installed FilePilot.exe was not found after MSI install."
+            throw "Installed $desktopExeName was not found after MSI install."
           }
 
           powershell -ExecutionPolicy Bypass -File scripts\smoke_desktop_bundle.ps1 -AppPath $app
