@@ -293,7 +293,7 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         assert session is not None
 
         with self.assertRaisesRegex(RuntimeError, "scan_empty_result"):
-            self.service.start_scan(session.session_id, scan_runner=lambda path: "")
+            self.service.start_scan(session.session_id, scan_runner=lambda path, session_id=None: "")
 
         scanned = self.store.load(session.session_id)
         self.assertIsNotNone(scanned)
@@ -1048,7 +1048,7 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         self.store.save(session)
 
         with self.assertRaisesRegex(RuntimeError, "scan_empty_result"):
-            self.service.refresh_session(session.session_id, scan_runner=lambda path: "")
+            self.service.refresh_session(session.session_id, scan_runner=lambda path, session_id=None: "")
 
         reloaded = self.store.load(session.session_id)
         self.assertIsNotNone(reloaded)

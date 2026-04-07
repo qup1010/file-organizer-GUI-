@@ -34,6 +34,15 @@ class OrganizerSessionService:
         self._event_log: dict[str, list[dict]] = {}
         self._subscribers: dict[str, list[Queue]] = {}
 
+    @staticmethod
+    def _call_with_optional_session_id(func, *args, session_id: str | None = None, **kwargs):
+        try:
+            return func(*args, session_id=session_id, **kwargs)
+        except TypeError as exc:
+            if "unexpected keyword argument 'session_id'" not in str(exc):
+                raise
+            return func(*args, **kwargs)
+
     def create_session(self, target_dir: str, resume_if_exists: bool, strategy: dict | None = None) -> CreateSessionResult:
         path = Path(target_dir)
         latest = self.store.find_latest_by_directory(path)
@@ -1170,13 +1179,72 @@ class OrganizerSessionService:
         return changed
 
     def _default_scan_runner(self, target_dir: Path, event_handler=None, session_id: str | None = None) -> str:
-        return analysis_service.run_analysis_cycle(target_dir, event_handler=event_handler, session_id=session_id)
+        return self._call_with_optional_session_id(
+            analysis_service.run_analysis_cycle,
+            target_dir,
+            event_handler=event_handler,
+            session_id=session_id,
+        )
+
+    def _handle_empty_scan_result(self, session: OrganizerSession, *, total_count: int, mode: str) -> str:
+        if total_count == 0:
+            session.scan_lines = ""
+            session.summary = "当前目录为空，无需整理"
+            session.pending_plan = {}
+            session.plan_snapshot = {}
+            session.assistant_message = {"role": "assistant", "content": "当前目录为空，没有可整理的文件。"}
+            session.stage = "planning"
+            session.last_error = None
+            session.scanner_progress = {
+                **dict(session.scanner_progress or {}),
+                "status": "completed",
+                "processed_count": 0,
+                "total_count": 0,
+                "current_item": None,
+                "recent_analysis_items": [],
+                "message": "目录为空，无需整理",
+            }
+            self.store.save(session)
+            self._log_runtime_event("scan.completed", session, entry_count=0, mode=mode, auto_plan_pending=False)
+            self._write_session_debug_event(
+                "scan.completed",
+                session,
+                payload={"entry_count": 0, "mode": mode, "reason": "empty_directory"},
+            )
+            self._record_event("scan.completed", session)
+            return "empty_directory"
+
+        session.stage = "interrupted"
+        session.scan_lines = ""
+        session.last_error = "scan_empty_result"
+        session.scanner_progress = {
+            **dict(session.scanner_progress or {}),
+            "status": "failed",
+            "processed_count": 0,
+            "current_item": None,
+            "recent_analysis_items": [],
+            "message": "扫描未返回任何条目，请检查模型输出或调试日志",
+        }
+        self.store.save(session)
+        self._log_runtime_event("scan.failed", session, level=logging.ERROR, error="scan_empty_result", mode=mode)
+        self._write_session_debug_event(
+            "scan.failed",
+            session,
+            level="ERROR",
+            payload={"error": "scan_empty_result", "mode": mode},
+        )
+        self._record_event("session.error", session)
+        return "scan_empty_result"
 
     def _finish_async_scan(self, session_id: str, scan_lines: str) -> None:
         session = self._load_or_raise(session_id)
         if session.stage != "scanning":
             return
         all_entries = self._scan_entries(scan_lines)
+        total_count = self._count_visible_entries(Path(session.target_dir))
+        if not all_entries:
+            self._handle_empty_scan_result(session, total_count=total_count, mode="async")
+            return
         session.scan_lines = scan_lines or ""
         recent_items = all_entries[-5:]
         existing_progress = dict(session.scanner_progress or {})
@@ -1184,13 +1252,13 @@ class OrganizerSessionService:
             **existing_progress,
             "status": "completed",
             "processed_count": len(all_entries),
-            "total_count": self._count_visible_entries(Path(session.target_dir)),
+            "total_count": total_count,
             "current_item": recent_items[-1]["display_name"] if recent_items else None,
             "recent_analysis_items": recent_items,
         }
         if existing_progress.get("batch_count"):
             session.scanner_progress["completed_batches"] = existing_progress.get("batch_count")
-            session.scanner_progress["message"] = f"已完成 {existing_progress.get('batch_count')}/{existing_progress.get('batch_count')} 个并行批次"
+            session.scanner_progress["message"] = f"已完成 {existing_progress.get('batch_count')}/{existing_progress.get('batch_count')} 批并行分析"
         else:
             session.scanner_progress["message"] = "扫描分析已完成"
         session.stage = "planning"
@@ -1306,8 +1374,18 @@ class OrganizerSessionService:
         session.scanner_progress = self._initial_scan_progress(Path(session.target_dir))
         self.store.save(session)
         self._record_event("scan.started", session)
-        result = scan_runner(Path(session.target_dir), session_id=session.session_id)
+        result = self._call_with_optional_session_id(
+            scan_runner,
+            Path(session.target_dir),
+            session_id=session.session_id,
+        )
         all_entries = self._scan_entries(result)
+        total_count = self._count_visible_entries(Path(session.target_dir))
+        if not all_entries:
+            outcome = self._handle_empty_scan_result(session, total_count=total_count, mode="sync")
+            if outcome == "scan_empty_result":
+                raise RuntimeError(outcome)
+            return result or ""
         recent_items = all_entries[-5:]
         session.scan_lines = result or ""
         session.stage = "planning"
@@ -1315,7 +1393,7 @@ class OrganizerSessionService:
             **dict(session.scanner_progress or {}),
             "status": "completed",
             "processed_count": len(all_entries),
-            "total_count": self._count_visible_entries(Path(session.target_dir)),
+            "total_count": total_count,
             "current_item": recent_items[-1]["display_name"] if recent_items else None,
             "recent_analysis_items": recent_items,
             "message": "已完成单线程扫描分析",

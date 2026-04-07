@@ -194,6 +194,59 @@ class StructuredAnalysisServiceTests(unittest.TestCase):
         self.assertEqual(second_messages[2]["role"], "assistant")
         self.assertEqual(second_messages[2]["tool_calls"][0]["function"]["name"], "list_local_files")
 
+    def test_run_analysis_cycle_synthesizes_missing_tool_call_ids_before_retrying(self):
+        first_response = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content="",
+                        tool_calls=[
+                            SimpleNamespace(
+                                id=None,
+                                type="function",
+                                function=SimpleNamespace(
+                                    name="list_local_files",
+                                    arguments='{"directory": ".", "max_depth": 0}',
+                                ),
+                            )
+                        ],
+                    )
+                )
+            ]
+        )
+        second_response = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content="",
+                        tool_calls=[
+                            SimpleNamespace(
+                                id="call_2",
+                                type="function",
+                                function=SimpleNamespace(
+                                    name=analysis_service.SUBMIT_ANALYSIS_TOOL_NAME,
+                                    arguments='{"items": [{"entry_name": "合同.pdf", "suggested_purpose": "财务/合同", "summary": "付款协议"}, {"entry_name": "Screenshots", "suggested_purpose": "截图记录", "summary": "软件报错截图"}]}',
+                                ),
+                            )
+                        ],
+                    )
+                )
+            ]
+        )
+        create_mock = mock.Mock(side_effect=[first_response, second_response])
+        client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create_mock)))
+
+        with mock.patch.object(analysis_service, "get_client", return_value=client), mock.patch.object(
+            analysis_service, "list_local_files", return_value="示例文件列表"
+        ), mock.patch.object(analysis_service, "_dispatch_tool_call", return_value="目录列表"):
+            rendered = analysis_service.run_analysis_cycle(self.base_dir)
+
+        self.assertIn("合同.pdf | 财务/合同 | 付款协议", rendered)
+        second_messages = create_mock.call_args_list[1].kwargs["messages"]
+        synthesized_id = second_messages[2]["tool_calls"][0]["id"]
+        self.assertTrue(synthesized_id)
+        self.assertEqual(second_messages[3]["tool_call_id"], synthesized_id)
+
     def test_run_analysis_cycle_accepts_plain_text_string_response(self):
         response = (
             "<output>\n"
@@ -227,6 +280,46 @@ class StructuredAnalysisServiceTests(unittest.TestCase):
 
         self.assertIn("合同.pdf | 财务/合同 | 付款协议", rendered)
         self.assertIn("Screenshots | 截图记录 | 软件报错截图", rendered)
+
+    def test_run_analysis_cycle_falls_back_to_stream_when_non_stream_message_is_empty(self):
+        empty_response = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=None, tool_calls=None, role="assistant"), finish_reason="stop")]
+        )
+        stream_response = [
+            {"choices": [{"delta": {"role": "assistant"}, "finish_reason": None}]},
+            {
+                "choices": [
+                    {
+                        "delta": {
+                            "tool_calls": [
+                                {
+                                    "index": 0,
+                                    "id": "call_stream",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "submit_analysis_result",
+                                        "arguments": '{"items": [{"entry_name": "合同.pdf", "suggested_purpose": "finance/contract", "summary": "payment agreement"}, {"entry_name": "Screenshots", "suggested_purpose": "screenshots", "summary": "error screenshots"}]}'
+                                    },
+                                }
+                            ]
+                        },
+                        "finish_reason": "tool_calls",
+                    }
+                ]
+            },
+        ]
+        create_mock = mock.Mock(side_effect=[empty_response, stream_response])
+        client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create_mock)))
+
+        with mock.patch.object(analysis_service, "get_client", return_value=client), mock.patch.object(
+            analysis_service, "list_local_files", return_value="sample files"
+        ):
+            rendered = analysis_service.run_analysis_cycle(self.base_dir)
+
+        self.assertIn("合同.pdf | finance/contract | payment agreement", rendered)
+        self.assertEqual(create_mock.call_count, 2)
+        self.assertNotIn("stream", create_mock.call_args_list[0].kwargs)
+        self.assertTrue(create_mock.call_args_list[1].kwargs["stream"])
 
     def test_validate_analysis_returns_duplicates_key_for_missing_output(self):
         validation = analysis_service.validate_analysis("", self.base_dir)

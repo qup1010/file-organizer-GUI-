@@ -2,6 +2,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 FolderPainter
+logs/
 
 # 环境与配置
 .venv/

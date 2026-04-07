@@ -224,14 +224,19 @@ def _extract_submitted_analysis(tool_calls) -> list[AnalysisItem] | None:
     return None
 
 
+def _synthesize_tool_call_id(index: int) -> str:
+    return f"compat_call_{index}"
+
+
 def _normalize_tool_calls(tool_calls) -> list[SimpleNamespace]:
     normalized = []
     for tool_call in tool_calls or []:
+        fallback_id = _synthesize_tool_call_id(len(normalized))
         if isinstance(tool_call, dict):
             function = tool_call.get("function") or {}
             normalized.append(
                 SimpleNamespace(
-                    id=tool_call.get("id"),
+                    id=tool_call.get("id") or fallback_id,
                     type=tool_call.get("type", "function"),
                     function=SimpleNamespace(
                         name=function.get("name", ""),
@@ -246,7 +251,7 @@ def _normalize_tool_calls(tool_calls) -> list[SimpleNamespace]:
             continue
         normalized.append(
             SimpleNamespace(
-                id=getattr(tool_call, "id", None),
+                id=getattr(tool_call, "id", None) or fallback_id,
                 type=getattr(tool_call, "type", "function"),
                 function=SimpleNamespace(
                     name=getattr(function, "name", ""),
@@ -298,15 +303,83 @@ def _coerce_response_message(response):
     raise TypeError(f"不支持的模型响应类型: {type(response).__name__}")
 
 
+def _is_empty_assistant_message(message) -> bool:
+    return not (getattr(message, "content", "") or "").strip() and not list(getattr(message, "tool_calls", None) or [])
+
+
+def _collect_stream_response(stream) -> dict:
+    role = "assistant"
+    content_parts: list[str] = []
+    tool_calls: list[dict] = []
+    finish_reason = None
+
+    for chunk in stream:
+        choices = getattr(chunk, "choices", None) or (chunk.get("choices") if isinstance(chunk, dict) else None) or []
+        if not choices:
+            continue
+
+        choice = choices[0]
+        delta = getattr(choice, "delta", None) if not isinstance(choice, dict) else (choice.get("delta") or {})
+        finish_reason = getattr(choice, "finish_reason", finish_reason) if not isinstance(choice, dict) else choice.get("finish_reason", finish_reason)
+        if delta is None:
+            continue
+
+        delta_role = getattr(delta, "role", None) if not isinstance(delta, dict) else delta.get("role")
+        delta_content = getattr(delta, "content", None) if not isinstance(delta, dict) else delta.get("content")
+        delta_tool_calls = getattr(delta, "tool_calls", None) if not isinstance(delta, dict) else delta.get("tool_calls")
+
+        if delta_role:
+            role = delta_role
+        if delta_content:
+            content_parts.append(delta_content)
+        if delta_tool_calls:
+            for raw_tool_call in delta_tool_calls:
+                idx = getattr(raw_tool_call, "index", None) if not isinstance(raw_tool_call, dict) else raw_tool_call.get("index")
+                if idx is None:
+                    continue
+                while len(tool_calls) <= idx:
+                    tool_calls.append({"id": None, "type": "function", "function": {"name": "", "arguments": ""}})
+                current = tool_calls[idx]
+                if not isinstance(raw_tool_call, dict):
+                    current["id"] = getattr(raw_tool_call, "id", current["id"])
+                    current["type"] = getattr(raw_tool_call, "type", current["type"])
+                    function = getattr(raw_tool_call, "function", None)
+                    name = getattr(function, "name", None) if function is not None else None
+                    arguments = getattr(function, "arguments", None) if function is not None else None
+                else:
+                    current["id"] = raw_tool_call.get("id", current["id"])
+                    current["type"] = raw_tool_call.get("type", current["type"])
+                    function = raw_tool_call.get("function") or {}
+                    name = function.get("name")
+                    arguments = function.get("arguments")
+                if name:
+                    current["function"]["name"] += name
+                if arguments:
+                    current["function"]["arguments"] += arguments
+
+    return {
+        "choices": [
+            {
+                "message": {
+                    "role": role,
+                    "content": "".join(content_parts) or None,
+                    "tool_calls": tool_calls or None,
+                },
+                "finish_reason": finish_reason,
+            }
+        ]
+    }
+
+
 def _serialize_assistant_message(message) -> dict:
     tool_calls_payload = []
-    for tool_call in getattr(message, "tool_calls", None) or []:
+    for index, tool_call in enumerate(getattr(message, "tool_calls", None) or []):
         function = getattr(tool_call, "function", None)
         if function is None:
             continue
         tool_calls_payload.append(
             {
-                "id": getattr(tool_call, "id", None),
+                "id": getattr(tool_call, "id", None) or _synthesize_tool_call_id(index),
                 "type": getattr(tool_call, "type", "function"),
                 "function": {
                     "name": getattr(function, "name", ""),
@@ -422,11 +495,12 @@ def _extract_submitted_analysis(tool_calls) -> list[AnalysisItem] | None:
 def _normalize_tool_calls(tool_calls) -> list[SimpleNamespace]:
     normalized = []
     for tool_call in tool_calls or []:
+        fallback_id = _synthesize_tool_call_id(len(normalized))
         if isinstance(tool_call, dict):
             function = tool_call.get("function") or {}
             normalized.append(
                 SimpleNamespace(
-                    id=tool_call.get("id"),
+                    id=tool_call.get("id") or fallback_id,
                     type=tool_call.get("type", "function"),
                     function=SimpleNamespace(
                         name=function.get("name", ""),
@@ -441,7 +515,7 @@ def _normalize_tool_calls(tool_calls) -> list[SimpleNamespace]:
             continue
         normalized.append(
             SimpleNamespace(
-                id=getattr(tool_call, "id", None),
+                id=getattr(tool_call, "id", None) or fallback_id,
                 type=getattr(tool_call, "type", "function"),
                 function=SimpleNamespace(
                     name=getattr(function, "name", ""),
@@ -495,13 +569,13 @@ def _coerce_response_message(response):
 
 def _serialize_assistant_message(message) -> dict:
     tool_calls_payload = []
-    for tool_call in getattr(message, "tool_calls", None) or []:
+    for index, tool_call in enumerate(getattr(message, "tool_calls", None) or []):
         function = getattr(tool_call, "function", None)
         if function is None:
             continue
         tool_calls_payload.append(
             {
-                "id": getattr(tool_call, "id", None),
+                "id": getattr(tool_call, "id", None) or _synthesize_tool_call_id(index),
                 "type": getattr(tool_call, "type", "function"),
                 "function": {
                     "name": getattr(function, "name", ""),
@@ -627,9 +701,34 @@ def _run_analysis_worker(
         normalized_items: list[AnalysisItem] = []
 
         while True:
+            request_kwargs = {
+                "model": model,
+                "messages": curr_messages,
+                "tools": tools,
+                "tool_choice": "auto",
+            }
             emit(event_handler, "model_wait_start", {"message": wait_message})
             try:
-                response = client.chat.completions.create(model=model, messages=curr_messages, tools=tools, tool_choice="auto")
+                response = client.chat.completions.create(**request_kwargs)
+                msg = _coerce_response_message(response)
+                response_payload = response.choices[0].message.to_dict() if hasattr(response, "choices") and hasattr(response.choices[0].message, "to_dict") else str(response)
+                mode = "non_stream"
+                if _is_empty_assistant_message(msg):
+                    _write_analysis_debug_event(
+                        target_dir,
+                        "analysis.empty_message_fallback",
+                        level="WARNING",
+                        session_id=session_id,
+                        payload={
+                            "attempt": attempt,
+                            "model": model,
+                        },
+                    )
+                    stream_response = client.chat.completions.create(**{**request_kwargs, "stream": True})
+                    response = _collect_stream_response(stream_response)
+                    msg = _coerce_response_message(response)
+                    response_payload = response
+                    mode = "stream_fallback"
                 _write_analysis_debug_event(
                     target_dir,
                     "analysis.response",
@@ -637,12 +736,12 @@ def _run_analysis_worker(
                     payload={
                         "attempt": attempt,
                         "model": model,
-                        "response": response.choices[0].message.to_dict() if hasattr(response.choices[0].message, "to_dict") else str(response),
+                        "mode": mode,
+                        "response": response_payload,
                     },
                 )
             finally:
                 emit(event_handler, "model_wait_end")
-            msg = _coerce_response_message(response)
             submitted_items = _extract_submitted_analysis(getattr(msg, "tool_calls", None))
             if submitted_items is not None:
                 normalized_items, invalid_lines = _normalize_analysis_items(submitted_items, target_dir)
