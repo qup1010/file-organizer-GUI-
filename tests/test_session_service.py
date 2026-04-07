@@ -336,10 +336,11 @@ class OrganizerSessionServiceTests(unittest.TestCase):
 
         def fake_run_analysis_cycle(_target_dir, event_handler=None):
             if event_handler is not None:
-                event_handler("batch_split", {"total_entries": 31, "batch_count": 3, "worker_count": 3})
-                event_handler("batch_progress", {"batch_index": 0, "total_batches": 3, "status": "completed", "completed_batches": 1})
-                event_handler("batch_progress", {"batch_index": 1, "total_batches": 3, "status": "completed", "completed_batches": 2})
-                event_handler("batch_progress", {"batch_index": 2, "total_batches": 3, "status": "completed", "completed_batches": 3})
+                event_handler("batch_split", {"total_entries": 60, "batch_count": 4, "worker_count": 4})
+                event_handler("batch_progress", {"batch_index": 0, "total_batches": 4, "status": "completed", "completed_batches": 1})
+                event_handler("batch_progress", {"batch_index": 1, "total_batches": 4, "status": "completed", "completed_batches": 2})
+                event_handler("batch_progress", {"batch_index": 2, "total_batches": 4, "status": "completed", "completed_batches": 3})
+                event_handler("batch_progress", {"batch_index": 3, "total_batches": 4, "status": "completed", "completed_batches": 4})
             return "a.txt | 文档 | A"
 
         with mock.patch(
@@ -353,11 +354,48 @@ class OrganizerSessionServiceTests(unittest.TestCase):
 
         scanned = self.store.load(session.session_id)
         assert scanned is not None
-        self.assertEqual(scanned.scanner_progress["batch_count"], 3)
-        self.assertEqual(scanned.scanner_progress["completed_batches"], 3)
-        self.assertEqual(scanned.scanner_progress["message"], "已完成 3/3 批并行分析")
+        self.assertEqual(scanned.scanner_progress["batch_count"], 4)
+        self.assertEqual(scanned.scanner_progress["completed_batches"], 4)
+        self.assertEqual(scanned.scanner_progress["message"], "已完成 4/4 批并行分析")
         self.assertEqual(scanned.stage, "planning")
         self.assertTrue(any(event["event_type"] == "scan.progress" for event in service.read_events(session.session_id)))
+
+    def test_start_scan_tracks_file_level_progress_during_parallel_scan(self):
+        service = OrganizerSessionService(self.store, scanner=ImmediateScanner())
+        (self.target_dir / "report.pdf").write_text("hello", encoding="utf-8")
+        created = service.create_session(str(self.target_dir), resume_if_exists=False)
+        session = created.session
+        assert session is not None
+
+        def fake_run_analysis_cycle(_target_dir, event_handler=None):
+            if event_handler is not None:
+                event_handler("batch_split", {"total_entries": 31, "batch_count": 3, "worker_count": 3})
+                event_handler("tool_start", {"name": "read_local_file", "args": {"filename": "report.pdf"}})
+                event_handler("batch_progress", {"batch_index": 0, "total_batches": 3, "status": "completed", "completed_batches": 1})
+            return "report.pdf | 文档 | A"
+
+        with mock.patch(
+            "file_organizer.app.session_service.analysis_service.run_analysis_cycle",
+            side_effect=fake_run_analysis_cycle,
+        ), mock.patch(
+            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            return_value=("", None),
+        ):
+            service.start_scan(session.session_id)
+
+        progress_events = [
+            event for event in service.read_events(session.session_id) if event["event_type"] == "scan.progress"
+        ]
+        self.assertTrue(progress_events)
+        progress_snapshots = [event["session_snapshot"]["scanner_progress"] for event in progress_events]
+        self.assertTrue(
+            any(
+                progress["current_item"] == "report.pdf"
+                and progress["message"] == "正在读取 report.pdf"
+                and any(item["display_name"] == "report.pdf" for item in progress.get("recent_analysis_items", []))
+                for progress in progress_snapshots
+            )
+        )
 
     def test_start_scan_writes_runtime_log_for_create_scan_and_auto_plan(self):
         log_dir = self.root / "logs" / "backend"
@@ -640,6 +678,87 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         self.assertTrue(cycle_mock.called)
         self.assertEqual(result.session_snapshot["plan_snapshot"]["unresolved_items"], [])
         self.assertEqual(result.session_snapshot["messages"][-1]["content"], "已根据你的说明更新计划")
+
+    def test_get_snapshot_normalizes_legacy_unresolved_choice_ids_for_duplicate_filenames(self):
+        created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
+        session = created.session
+        assert session is not None
+        session.stage = "planning"
+        session.scan_lines = (
+            "archive/new_summary_232.bak | 备份文件 | 第一份备份\n"
+            "drafts/new_summary_232.bak | 备份文件 | 第二份备份"
+        )
+        session.pending_plan = {
+            "directories": ["Review/archive", "Review/drafts"],
+            "moves": [
+                {"source": "archive/new_summary_232.bak", "target": "Review/archive/new_summary_232.bak"},
+                {"source": "drafts/new_summary_232.bak", "target": "Review/drafts/new_summary_232.bak"},
+            ],
+            "unresolved_items": [
+                "archive/new_summary_232.bak",
+                "drafts/new_summary_232.bak",
+            ],
+            "summary": "needs choices",
+        }
+        session.messages = [
+            {
+                "role": "assistant",
+                "content": "",
+                "blocks": [
+                    {
+                        "type": "unresolved_choices",
+                        "request_id": "req_dup",
+                        "summary": "请确认 2 个同名文件",
+                        "status": "pending",
+                        "items": [
+                            {
+                                "item_id": "new_summary_232.bak",
+                                "display_name": "new_summary_232.bak",
+                                "question": "第一份更像项目备份还是归档资料？",
+                                "suggested_folders": ["项目资料", "备份归档"],
+                            },
+                            {
+                                "item_id": "new_summary_232.bak",
+                                "display_name": "new_summary_232.bak",
+                                "question": "第二份更像学习备份还是归档资料？",
+                                "suggested_folders": ["学习资料", "备份归档"],
+                            },
+                        ],
+                    }
+                ],
+            }
+        ]
+        session.assistant_message = dict(session.messages[0])
+        self.store.save(session)
+
+        snapshot = self.service.get_snapshot(session.session_id)
+        block = snapshot["messages"][0]["blocks"][0]
+        normalized_ids = [item["item_id"] for item in block["items"]]
+
+        self.assertEqual(
+            normalized_ids,
+            [
+                "archive/new_summary_232.bak",
+                "drafts/new_summary_232.bak",
+            ],
+        )
+
+        result = self.service.resolve_unresolved_choices(
+            session.session_id,
+            "req_dup",
+            [
+                {"item_id": "archive/new_summary_232.bak", "selected_folder": "项目资料", "note": ""},
+                {"item_id": "drafts/new_summary_232.bak", "selected_folder": "Review", "note": ""},
+            ],
+        )
+
+        targets = {
+            item["item_id"]: item["target_relpath"]
+            for item in result.session_snapshot["plan_snapshot"]["items"]
+        }
+        self.assertEqual(targets["archive/new_summary_232.bak"], "项目资料/new_summary_232.bak")
+        self.assertEqual(targets["drafts/new_summary_232.bak"], "Review/new_summary_232.bak")
+        self.assertEqual(result.session_snapshot["plan_snapshot"]["unresolved_items"], [])
 
     def test_get_snapshot_assigns_stable_message_ids(self):
         created = self.service.create_session(str(self.target_dir), resume_if_exists=False)

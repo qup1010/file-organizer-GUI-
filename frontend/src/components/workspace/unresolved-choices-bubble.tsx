@@ -36,9 +36,7 @@ export function UnresolvedChoicesBubble({
 }: UnresolvedChoicesBubbleProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const isSubmitted = block.status === "submitted";
-  const submittedMap = Object.fromEntries(
-    (block.submitted_resolutions || []).map((item) => [item.item_id, item]),
-  );
+  const submittedItems = block.submitted_resolutions || [];
 
   const COLLAPSE_THRESHOLD = 3;
   const showExpandButton = !isSubmitted && block.items.length > COLLAPSE_THRESHOLD;
@@ -59,10 +57,10 @@ export function UnresolvedChoicesBubble({
           </span>
         </div>
         <div className="mt-2 space-y-1.5 border-t border-success/10 pt-2 text-[12px]">
-          {block.items.map((item) => {
-            const submitted = submittedMap[item.item_id];
+          {block.items.map((item, index) => {
+            const submitted = submittedItems[index] || submittedItems.find((entry) => entry.item_id === item.item_id);
             return (
-              <div key={item.item_id} className="flex items-baseline gap-2 text-on-surface/60">
+              <div key={`${item.item_id}-${index}`} className="flex items-baseline gap-2 text-on-surface/60">
                 <span className="shrink-0 font-bold text-on-surface/80">{item.display_name}</span>
                 <div className="h-[1px] flex-1 border-b border-dashed border-on-surface/5" />
                 <span className="shrink-0 rounded-md bg-success/10 px-1.5 py-0.5 font-semibold text-success-dim">
@@ -100,14 +98,14 @@ export function UnresolvedChoicesBubble({
       </div>
 
       <div className="mt-5 space-y-3">
-        {visibleItems.map((item) => {
+        {visibleItems.map((item, index) => {
           const draft = drafts[item.item_id] || { selected_folder: "", note: "", custom_selected: false };
           const selectedFolder = draft.selected_folder;
           const currentNote = draft.note;
           const customSelected = draft.custom_selected;
           
           return (
-            <div key={item.item_id} className="group/item rounded-[4px] border border-on-surface/[0.03] bg-surface-container-lowest/50 p-3.5 transition-all hover:border-primary/10 hover:shadow-md hover:shadow-black/[0.02]">
+            <div key={`${item.item_id}-${index}`} className="group/item rounded-[4px] border border-on-surface/[0.03] bg-surface-container-lowest/50 p-3.5 transition-all hover:border-primary/10 hover:shadow-md hover:shadow-black/[0.02]">
               <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-3 min-w-0">
                 <span className="shrink-0 text-[13.5px] font-bold text-on-surface truncate max-w-[70%] sm:max-w-[60%]">{item.display_name}</span>
                 <span className="text-[12px] font-medium text-ui-muted opacity-60 truncate flex-1">{item.question}</span>

@@ -102,7 +102,7 @@ function assistantRuntimeFromAction(event: SessionEvent): AssistantRuntimeStatus
 
   if (action?.message) {
     const detail = phase === "scan"
-      ? (action.args?.filename ? `正在分析 ${humanizeActionTarget(action.args.filename)}` : "文件较多时，这一步可能耗时更久")
+      ? (action.args?.filename ? `正在处理 ${humanizeActionTarget(action.args.filename)}` : "正在处理文件，请稍候")
       : "正在整理目录结构与最新要求";
     return {
       phase,
@@ -121,7 +121,7 @@ function assistantRuntimeFromTyping(phase: "scan" | "plan"): AssistantRuntimeSta
         phase,
         mode: "streaming",
         label: "正在输出扫描结果",
-        detail: "正在整理本轮扫描结论",
+        detail: "正在整理结果",
       }
     : {
         phase,

@@ -36,30 +36,30 @@ function getStatusMeta(scanner: ScannerProgress, progressPercent: number) {
 
   if (status === "error") {
     return {
-      title: "扫描已中断",
+      title: "扫描已停止",
       description: scanner.message || "扫描过程中遇到异常，请重试。",
-      stageLabel: "等待重试",
+      stageLabel: "已中断",
       tone: "error" as const,
-      helper: "重新扫描即可恢复正常流程。",
+      helper: "可以重新开始扫描。",
     };
   }
 
   if (status === "success") {
     return {
-      title: "扫描完成，正在汇总",
-      description: "元数据提取已完成，正在生成初始草案。",
-      stageLabel: "结果汇总",
+      title: "扫描完成",
+      description: "正在整理结果。",
+      stageLabel: "已完成",
       tone: "success" as const,
-      helper: "接下来将自动进入整理建议阶段。",
+      helper: "接下来会显示整理方案。",
     };
   }
 
   return {
-    title: progressPercent < 30 ? "正在读取目录结构" : progressPercent < 70 ? "正在抽取文件摘要" : "正在识别图片与用途",
-    description: scanner.message || "系统正在读取文件内容并判断用途。",
-    stageLabel: progressPercent < 30 ? "目录读取" : progressPercent < 70 ? "摘要分析" : "用途识别",
+    title: "正在扫描",
+    description: scanner.message || "正在读取文件，请稍候。",
+    stageLabel: "扫描中",
     tone: "progress" as const,
-    helper: "系统正在逐项分析文件内容和用途，请稍候。",
+    helper: "正在读取文件，请稍候。",
   };
 }
 
@@ -93,10 +93,10 @@ export function ScanningOverlay({
   const phaseIndex = getPhaseIndex(scanner.status, clampedPercent);
 
   const phases = [
-    { label: "读取目录", icon: FolderTree },
-    { label: "抽取摘要", icon: FileSearch },
+    { label: "读取文件", icon: FolderTree },
+    { label: "生成摘要", icon: FileSearch },
     { label: "判断用途", icon: Sparkles },
-    { label: "结果汇总", icon: Layers3 },
+    { label: "整理结果", icon: Layers3 },
   ];
 
   return (
@@ -182,7 +182,7 @@ export function ScanningOverlay({
               <div className="relative z-10">
                 <div className="flex items-center gap-2 mb-3">
                   <span className="flex h-2 w-2 rounded-full bg-primary animate-ping" />
-                  <span className="text-[11px] font-black uppercase tracking-[0.2em] text-primary">正在分析当前文件</span>
+                  <span className="text-[11px] font-black uppercase tracking-[0.2em] text-primary">当前文件</span>
                 </div>
                 <div className="flex items-start gap-4">
                   <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[10px] bg-surface-container-lowest shadow-md ring-1 ring-black/[0.05]">
@@ -207,9 +207,9 @@ export function ScanningOverlay({
               <div className="flex items-center justify-between border-b border-black/[0.05] pb-3">
                 <div className="flex items-center gap-2">
                   <Activity className="h-4 w-4 text-primary" />
-                  <span className="text-[12px] font-black uppercase tracking-widest text-on-surface">实时分析记录</span>
+                  <span className="text-[12px] font-black uppercase tracking-widest text-on-surface">最近处理</span>
                 </div>
-                <span className="text-[11px] font-bold text-success-dim animate-pulse">● LIVE</span>
+                <span className="text-[11px] font-bold text-ui-muted">更新中</span>
               </div>
 
               <div className="mt-4 flex-1 overflow-y-auto space-y-3 pr-2 scrollbar-thin">
@@ -248,7 +248,7 @@ export function ScanningOverlay({
                   <div className="flex h-full items-center justify-center py-20">
                     <div className="text-center">
                       <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary/30" />
-                      <p className="mt-4 text-[13px] font-black text-on-surface/40 uppercase tracking-widest">正在准备分析流程...</p>
+                      <p className="mt-4 text-[13px] font-black text-on-surface/40 uppercase tracking-widest">正在扫描...</p>
                     </div>
                   </div>
                 )}
@@ -260,7 +260,7 @@ export function ScanningOverlay({
           <aside className="w-full shrink-0 flex-col bg-surface-container-low/30 p-6 xl:w-[320px]">
             <div className="flex items-center gap-2 mb-6">
               <ShieldCheck className="h-4 w-4 text-primary" />
-              <span className="text-[12px] font-black uppercase tracking-widest text-on-surface/60">扫描轨迹</span>
+              <span className="text-[12px] font-black uppercase tracking-widest text-on-surface/60">扫描进度</span>
             </div>
 
             <div className="space-y-6">

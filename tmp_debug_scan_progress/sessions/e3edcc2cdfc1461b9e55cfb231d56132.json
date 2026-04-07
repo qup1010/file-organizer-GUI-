@@ -1,0 +1,65 @@
+{
+  "session_id": "e3edcc2cdfc1461b9e55cfb231d56132",
+  "target_dir": "d:/3_projects/active/file-organizer-gui-/tmp_debug_scan_progress/inbox",
+  "stage": "planning",
+  "strategy_template_id": "general_downloads",
+  "strategy_template_label": "通用下载",
+  "naming_style": "zh",
+  "caution_level": "balanced",
+  "strategy_note": "",
+  "messages": [
+    {
+      "role": "system",
+      "content": "你是一位“系统文件整理”专家，对文件整理有深入的理解和丰富的经验。\n\n你的任务是：\n基于提供给你的目录扫描结果，给用户提交一份结构化的整理计划。\n\n一、工具详细说明\n你可以调用两个工具：\n1. submit_plan_diff：用于提交待定计划的增量变更。只要状态有变，必须调用此工具。\nsubmit_plan_diff：只提交本轮变更字段（directory_renames, move_updates, unresolved_adds, unresolved_removals, summary）。只要用户确认了某个项目，必须从 unresolved_removals 中将其移除。\n  * 注意：summary 必须包含量化信息，格式如“已分类 X 项，调整 Y 项，仍剩 Z 项待定”。\n  * 每个项目必须且只能对应一条 MOVE。\n  * source 必须来自原始扫描结果。\n  * 顺序 must 一致，目标必须是相对路径且保留原名。\n  * 如果某项不需要移动，也需要调用MOVE，但是目标路径必须和源路径完全一致。\n  * 只要这轮变更中有待确认项（unresolved items），就必须使用 unresolved_adds 登记该项的【原始文件名】。\n  * 所有待确认项必须使用unresolved_adds提交上去，并且需要创建Review目录，并且把所有待确认项暂时归入Review目录\n\n2. request_unresolved_choices：当你提交的计划中有 unresolved items（待确认项）时，你必须调用此工具来请求用户确认这些项的归类。\n  * request_id: 本次待确认请求的唯一标识。\n  * summary: 展示在聊天气泡顶部的简短说明。\n  * items: 待确认项列表。\n  * 每个 item 的 item_id 必须使用该文件的【原始文件名】，禁止使用 unresolved_1 等占位符。\n  * 每个 item 必须包含 display_name、question、suggested_folders。\n  * suggested_folders 必须恰好提供 2 个候选目录名，不要包含 Review。\n  * 如果没有待确认项，禁止调用此工具。\n  * 当你第一次调用 submit_plan_diff 提交计划时，如果有待确认项，必须同时调用此工具来获取用户的选择。（记住这两个工具可以同时调用，请灵活判断情况，并确保两个工具中涉及的 ID 完全一致）\n\n二、业务规则与整理原则\n1. 默认优先按用途整理，不过如果用户有明确的整理意愿，请优先按照用户意愿进行整理\n2. 先依据“可能用途”判断归类；若用途不明确，再结合“内容摘要”判断\n3. 若无法稳定判断，先把该项加入 unresolved_items，先暂时归入 Review/\n\n三、整理策略\n当前固定整理策略（必须优先遵守）：\n- 主模板：通用下载。适合下载目录、桌面暂存区等混合文件场景。\n场景重点：这是一个混合下载目录或零散收纳目录。\n优先目标：快速把杂乱文件按实际用途归到清晰的大类，而不是过度细分。\n优先考虑的目录语义：项目资料、财务票据、学习资料、安装程序、截图记录、媒体素材、历史归档、待确认。\n目录命名风格：优先使用简洁、自然、统一的中文目录名。\n避免中英混搭；同一套方案中的目录语言保持一致。\n整理保守度：平衡。\n对高置信度和中高置信度项目都可以直接归类，只把真正拿不准的项放入 Review。\n允许为清晰结构创建适量目录，但不要过度细分。\n\n四、输出规则\n\n================\n【特别强调：输出要求】\n================\n你必须遵守以下输出规则：\n1. 只要调用工具，就必须要给用户回复内容\n例如调用submit_plan_diff时，你必须要根据用户的回复来回复用户（例如你做了什么，调整的考虑因素或新的进度统计，和用户进行自然沟通），禁止只输出工具调用而不输出回复文本\n2. 不要在回复中罗列完整计划列表，只要在工具调用中更新计划状态即可。\n3. 只要你说“已同步/已更新”等等，同一条消息里一定同时提交工具调用，禁止只说“已同步”而不调用工具，也禁止调用工具了又不说“已同步”。\n4. 没有文字说明就不要调用工具；工具调用必须跟在说明之后\n\n五、对话与交互策略（一般流程）\n1. 【首轮启动】：调用 submit_plan_diff 建立初版，然后在回复中和用户介绍你的思路并询问建议。\n2. 【改动确认】：用户要求修改后，在回复中确认“收到，我处理完成了”，同时通过 submit_plan_diff 同步。\n3. 【待确认项】：当你需要用户对某些文件做明确选择时，先在普通文本中简要说明原因，再调用 request_unresolved_choices。不要同时为同一批待确认项再输出冗长追问。\n4. 【结束引导】：方案就绪后（没有待确认项时）。请提醒用户“当前整理草案已满足预检条件，如果您对当前方案满意，请点击界面上的‘开始预检’。”。\n\n\n================\n当前扫描结果\n================\nreport.pdf | ?? | A\n",
+      "id": "system-38467292298c4ddb9a782fa14c761870"
+    },
+    {
+      "role": "user",
+      "content": "请基于上述的目录扫描结果和整理规则，为我生成整理计划。简要聊聊你为何这样计划，以及你对此目录的理解和分析。",
+      "id": "user-4c25895b852a413ea3e3555abd9bdccd"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "id": "assistant-75456270684d40d4a503063bd562296d"
+    }
+  ],
+  "scan_lines": "report.pdf | ?? | A",
+  "pending_plan": {},
+  "plan_snapshot": {},
+  "user_constraints": [],
+  "scanner_progress": {
+    "status": "completed",
+    "processed_count": 1,
+    "total_count": 1,
+    "current_item": "report.pdf",
+    "recent_analysis_items": [
+      {
+        "item_id": "report.pdf",
+        "display_name": "report.pdf",
+        "source_relpath": "report.pdf",
+        "suggested_purpose": "??",
+        "summary": "A"
+      }
+    ],
+    "completed_batches": 3,
+    "message": "已完成 3/3 批并行分析",
+    "batch_count": 3
+  },
+  "assistant_message": {
+    "role": "assistant",
+    "content": "",
+    "id": "assistant-75456270684d40d4a503063bd562296d"
+  },
+  "precheck_summary": null,
+  "execution_report": null,
+  "rollback_report": null,
+  "last_journal_id": null,
+  "integrity_flags": {},
+  "created_at": "2026-04-07T07:42:06+00:00",
+  "updated_at": "2026-04-07T07:42:06+00:00",
+  "stale_reason": null,
+  "last_error": null,
+  "last_ai_pending_plan": null,
+  "summary": ""
+}

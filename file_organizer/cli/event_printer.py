@@ -1,4 +1,6 @@
-﻿from file_organizer.cli.console import default_cli
+from pathlib import Path
+
+from file_organizer.cli.console import default_cli
 
 
 def scanner_ui_handler(event_type, data, cli=default_cli):
@@ -10,7 +12,13 @@ def scanner_ui_handler(event_type, data, cli=default_cli):
     elif event_type == "cycle_start":
         pass
     elif event_type == "tool_start":
-        cli.stream_status("工具调用", f"{data['name']}({data['args']})", style="dim")
+        name = data.get("name")
+        args = data.get("args") or {}
+        if name == "read_local_file":
+            filename = Path(str(args.get("filename") or "文件")).name
+            cli.stream_status("扫描进度", f"正在读取 {filename}", style="dim")
+        else:
+            cli.stream_status("工具调用", f"{name}({args})", style="dim")
     elif event_type == "ai_streaming_start":
         cli.begin_stream()
     elif event_type == "ai_reasoning":

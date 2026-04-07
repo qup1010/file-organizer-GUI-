@@ -66,17 +66,18 @@ export function MinimalScanningView({
                 <Search className="h-3.5 w-3.5" />
               </div>
               <h2 className="text-[14px] font-bold tracking-tight text-on-surface">
-                正在扫描目录
+                正在扫描
               </h2>
             </div>
             <p className="text-[12px] text-ui-muted">
-              正在读取目录结构和文件特征，完成后会自动进入方案整理。
+              正在读取文件，完成后会生成整理方案。
             </p>
           </div>
 
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 rounded-[6px] border border-on-surface/8 bg-surface-container-lowest px-2.5 py-1">
-              <span className="text-[11px] font-medium text-ui-muted">进度</span>
+              <span className="text-[11px] font-medium text-ui-muted">当前进度</span>
+              
               <span className="text-[14px] font-bold tabular-nums text-on-surface">
                 {Math.round(progressPercent)}%
               </span>
@@ -131,9 +132,9 @@ export function MinimalScanningView({
 
               <div className="grid gap-2 sm:grid-cols-3">
                 {[
-                  { label: "模式", value: "全量扫描" },
-                  { label: "线程", value: scanner.batch_count ? `${scanner.batch_count} 并行` : "标准" },
-                  { label: "阶段", value: "生成方案" },
+                  { label: "方式", value: "全量扫描" },
+                  { label: "并发", value: scanner.batch_count ? `${scanner.batch_count} 路` : "1 路" },
+                  { label: "结果", value: "整理方案" },
                 ].map((stat, idx) => (
                   <div key={idx} className="border-l border-on-surface/10 pl-3 py-0.5">
                     <p className="text-[10px] text-ui-muted uppercase tracking-tight">{stat.label}</p>
@@ -147,9 +148,9 @@ export function MinimalScanningView({
             <div className="flex flex-1 flex-col overflow-hidden rounded-[6px] border border-on-surface/8 bg-surface-container-lowest/50">
               <div className="flex items-center justify-between border-b border-on-surface/6 bg-surface-container-lowest px-3 py-2">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface/50">
-                  最近记录
+                  最近处理
                 </span>
-                <span className="text-[10px] text-success/70 font-medium">同步中</span>
+                <span className="text-[10px] text-ui-muted font-medium">更新中</span>
               </div>
               
               <div className="flex-1 overflow-y-auto p-1.5 space-y-1.5 scrollbar-none">
@@ -181,7 +182,7 @@ export function MinimalScanningView({
                     ))
                   ) : (
                     <div className="flex h-full items-center justify-center text-ui-muted opacity-30 py-8">
-                  <p className="text-[11px]">正在等待扫描结果...</p>
+                  <p className="text-[11px]">正在扫描...</p>
                     </div>
                   )}
                 </AnimatePresence>
@@ -193,35 +194,21 @@ export function MinimalScanningView({
           <div className="hidden flex-col gap-4 lg:flex">
             <div className="flex-1 rounded-[6px] border border-on-surface/8 bg-surface-container-low/10 p-4">
               <h4 className="text-[10px] font-bold uppercase tracking-wider text-on-surface/40 mb-4">
-                扫描作业说明
+                说明
               </h4>
               <div className="space-y-4">
                 <div className="space-y-1">
-                  <p className="text-[12px] font-bold text-on-surface">自动分类引擎</p>
+                  <p className="text-[12px] font-bold text-on-surface">扫描中</p>
                   <p className="text-[11px] leading-relaxed text-ui-muted">
-                    系统根据文件摘要自动分类。超大文件仅读取元数据。AI 将根据预设模板分析文件用途并推荐归类。
+                    正在读取目录和文件内容。
                   </p>
                 </div>
 
                 <div className="rounded-[4px] border border-primary/10 bg-primary/5 p-3">
-                  <p className="text-[11px] font-bold text-primary mb-1">扫描作业完成后</p>
+                  <p className="text-[11px] font-bold text-primary mb-1">完成后</p>
                   <p className="text-[10px] leading-relaxed text-primary/70">
-                    您将直接看到第一版整理方案预览。在点击“开始预检”前，您可以继续补充要求。
+                    会自动显示整理方案。
                   </p>
-                </div>
-
-                <div className="pt-2">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-on-surface/30 mb-2">作业指标</div>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-ui-muted">核心目录分析</span>
-                      <span className="font-medium text-on-surface">高优先级</span>
-                    </div>
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-ui-muted">上下文深度</span>
-                      <span className="font-medium text-on-surface">标准</span>
-                    </div>
-                  </div>
                 </div>
               </div>
             </div>

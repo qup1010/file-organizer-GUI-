@@ -18,7 +18,7 @@ MAX_ANALYSIS_RETRIES = 3
 BATCH_ANALYSIS_RETRIES = 2
 BATCH_THRESHOLD = 30
 BATCH_TARGET_SIZE = 15
-MAX_WORKERS = 3
+MAX_SCAN_WORKERS = 6
 WORKDIR_PATH = Path.cwd().resolve()
 SUBMIT_ANALYSIS_TOOL_NAME = "submit_analysis_result"
 
@@ -405,10 +405,17 @@ def _emit_text_response(content: str, event_handler=None) -> None:
     emit(event_handler, "ai_streaming_end", {"full_content": content})
 
 
+def _compute_batch_count(entry_count: int) -> int:
+    if entry_count <= 0:
+        return 0
+    target_batch_count = max(1, math.ceil(entry_count / BATCH_TARGET_SIZE))
+    return min(target_batch_count, MAX_SCAN_WORKERS, entry_count)
+
+
 def _split_batches(entries: list[str]) -> list[list[str]]:
     if not entries:
         return []
-    batch_count = min(MAX_WORKERS, max(1, math.ceil(len(entries) / BATCH_TARGET_SIZE)))
+    batch_count = _compute_batch_count(len(entries))
     base_size, remainder = divmod(len(entries), batch_count)
     batches: list[list[str]] = []
     cursor = 0
@@ -591,30 +598,6 @@ def _serialize_assistant_message(message) -> dict:
     if tool_calls_payload:
         payload["tool_calls"] = tool_calls_payload
     return payload
-
-
-def _emit_text_response(content: str, event_handler=None) -> None:
-    if not content:
-        return
-    emit(event_handler, "ai_streaming_start")
-    emit(event_handler, "ai_chunk", {"content": content})
-    emit(event_handler, "ai_streaming_end", {"full_content": content})
-
-
-def _split_batches(entries: list[str]) -> list[list[str]]:
-    if not entries:
-        return []
-    batch_count = min(MAX_WORKERS, max(1, math.ceil(len(entries) / BATCH_TARGET_SIZE)))
-    base_size, remainder = divmod(len(entries), batch_count)
-    batches: list[list[str]] = []
-    cursor = 0
-    for index in range(batch_count):
-        size = base_size + (1 if index < remainder else 0)
-        if size <= 0:
-            continue
-        batches.append(entries[cursor:cursor + size])
-        cursor += size
-    return batches
 
 
 def _slice_files_info_for_batch(files_info: str, batch_entries: list[str], target_dir: Path) -> str:
@@ -938,7 +921,7 @@ def run_analysis_cycle(target_dir: Path, event_handler=None, model: str | None =
 
     detailed_files_info = list_local_files(str(target_dir), max_depth=1, char_limit=0)
     batches = _split_batches(entries)
-    worker_count = min(MAX_WORKERS, len(batches))
+    worker_count = min(_compute_batch_count(len(entries)), len(batches))
     emit(event_handler, "batch_split", {
         "total_entries": len(entries),
         "batch_count": len(batches),

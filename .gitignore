@@ -2,8 +2,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 FolderPainter
-logs/
-
+logs/*
+need-oranganize-folder/
 # 环境与配置
 .venv/
 venv/

@@ -32,8 +32,8 @@ class ParallelAnalysisTests(unittest.TestCase):
         cases = {
             31: [11, 10, 10],
             45: [15, 15, 15],
-            60: [20, 20, 20],
-            100: [34, 33, 33],
+            60: [15, 15, 15, 15],
+            100: [17, 17, 17, 17, 16, 16],
         }
         for total, expected_sizes in cases.items():
             with self.subTest(total=total):
@@ -149,6 +149,34 @@ class ParallelAnalysisTests(unittest.TestCase):
         self.assertIn(("batch_split", {"total_entries": 31, "batch_count": 3, "worker_count": 3}), events)
         progress_events = [event for event in events if event[0] == "batch_progress"]
         self.assertEqual(len(progress_events), 3)
+
+    def test_run_analysis_cycle_emits_dynamic_worker_count_for_larger_directory(self):
+        entries = self._make_entries(60)
+
+        def fake_analyze_batch(_target_dir, batch_entries, batch_index, _total_batches, _files_info, _model, session_id=None, event_handler=None):
+            del session_id, event_handler
+            return [
+                AnalysisItem(entry_name=name, suggested_purpose="文档", summary=f"{name} summary")
+                for name in batch_entries
+            ]
+
+        events: list[tuple[str, dict]] = []
+        with mock.patch.object(analysis_service, "_analyze_batch", side_effect=fake_analyze_batch), mock.patch.object(
+            analysis_service,
+            "list_local_files",
+            side_effect=["root-info", "detailed-info"],
+        ):
+            rendered = analysis_service.run_analysis_cycle(
+                self.base_dir,
+                event_handler=lambda event_type, data=None: events.append((event_type, data or {})),
+            )
+
+        self.assertIsNotNone(rendered)
+        for name in entries:
+            self.assertIn(name, rendered)
+        self.assertIn(("batch_split", {"total_entries": 60, "batch_count": 4, "worker_count": 4}), events)
+        progress_events = [event for event in events if event[0] == "batch_progress"]
+        self.assertEqual(len(progress_events), 4)
 
     def test_missing_entries_get_placeholder_when_retry_also_fails(self):
         entries = self._make_entries(31)

@@ -14,14 +14,14 @@ submit_plan_diff：只提交本轮变更字段（directory_renames, move_updates
   * source 必须来自原始扫描结果。
   * 顺序 must 一致，目标必须是相对路径且保留原名。
   * 如果某项不需要移动，也需要调用MOVE，但是目标路径必须和源路径完全一致。
-  * 只要这轮变更中有待确认项（unresolved items），就必须使用 unresolved_adds 登记该项的【原始文件名】。
+  * 只要这轮变更中有待确认项（unresolved items），就必须使用 unresolved_adds 登记该项在扫描结果中的【原始相对路径 / source】。
   * 所有待确认项必须使用unresolved_adds提交上去，并且需要创建Review目录，并且把所有待确认项暂时归入Review目录
 
 2. request_unresolved_choices：当你提交的计划中有 unresolved items（待确认项）时，你必须调用此工具来请求用户确认这些项的归类。
   * request_id: 本次待确认请求的唯一标识。
   * summary: 展示在聊天气泡顶部的简短说明。
   * items: 待确认项列表。
-  * 每个 item 的 item_id 必须使用该文件的【原始文件名】，禁止使用 unresolved_1 等占位符。
+  * 每个 item 的 item_id 必须使用该文件在扫描结果中的【原始相对路径 / source】；display_name 再单独放展示名称。禁止使用 unresolved_1 等占位符，也不要只传文件名。
   * 每个 item 必须包含 display_name、question、suggested_folders。
   * suggested_folders 必须恰好提供 2 个候选目录名，不要包含 Review。
   * 如果没有待确认项，禁止调用此工具。

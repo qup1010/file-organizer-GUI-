@@ -51,6 +51,15 @@ class EventPrinterTests(unittest.TestCase):
         self.assertIn("工具调用", output)
         self.assertIn("list_local_files", output)
 
+    def test_tool_start_humanizes_file_read_status(self):
+        cli, buffer = self.build_cli()
+
+        scanner_ui_handler("tool_start", {"name": "read_local_file", "args": {"filename": "report.pdf"}}, cli=cli)
+
+        output = buffer.getvalue()
+        self.assertIn("正在读取", output)
+        self.assertIn("report.pdf", output)
+
     def test_cycle_start_does_not_render_round_banner(self):
         cli, buffer = self.build_cli()
 

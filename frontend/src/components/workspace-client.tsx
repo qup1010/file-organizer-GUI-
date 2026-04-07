@@ -160,7 +160,7 @@ export default function WorkspaceClient() {
       return "下一步请先开始扫描。系统会读取目录结构并建立初始分析范围。";
     }
     if (stage === "scanning") {
-      return "扫描完成后会自动进入第一版整理方案，无需手动切换页面。";
+      return "扫描完成后会自动显示整理方案。";
     }
     if (stage === "planning") {
       return plan.readiness.can_precheck

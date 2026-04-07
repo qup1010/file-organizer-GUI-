@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import uuid
@@ -196,20 +197,18 @@ class OrganizerSessionService:
         )
         self._record_event("scan.started", session)
         seen_entries: set[str] = set()
-        parallel_state = {"enabled": False}
 
         def on_scan_event(event_type: str, data: dict):
             self._forward_runtime_event("scan", session.session_id, event_type, data)
+            changed = False
             if event_type == "batch_split":
-                parallel_state["enabled"] = True
                 batch_count = max(1, int(data.get("batch_count") or 1))
                 worker_count = max(1, int(data.get("worker_count") or batch_count))
                 session.scanner_progress["batch_count"] = batch_count
                 session.scanner_progress["completed_batches"] = 0
                 session.scanner_progress["message"] = f"文件较多，已拆分为 {batch_count} 个批次并行分析"
                 session.scanner_progress["current_item"] = f"已启动 {worker_count} 个并行分析线程"
-                self.store.save(session)
-                self._record_event("scan.progress", session)
+                changed = True
             elif event_type == "batch_progress":
                 total_batches = max(1, int(data.get("total_batches") or session.scanner_progress.get("batch_count") or 1))
                 completed_batches = max(0, int(data.get("completed_batches") or 0))
@@ -223,23 +222,28 @@ class OrganizerSessionService:
                     total_count,
                     int((completed_batches / total_batches) * total_count) if total_count else 0,
                 )
-                if batch_size:
-                    session.scanner_progress["current_item"] = f"第 {min(batch_index + 1, total_batches)}/{total_batches} 批（{batch_size} 项）"
-                else:
-                    session.scanner_progress["current_item"] = f"第 {min(batch_index + 1, total_batches)}/{total_batches} 批"
+                current_item = str(session.scanner_progress.get("current_item") or "")
+                if not self._is_specific_scan_target(current_item):
+                    if batch_size:
+                        session.scanner_progress["current_item"] = f"第 {min(batch_index + 1, total_batches)}/{total_batches} 批（{batch_size} 项）"
+                    else:
+                        session.scanner_progress["current_item"] = f"第 {min(batch_index + 1, total_batches)}/{total_batches} 批"
                 if status == "failed":
                     session.scanner_progress["message"] = f"第 {batch_index + 1}/{total_batches} 批失败，正在继续汇总其余批次"
                 else:
                     session.scanner_progress["message"] = f"已完成 {completed_batches}/{total_batches} 批并行分析"
-                self.store.save(session)
-                self._record_event("scan.progress", session)
-            elif not parallel_state["enabled"] and self._update_single_scan_progress(
+                changed = True
+
+            if event_type != "batch_split" and self._update_single_scan_progress(
                 session,
                 target_dir,
                 seen_entries,
                 event_type,
                 data,
             ):
+                changed = True
+
+            if changed:
                 self.store.save(session)
                 self._record_event("scan.progress", session)
 
@@ -324,6 +328,108 @@ class OrganizerSessionService:
     def _message_blocks(message: dict) -> list[dict]:
         blocks = message.get("blocks")
         return blocks if isinstance(blocks, list) else []
+
+    @staticmethod
+    def _ordered_unresolved_sources(pending: PendingPlan) -> list[str]:
+        unresolved_set = set(pending.unresolved_items or [])
+        ordered: list[str] = []
+        seen: set[str] = set()
+        for move in pending.moves:
+            if move.source in unresolved_set and move.source not in seen:
+                ordered.append(move.source)
+                seen.add(move.source)
+        for item_id in pending.unresolved_items or []:
+            if item_id not in seen:
+                ordered.append(item_id)
+                seen.add(item_id)
+        return ordered
+
+    @staticmethod
+    def _normalize_unresolved_block_items(block: dict, candidate_ids: list[str]) -> bool:
+        items = block.get("items")
+        if not isinstance(items, list) or not items:
+            return False
+
+        exact_candidates = {candidate.lower(): candidate for candidate in candidate_ids}
+        basename_candidates: dict[str, list[str]] = {}
+        for candidate in candidate_ids:
+            basename_candidates.setdefault(Path(candidate).name.lower(), []).append(candidate)
+
+        changed = False
+        used_candidates: set[str] = set()
+        normalized_ids_by_index: list[str | None] = []
+
+        for item in items:
+            if not isinstance(item, dict):
+                normalized_ids_by_index.append(None)
+                continue
+
+            raw_id = str(item.get("item_id") or "").strip()
+            display_name = str(item.get("display_name") or "").strip()
+            normalized_id = None
+
+            if raw_id:
+                exact_match = exact_candidates.get(raw_id.lower())
+                if exact_match and exact_match not in used_candidates:
+                    normalized_id = exact_match
+
+            if normalized_id is None:
+                basename = Path(raw_id or display_name).name.lower()
+                for candidate in basename_candidates.get(basename, []):
+                    if candidate not in used_candidates:
+                        normalized_id = candidate
+                        break
+
+            if normalized_id:
+                if raw_id != normalized_id:
+                    item["item_id"] = normalized_id
+                    changed = True
+                if not display_name:
+                    item["display_name"] = Path(normalized_id).name
+                    changed = True
+                used_candidates.add(normalized_id)
+
+            normalized_ids_by_index.append(normalized_id or raw_id or None)
+
+        submitted = block.get("submitted_resolutions")
+        if isinstance(submitted, list):
+            for index, resolution in enumerate(submitted):
+                if not isinstance(resolution, dict):
+                    continue
+                normalized_id = normalized_ids_by_index[index] if index < len(normalized_ids_by_index) else None
+                if not normalized_id:
+                    continue
+                if str(resolution.get("item_id") or "").strip() != normalized_id:
+                    resolution["item_id"] = normalized_id
+                    changed = True
+                if not resolution.get("display_name"):
+                    resolution["display_name"] = Path(normalized_id).name
+                    changed = True
+
+        return changed
+
+    def _normalize_unresolved_request_blocks(self, session: OrganizerSession) -> bool:
+        pending = self._pending_plan_from_session(session)
+        candidate_ids = self._ordered_unresolved_sources(pending)
+        if not candidate_ids:
+            return False
+
+        changed = False
+        for message in session.messages:
+            for block in self._message_blocks(message):
+                if block.get("type") != "unresolved_choices":
+                    continue
+                if self._normalize_unresolved_block_items(block, candidate_ids):
+                    changed = True
+
+        if session.assistant_message:
+            for block in self._message_blocks(session.assistant_message):
+                if block.get("type") != "unresolved_choices":
+                    continue
+                if self._normalize_unresolved_block_items(block, candidate_ids):
+                    changed = True
+
+        return changed
 
     def _find_unresolved_request_message(self, session: OrganizerSession, request_id: str) -> tuple[dict | None, dict | None]:
         for message in reversed(session.messages):
@@ -1062,6 +1168,19 @@ class OrganizerSessionService:
             return None
         return relative.parts[0]
 
+    @staticmethod
+    def _is_specific_scan_target(value: str | None) -> bool:
+        text = str(value or "").strip()
+        if not text:
+            return False
+        generic_prefixes = ("已启动 ", "第 ")
+        generic_labels = {
+            "当前目录",
+            "正在准备扫描任务",
+            "正在等待模型响应",
+        }
+        return text not in generic_labels and not text.startswith(generic_prefixes)
+
     def _update_single_scan_progress(
         self,
         session: OrganizerSession,
@@ -1412,7 +1531,8 @@ class OrganizerSessionService:
         session = self.store.load(session_id)
         if session is None:
             raise KeyError(f"Session {session_id} not found")
-        if self._ensure_plan_snapshot_consistency(session):
+        changed = self._normalize_unresolved_request_blocks(session)
+        if self._ensure_plan_snapshot_consistency(session) or changed:
             self.store.save(session)
         return session
 
@@ -1430,21 +1550,22 @@ class OrganizerSessionService:
                 self._ensure_message_id(message)
         if session.assistant_message and not session.assistant_message.get("id"):
             self._ensure_message_id(session.assistant_message)
+        self._normalize_unresolved_request_blocks(session)
         self._ensure_plan_snapshot_consistency(session)
         return {
             "session_id": session.session_id,
             "target_dir": str(session.target_dir),
             "stage": session.stage,
             "summary": session.summary,
-            "scanner_progress": session.scanner_progress,
-            "plan_snapshot": session.plan_snapshot,
-            "precheck_summary": session.precheck_summary,
-            "execution_report": session.execution_report,
-            "rollback_report": session.rollback_report,
-            "assistant_message": session.assistant_message,
-            "messages": session.messages,
+            "scanner_progress": copy.deepcopy(session.scanner_progress),
+            "plan_snapshot": copy.deepcopy(session.plan_snapshot),
+            "precheck_summary": copy.deepcopy(session.precheck_summary),
+            "execution_report": copy.deepcopy(session.execution_report),
+            "rollback_report": copy.deepcopy(session.rollback_report),
+            "assistant_message": copy.deepcopy(session.assistant_message),
+            "messages": copy.deepcopy(session.messages),
             "user_constraints": list(session.user_constraints),
-            "integrity_flags": session.integrity_flags,
+            "integrity_flags": copy.deepcopy(session.integrity_flags),
             "stale_reason": session.stale_reason,
             "last_journal_id": session.last_journal_id,
             "last_error": session.last_error,

@@ -290,7 +290,7 @@ export function ConversationPanel({
             </div>
             <div className="flex flex-1 items-center justify-between gap-4">
           <div className="space-y-0.5">
-                <p className="text-[13px] font-bold text-on-surface">正在分析目录结构...</p>
+                <p className="text-[13px] font-bold text-on-surface">正在扫描</p>
                 <div className="flex items-center gap-2 text-[10px] text-ui-muted font-bold uppercase tracking-wider">
                   <span className="relative flex h-1.5 w-1.5">
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/40 opacity-75"></span>
@@ -476,10 +476,10 @@ export function ConversationPanel({
           <button
             type="button"
             onClick={handleJumpToBottom}
-            className="sticky bottom-4 ml-auto flex items-center gap-2 rounded-full bg-on-surface px-4 py-2 text-[12px] font-medium text-white shadow-lg"
+            className="sticky bottom-6 z-20 mx-auto flex items-center gap-2 rounded-full border border-black/10 bg-on-surface/90 px-5 py-2.5 text-[12px] font-black tracking-tight text-surface shadow-2xl backdrop-blur-md transition-all hover:scale-105 active:scale-95 sm:bottom-8"
           >
             回到底部
-            <ChevronDown className="h-3.5 w-3.5" />
+            <ChevronDown className="h-4 w-4" />
           </button>
         )}
       </div>
