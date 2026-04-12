@@ -304,6 +304,109 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
 
         self.assertNotIn("请先调用 submit_plan_diff", messages[1]["content"])
 
+    def test_build_initial_messages_with_planner_items_hides_real_source_names(self):
+        messages = organizer_service.build_initial_messages(
+            "very_long_real_filename_contract_v12_final_really_final.pdf | 财务合同 | 付款协议",
+            planner_items=[
+                {
+                    "planner_id": "F001",
+                    "source_relpath": "very_long_real_filename_contract_v12_final_really_final.pdf",
+                    "display_name": "very_long_real_filename_contract_v12_final_really_final.pdf",
+                    "suggested_purpose": "财务合同",
+                    "summary": "付款协议",
+                    "ext": "pdf",
+                    "parent_hint": "",
+                }
+            ],
+        )
+
+        self.assertIn("F001 | pdf | 财务合同 | 付款协议", messages[0]["content"])
+        self.assertNotIn(
+            "very_long_real_filename_contract_v12_final_really_final.pdf | 财务合同 | 付款协议",
+            messages[0]["content"],
+        )
+
+    def test_run_organizer_cycle_translates_planner_ids_back_to_real_sources(self):
+        diff_call = SimpleNamespace(
+            function=SimpleNamespace(
+                name="submit_plan_diff",
+                arguments='{"directory_renames": [], "move_updates": [{"item_id": "F001", "target_dir": "Study"}], "unresolved_adds": ["F001"], "unresolved_removals": [], "summary": "已按用途整理"}',
+            )
+        )
+        message = SimpleNamespace(content="", tool_calls=[diff_call])
+
+        with mock.patch.object(organizer_service, "chat_one_round", return_value=message):
+            _, result = organizer_service.run_organizer_cycle(
+                messages=[],
+                scan_lines="very_long_real_filename_contract_v12_final_really_final.pdf | 财务合同 | 付款协议",
+                planner_items=[
+                    {
+                        "planner_id": "F001",
+                        "source_relpath": "very_long_real_filename_contract_v12_final_really_final.pdf",
+                        "display_name": "very_long_real_filename_contract_v12_final_really_final.pdf",
+                        "suggested_purpose": "财务合同",
+                        "summary": "付款协议",
+                        "ext": "pdf",
+                        "parent_hint": "",
+                    }
+                ],
+                pending_plan=PendingPlan(),
+            )
+
+        self.assertEqual(
+            result["pending_plan"].moves[0].source,
+            "very_long_real_filename_contract_v12_final_really_final.pdf",
+        )
+        self.assertEqual(
+            result["pending_plan"].moves[0].target,
+            "Study/very_long_real_filename_contract_v12_final_really_final.pdf",
+        )
+
+    def test_run_organizer_cycle_does_not_leak_planner_ids_into_pending_unresolved_items(self):
+        diff_call = self._tool_call(
+            "submit_plan_diff",
+            '{"directory_renames": [], "move_updates": [{"item_id": "F001", "target_dir": "Review"}], "unresolved_adds": ["F001"], "unresolved_removals": [], "summary": "需要你确认归类"}',
+            tool_id="call_diff",
+        )
+        unresolved_call = self._tool_call(
+            "request_unresolved_choices",
+            '{"request_id": "req_1", "summary": "请确认归类", "items": [{"item_id": "F001", "display_name": "very_long_real_filename_contract_v12_final_really_final.pdf", "question": "应该放学习资料还是财务资料？", "suggested_folders": ["学习资料", "财务资料"]}]}',
+            tool_id="call_unresolved",
+        )
+        message = SimpleNamespace(content="这份文件需要你确认归类。", tool_calls=[diff_call, unresolved_call])
+
+        with mock.patch.object(organizer_service, "chat_one_round", return_value=message):
+            _, result = organizer_service.run_organizer_cycle(
+                messages=[],
+                scan_lines="very_long_real_filename_contract_v12_final_really_final.pdf | 财务合同 | 付款协议",
+                planner_items=[
+                    {
+                        "planner_id": "F001",
+                        "source_relpath": "very_long_real_filename_contract_v12_final_really_final.pdf",
+                        "display_name": "very_long_real_filename_contract_v12_final_really_final.pdf",
+                        "suggested_purpose": "财务合同",
+                        "summary": "付款协议",
+                        "ext": "pdf",
+                        "parent_hint": "",
+                    }
+                ],
+                pending_plan=PendingPlan(),
+            )
+
+        pending = result["pending_plan"]
+        self.assertEqual(
+            [move.source for move in pending.moves],
+            ["very_long_real_filename_contract_v12_final_really_final.pdf"],
+        )
+        self.assertEqual(
+            pending.moves[0].target,
+            "Review/very_long_real_filename_contract_v12_final_really_final.pdf",
+        )
+        self.assertEqual(
+            pending.unresolved_items,
+            ["very_long_real_filename_contract_v12_final_really_final.pdf"],
+        )
+
     def test_run_organizer_cycle_retries_with_full_assistant_message_for_invalid_plan_diff(self):
         initial_messages = [{"role": "user", "content": "请整理"}]
         first_message = SimpleNamespace(

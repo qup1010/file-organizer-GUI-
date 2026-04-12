@@ -25,6 +25,7 @@ class LockResult:
 class OrganizerSession:
     session_id: str
     target_dir: str
+    planning_schema_version: int = 2
     stage: str = "draft"
     strategy_template_id: str = DEFAULT_TEMPLATE_ID
     strategy_template_label: str = "通用下载"
@@ -33,6 +34,7 @@ class OrganizerSession:
     strategy_note: str = ""
     messages: list[dict] = field(default_factory=list)
     scan_lines: str = ""
+    planner_items: list[dict] = field(default_factory=list)
     pending_plan: dict = field(default_factory=dict)
     plan_snapshot: dict = field(default_factory=dict)
     user_constraints: list[str] = field(default_factory=list)
@@ -59,6 +61,7 @@ class OrganizerSession:
     @classmethod
     def from_dict(cls, data: dict) -> "OrganizerSession":
         return cls(
+            planning_schema_version=int(data.get("planning_schema_version", 1) or 1),
             session_id=data["session_id"],
             target_dir=data["target_dir"],
             stage=data.get("stage", "draft"),
@@ -69,6 +72,7 @@ class OrganizerSession:
             strategy_note=data.get("strategy_note", ""),
             messages=list(data.get("messages", [])),
             scan_lines=data.get("scan_lines", ""),
+            planner_items=list(data.get("planner_items", [])),
             pending_plan=dict(data.get("pending_plan", {})),
             plan_snapshot=dict(data.get("plan_snapshot", {})),
             user_constraints=list(data.get("user_constraints", [])),
