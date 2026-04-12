@@ -283,24 +283,42 @@ export function ConversationPanel({
           <motion.div
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="flex items-center gap-3.5 rounded-[6px] border border-on-surface/8 bg-surface-container-low px-4 py-2.5 shadow-sm shadow-black/[0.02]"
+            className="rounded-[6px] border border-on-surface/8 bg-surface-container-low px-4 py-3 shadow-sm shadow-black/[0.02]"
           >
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[4px] border border-primary/20 bg-primary/5 text-primary">
-              <Bot className="h-4 w-4" />
-            </div>
-            <div className="flex flex-1 items-center justify-between gap-4">
-          <div className="space-y-0.5">
-                <p className="text-[13px] font-bold text-on-surface">正在扫描</p>
-                <div className="flex items-center gap-2 text-[10px] text-ui-muted font-bold uppercase tracking-wider">
-                  <span className="relative flex h-1.5 w-1.5">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/40 opacity-75"></span>
-                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary/60"></span>
-                  </span>
-                  正在扫描
-                </div>
+            <div className="flex items-start gap-3.5">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[4px] border border-primary/20 bg-primary/5 text-primary">
+                <Bot className="h-4 w-4" />
               </div>
-              <div className="flex items-center gap-2 rounded-full bg-primary/10 px-2.5 py-0.5 text-[12px] font-black tabular-nums text-primary">
-                {scanningPercent}%
+              <div className="min-w-0 flex-1 space-y-2">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-0.5">
+                    <p className="text-[13px] font-bold text-on-surface">正在扫描</p>
+                    <div className="flex items-center gap-2 text-[10px] text-ui-muted font-bold uppercase tracking-wider">
+                      <span className="relative flex h-1.5 w-1.5">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/40 opacity-75"></span>
+                        <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary/60"></span>
+                      </span>
+                      当前处理：{currentScanningItem}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 rounded-full bg-primary/10 px-2.5 py-0.5 text-[12px] font-black tabular-nums text-primary">
+                    {scanningPercent}%
+                  </div>
+                </div>
+
+                {scanningItems.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {scanningItems.slice(0, 3).map((item) => (
+                      <span
+                        key={item.item_id}
+                        className="max-w-[180px] truncate rounded-full border border-on-surface/8 bg-surface px-2.5 py-1 text-[11px] font-semibold text-on-surface-variant"
+                        title={item.display_name}
+                      >
+                        {item.display_name}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             </div>
           </motion.div>

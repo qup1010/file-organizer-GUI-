@@ -201,6 +201,9 @@ export function useSession(sessionId: string | null) {
     }
 
     if (event.event_type === "scan.action" || event.event_type === "plan.action") {
+      if (event.session_snapshot) {
+        setSnapshot(event.session_snapshot);
+      }
       const runtime = assistantRuntimeFromAction(event);
       if (runtime) {
         setAssistantRuntime(runtime);
@@ -209,11 +212,17 @@ export function useSession(sessionId: string | null) {
     }
 
     if (event.event_type === "scan.ai_typing") {
+      if (event.session_snapshot) {
+        setSnapshot(event.session_snapshot);
+      }
       setAssistantRuntime(assistantRuntimeFromTyping("scan"));
       return;
     }
 
     if (event.event_type === "plan.ai_typing") {
+      if (event.session_snapshot) {
+        setSnapshot(event.session_snapshot);
+      }
       setAssistantRuntime(assistantRuntimeFromTyping("plan"));
       setAssistantDraft((prev) => prev + (event.content || ""));
       return;

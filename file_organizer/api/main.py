@@ -686,6 +686,16 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
             return {"path": os.path.abspath(directory)}
         return {"path": None}
 
+    @app.get("/api/utils/common-dirs")
+    def common_dirs():
+        home = Path.home()
+        dirs = []
+        for label, name in [("下载", "Downloads"), ("桌面", "Desktop"), ("文档", "Documents")]:
+            p = home / name
+            if p.exists():
+                dirs.append({"label": label, "path": str(p)})
+        return dirs
+
     @app.post("/api/icon-workbench/sessions")
     def create_icon_workbench_session(payload: IconWorkbenchCreatePayload):
         try:

@@ -25,7 +25,7 @@ class LockResult:
 class OrganizerSession:
     session_id: str
     target_dir: str
-    planning_schema_version: int = 2
+    planning_schema_version: int = 3
     stage: str = "draft"
     strategy_template_id: str = DEFAULT_TEMPLATE_ID
     strategy_template_label: str = "通用下载"

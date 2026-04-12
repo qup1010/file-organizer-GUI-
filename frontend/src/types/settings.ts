@@ -11,6 +11,7 @@ export interface PresetSummary {
 export interface TextSettingsPreset extends PresetSummary {
   OPENAI_BASE_URL: string;
   OPENAI_MODEL: string;
+  OPENAI_API_KEY: string;
   secret_state: SecretState;
 }
 
@@ -18,12 +19,14 @@ export interface VisionSettingsPreset extends PresetSummary {
   IMAGE_ANALYSIS_NAME: string;
   IMAGE_ANALYSIS_BASE_URL: string;
   IMAGE_ANALYSIS_MODEL: string;
+  IMAGE_ANALYSIS_API_KEY: string;
   secret_state: SecretState;
 }
 
 export interface SafeModelConfig {
   base_url: string;
   model: string;
+  api_key?: string;
   secret_state: SecretState;
   configured?: boolean;
   name?: string;
@@ -50,6 +53,7 @@ export interface BgRemovalSettingsPreset {
   model_id: string;
   api_type: string;
   payload_template: string;
+  hf_api_token: string;
   secret_state: SecretState;
 }
 

@@ -655,7 +655,7 @@ export default function IconWorkbenchV2() {
   const renderEmptyState = () => (
     <div className="flex-1 px-6 py-12 lg:py-20">
       <div className="mx-auto flex max-w-[640px] flex-col items-center text-center">
-        <div className="relative mb-8 flex h-20 w-20 items-center justify-center rounded-[24px] bg-primary/10 text-primary shadow-[0_12px_24px_-8px_rgba(var(--primary-rgb),0.3)]">
+        <div className="relative mb-8 flex h-20 w-20 items-center justify-center rounded-[14px] bg-primary/10 text-primary shadow-[0_12px_24px_-8px_rgba(var(--primary-rgb),0.3)]">
           <FolderPlus className="h-10 w-10" />
           <div className="absolute -right-2 -top-2 flex h-8 w-8 items-center justify-center rounded-full border-[3px] border-white bg-primary text-white shadow-sm">
             <Sparkles className="h-4 w-4" />

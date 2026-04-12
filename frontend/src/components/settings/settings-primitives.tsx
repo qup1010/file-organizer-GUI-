@@ -117,7 +117,9 @@ export function StrategyOptionButton({
       onClick={onClick}
       className={cn(
         "w-full rounded-[10px] border px-4 py-3 text-left transition-colors",
-        active ? "border-primary/20 bg-primary/6 shadow-[0_10px_22px_rgba(0,0,0,0.04)]" : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/16 hover:bg-white",
+        active 
+          ? "border-primary/25 bg-primary/10 shadow-[0_8px_20px_rgba(0,0,0,0.12)] selection-active" 
+          : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
       )}
     >
       <p className={cn("text-[14px] font-semibold tracking-tight", active ? "text-primary" : "text-on-surface")}>{label}</p>
@@ -194,8 +196,8 @@ export function PresetManager({
             className={cn(
               "group flex items-center justify-between rounded-[10px] border px-3.5 py-3 text-left transition-colors",
               activeId === preset.id
-                ? "border-primary/18 bg-primary/6 shadow-[0_8px_18px_rgba(0,0,0,0.03)]"
-                : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/14 hover:bg-white",
+                ? "border-primary/25 bg-primary/10 shadow-[0_8px_20px_rgba(0,0,0,0.08)]"
+                : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/18 hover:bg-surface-container-low",
             )}
           >
             <div className="min-w-0">
@@ -287,8 +289,8 @@ export function PresetSelector({
             className={cn(
               "flex min-h-[54px] w-full items-center justify-between gap-4 rounded-[14px] border px-4 py-3 text-left transition-[border-color,background-color,box-shadow] duration-180",
               open
-                ? "border-primary/40 bg-surface-container-lowest shadow-[0_0_0_4px_rgba(0,120,212,0.10)]"
-                : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/18 hover:bg-white",
+                ? "border-primary/40 bg-surface-container-low shadow-[0_0_0_4px_rgba(0,120,212,0.12)]"
+                : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/25 hover:bg-surface-container-low",
               disabled && "cursor-not-allowed opacity-55",
             )}
           >
@@ -332,8 +334,10 @@ export function PresetSelector({
               <div
                 key={preset.id}
                 className={cn(
-                  "group flex items-center gap-3 rounded-[12px] px-3 py-3 transition-colors",
-                  active ? "bg-primary/[0.06]" : "hover:bg-surface-container-low",
+                  "group flex items-center gap-3 rounded-[10px] px-3 py-2.5 transition-all",
+                  active 
+                    ? "bg-primary/10 ring-1 ring-inset ring-primary/20" 
+                    : "hover:bg-on-surface/[0.04] active:scale-[0.98]",
                 )}
               >
                 <button

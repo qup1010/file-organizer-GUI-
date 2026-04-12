@@ -146,11 +146,14 @@ export function MinimalScanningView({
                   ) : null}
                 </div>
 
-                <div className="ml-auto flex items-center gap-2.5 rounded-[10px] bg-on-surface/[0.03] pl-3 py-1 pr-2 border border-on-surface/[0.04] max-w-[40%]">
+                <div className="ml-auto flex items-center gap-2.5 rounded-[10px] bg-on-surface/[0.03] pl-3 py-1 pr-2 border border-on-surface/[0.04] max-w-[46%]">
                   <Loader2 className="h-3 w-3 shrink-0 animate-spin text-on-surface-variant/40" />
-                  <p className="text-[12px] font-bold text-on-surface/60 leading-none truncate" title={currentItem}>
-                    {currentItem}
-                  </p>
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-ui-muted">当前处理</div>
+                    <p className="text-[12px] font-bold text-on-surface/60 leading-none truncate" title={currentItem}>
+                      {currentItem}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -175,6 +178,11 @@ export function MinimalScanningView({
                 <AnimatePresence initial={false}>
                   {recentItems.length > 0 || isThinking ? (
                     <div className="space-y-0.5 px-3 py-2">
+                      {recentItems.length > 0 ? (
+                        <div className="mb-2 px-1 text-[11px] font-semibold text-ui-muted">
+                          最近已扫描 / 正在分析的文件
+                        </div>
+                      ) : null}
                       {isThinking && (
                         <motion.div
                           initial={{ opacity: 0, height: 0 }}

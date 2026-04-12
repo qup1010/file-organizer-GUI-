@@ -66,6 +66,7 @@ export interface ApiClient {
   // utils
   openDir(path: string): Promise<{ status: string }>;
   selectDir(): Promise<{ path: string | null }>;
+  getCommonDirs(): Promise<{ label: string; path: string }[]>;
   getHistory(): Promise<HistoryItem[]>;
   deleteHistoryEntry(entry_id: string): Promise<{ status: string; entry_id: string; entry_type: string }>;
   getSettings(): Promise<SettingsSnapshot>;
@@ -202,6 +203,12 @@ export function createApiClient(baseUrl: string, apiToken?: string): ApiClient {
         headers: buildAuthHeaders(apiToken),
       });
       return parseResponse<{ path: string | null }>(response);
+    },
+    async getCommonDirs() {
+      const response = await fetch(joinUrl(baseUrl, "/api/utils/common-dirs"), {
+        headers: buildAuthHeaders(apiToken),
+      });
+      return parseResponse<{ label: string; path: string }[]>(response);
     },
     async getHistory() {
       const response = await fetch(joinUrl(baseUrl, "/api/history"), {

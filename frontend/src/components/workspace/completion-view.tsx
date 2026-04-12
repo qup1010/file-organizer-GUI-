@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils";
 import { DirectoryTreeDiff, type DirectoryTreeLeafEntry, type DirectoryTreeFilter } from "./directory-tree-diff";
 import { useState } from "react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { MarkdownProse } from "./markdown-prose";
+
 
 interface CompletionViewProps {
   journal: JournalSummary | null;
@@ -14,7 +16,7 @@ interface CompletionViewProps {
   targetDir: string;
   isBusy: boolean;
   readOnly?: boolean;
-  onOpenExplorer: () => void;
+  onOpenExplorer: (path?: string) => void;
   onCleanupDirs: () => void;
   onRollback: () => void;
   onGoHome: () => void;
@@ -102,7 +104,7 @@ export function CompletionView({
   };
 
   return (
-    <div className="mx-auto max-w-[1360px] animate-in fade-in slide-in-from-bottom-4 space-y-5 py-5 duration-500">
+    <div className="mx-auto max-w-[1360px] animate-in fade-in slide-in-from-bottom-4 space-y-5 py-5 duration-500 @container">
       <section className="overflow-hidden rounded-[12px] border border-on-surface/8 bg-surface-container-lowest shadow-[0_18px_44px_rgba(0,0,0,0.04)]">
         <div className="border-b border-on-surface/8 bg-surface px-4 py-3.5 lg:px-5">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -119,9 +121,9 @@ export function CompletionView({
               <h2 className="text-[1.35rem] font-bold font-headline tracking-tight text-on-surface lg:text-[1.8rem] leading-[1.1]">
                 {isPartial ? "请检查未完成的条目" : "这次整理已经完成"}
               </h2>
-              <p className="max-w-2xl text-[14px] leading-7 text-ui-muted opacity-80">
-                {summary || "文件已按方案完成移动。建议先看下方结果对比；如果结果不符合预期，可以回退这次整理。"}
-              </p>
+                            <div className="max-w-2xl text-[14px] leading-7 text-ui-muted opacity-80 [&>div>p]:mb-1 [&>div>p:last-child]:mb-0">
+                {summary ? <MarkdownProse content={summary} /> : "文件已按方案完成移动。建议先看下方结果对比；如果结果不符合预期，可以回退这次整理。"}
+              </div>
             </div>
 
             <div className="rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-4 py-2.5 font-mono">
@@ -131,7 +133,7 @@ export function CompletionView({
           </div>
         </div>
 
-        <div className="grid gap-2.5 p-4 sm:grid-cols-2 xl:grid-cols-4 lg:px-5 lg:pb-5">
+        <div className="grid gap-2.5 p-4 @sm:grid-cols-2 @2xl:grid-cols-4 lg:px-5 lg:pb-5">
           <div className="rounded-[12px] border border-on-surface/8 bg-surface-container-lowest px-5 py-5 shadow-sm">
             <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-ui-muted opacity-60">
               <CheckCircle2 className="h-3.5 w-3.5 text-success-dim" />
@@ -258,7 +260,7 @@ export function CompletionView({
         </button>
         <button
           type="button"
-          onClick={onOpenExplorer}
+          onClick={() => onOpenExplorer(targetDir)}
           disabled={isBusy}
           className="order-1 flex items-center justify-center gap-3 rounded-[10px] border border-primary/20 bg-primary px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary-dim active:scale-[0.98] disabled:opacity-40"
         >

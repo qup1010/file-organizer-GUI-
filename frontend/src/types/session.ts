@@ -78,6 +78,8 @@ export interface PlanItem {
   target_relpath: string | null;
   suggested_purpose?: string;
   content_summary?: string;
+  reason?: string;
+  confidence?: number | null;
   status: "planned" | "unresolved" | "review" | "invalidated" | string;
 }
 
@@ -107,8 +109,17 @@ export interface PlanSnapshot {
 }
 
 export interface PrecheckMovePreview {
+  item_id: string;
   source: string;
   target: string;
+}
+
+export interface PrecheckIssue {
+  id: string;
+  severity: "blocking" | "warning" | "review";
+  issue_type: string;
+  message: string;
+  related_item_ids: string[];
 }
 
 export interface PrecheckSummary {
@@ -117,6 +128,7 @@ export interface PrecheckSummary {
   warnings: string[];
   mkdir_preview: string[];
   move_preview: PrecheckMovePreview[];
+  issues: PrecheckIssue[];
 }
 
 export interface ExecutionReport {
@@ -345,9 +357,28 @@ export function createDemoSessionSnapshot(stage: SessionStage): SessionSnapshot 
     warnings: stage === "completed" ? [] : ["建议先确认 Review 组中的异常文件"],
     mkdir_preview: ["Docs", "Review"],
     move_preview: [
-      { source: "invoice-2026.pdf", target: "Docs/invoice-2026.pdf" },
-      { source: "weird-asset.bin", target: "Review/weird-asset.bin" },
+      { item_id: "invoice-2026.pdf", source: "invoice-2026.pdf", target: "Docs/invoice-2026.pdf" },
+      { item_id: "weird-asset.bin", source: "weird-asset.bin", target: "Review/weird-asset.bin" },
     ],
+    issues: stage === "planning"
+      ? [
+          {
+            id: "issue-unresolved",
+            severity: "blocking",
+            issue_type: "unresolved_items",
+            message: "仍有 1 个待确认项未处理",
+            related_item_ids: ["weird-asset.bin"],
+          },
+        ]
+      : [
+          {
+            id: "issue-review",
+            severity: "review",
+            issue_type: "review_items",
+            message: "建议先确认 Review 组中的异常文件",
+            related_item_ids: ["weird-asset.bin"],
+          },
+        ],
   };
 
   const items: PlanItem[] = [
@@ -356,6 +387,8 @@ export function createDemoSessionSnapshot(stage: SessionStage): SessionSnapshot 
       display_name: "invoice-2026.pdf",
       source_relpath: "invoice-2026.pdf",
       target_relpath: "Docs/invoice-2026.pdf",
+      reason: "发票类文档适合进入 Docs。",
+      confidence: 0.92,
       status: "planned",
     },
     {
@@ -363,6 +396,8 @@ export function createDemoSessionSnapshot(stage: SessionStage): SessionSnapshot 
       display_name: "weird-asset.bin",
       source_relpath: "weird-asset.bin",
       target_relpath: "Review/weird-asset.bin",
+      reason: "二进制文件用途不明确，先放入 Review。",
+      confidence: 0.41,
       status: stage === "planning" ? "unresolved" : "review",
     },
   ];

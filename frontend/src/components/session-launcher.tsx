@@ -7,12 +7,16 @@ import {
   ArrowLeft,
   ArrowRight,
   CheckCircle2,
+  ChevronRight,
+  Download,
+  FileText,
   FolderOpen,
   FolderTree,
   History,
   Layers3,
   Loader2,
-  Palette,
+  Monitor,
+  Search,
   ShieldCheck,
   Sparkles,
   X,
@@ -35,7 +39,7 @@ import {
   shouldSkipLaunchStrategyPrompt,
   STRATEGY_TEMPLATES,
 } from "@/lib/strategy-templates";
-import { SessionSnapshot, SessionStrategySelection, SessionStrategySummary } from "@/types/session";
+import { HistoryItem, SessionSnapshot, SessionStrategySelection, SessionStrategySummary } from "@/types/session";
 import { StrategySummaryChips } from "./launcher/strategy-summary-chips";
 import { LaunchTransitionOverlay } from "./launcher/launch-transition-overlay";
 import { StrategyDialog } from "./launcher/strategy-dialog";
@@ -64,7 +68,10 @@ export function SessionLauncher() {
   const [loading, setLoading] = useState(false);
   const [launchTransitionOpen, setLaunchTransitionOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [latestHistory, setLatestHistory] = useState<HistoryItem | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(true);
   const [resumePrompt, setResumePrompt] = useState<{ sessionId: string; snapshot: SessionSnapshot } | null>(null);
+  const [commonDirs, setCommonDirs] = useState<{ label: string; path: string }[]>([]);
 
   const resumeStrategy = resumePrompt?.snapshot.strategy || DEFAULT_STRATEGY_SUMMARY;
   const resumeStage = resumePrompt?.snapshot.stage;
@@ -73,6 +80,16 @@ export function SessionLauncher() {
   const currentTemplate = getTemplateMeta(savedLaunchStrategy.template_id);
   const namingLabel = currentSummary.naming_style_label;
   const cautionLabel = currentSummary.caution_level_label;
+  const latestHistoryName = latestHistory?.target_dir?.replace(/[\\/]$/, "").split(/[\\/]/).pop() || "最近任务";
+  const latestHistoryStage = latestHistory?.is_session
+    ? (latestHistory.status === "ready_to_execute" ? "等待执行" : latestHistory.status === "ready_for_precheck" ? "可开始预检" : latestHistory.status === "planning" ? "正在调整方案" : latestHistory.status === "scanning" ? "正在扫描" : latestHistory.status === "completed" ? "已完成" : latestHistory?.status || "最近任务")
+    : latestHistory?.status === "rolled_back"
+      ? "已回退"
+      : latestHistory?.status === "partial_failure"
+        ? "部分完成"
+        : latestHistory?.status === "success"
+          ? "已完成"
+          : latestHistory?.status || "最近任务";
 
   useEffect(() => {
     let cancelled = false;
@@ -109,6 +126,48 @@ export function SessionLauncher() {
     };
   }, [apiBaseUrl]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadLatestHistory() {
+      setHistoryLoading(true);
+      try {
+        const api = createApiClient(apiBaseUrl, getApiToken());
+        const history = await api.getHistory();
+        if (!cancelled) {
+          setLatestHistory(history[0] || null);
+        }
+      } catch {
+        if (!cancelled) {
+          setLatestHistory(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setHistoryLoading(false);
+        }
+      }
+    }
+
+    void loadLatestHistory();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [apiBaseUrl]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadCommonDirs() {
+      try {
+        const api = createApiClient(apiBaseUrl, getApiToken());
+        const dirs = await api.getCommonDirs();
+        if (!cancelled) setCommonDirs(dirs);
+      } catch { /* ignore */ }
+    }
+    void loadCommonDirs();
+    return () => { cancelled = true; };
+  }, [apiBaseUrl]);
+
   async function handleSelectDir() {
     setLoading(true);
     setError(null);
@@ -133,12 +192,16 @@ export function SessionLauncher() {
     }
   }
 
-  function openStrategyDialog() {
-    if (!targetDir.trim()) {
+  function openStrategyDialog(dirOverride?: string) {
+    const nextTargetDir = (dirOverride ?? targetDir).trim();
+    if (!nextTargetDir) {
       setError("请先选择一个需要整理的目录。");
       return;
     }
     setError(null);
+    if (dirOverride) {
+      setTargetDir(dirOverride);
+    }
     setDraftStrategy(savedLaunchStrategy);
     setStrategyDialogOpen(true);
   }
@@ -153,15 +216,16 @@ export function SessionLauncher() {
     }));
   }
 
-  async function launchWithStrategy(strategy: SessionStrategySelection) {
-    if (!targetDir.trim()) return;
+  async function launchWithStrategy(strategy: SessionStrategySelection, dirOverride?: string) {
+    const nextTargetDir = (dirOverride ?? targetDir).trim();
+    if (!nextTargetDir) return;
     setLoading(true);
     setLaunchTransitionOpen(true);
     setError(null);
     setEffectiveLaunchStrategy(strategy);
     try {
       const api = createApiClient(apiBaseUrl, getApiToken());
-      const response = await createSessionAndStartScan(api, targetDir, true, strategy);
+      const response = await createSessionAndStartScan(api, nextTargetDir, true, strategy);
       if (response.mode === "resume_available" && response.restorable_session?.session_id) {
         setLaunchTransitionOpen(false);
         setResumePrompt({
@@ -174,7 +238,7 @@ export function SessionLauncher() {
         throw new Error("没有成功创建整理会话，请再试一次。");
       }
       setStrategyDialogOpen(false);
-      router.push(`/workspace?session_id=${response.session_id}&dir=${encodeURIComponent(targetDir)}`);
+      router.push(`/workspace?session_id=${response.session_id}&dir=${encodeURIComponent(nextTargetDir)}`);
     } catch (err: any) {
       setLaunchTransitionOpen(false);
       if (err.message && err.message.toLowerCase().includes("failed to fetch")) {
@@ -195,6 +259,35 @@ export function SessionLauncher() {
       return;
     }
     openStrategyDialog();
+  }
+
+  function handleOpenLatestContinue() {
+    if (!latestHistory?.is_session) {
+      router.push("/history");
+      return;
+    }
+    router.push(`/workspace?session_id=${latestHistory.execution_id}`);
+  }
+
+  function handleOpenLatestReadonly() {
+    if (!latestHistory?.is_session) {
+      router.push("/history");
+      return;
+    }
+    router.push(`/workspace?session_id=${latestHistory.execution_id}&readonly=1`);
+  }
+
+  async function handleRestartLatest() {
+    const nextTargetDir = latestHistory?.target_dir?.trim();
+    if (!nextTargetDir) {
+      return;
+    }
+    setTargetDir(nextTargetDir);
+    if (launchSkipPrompt) {
+      await launchWithStrategy(savedLaunchStrategy, nextTargetDir);
+      return;
+    }
+    openStrategyDialog(nextTargetDir);
   }
 
   async function handleStartFresh() {
@@ -247,130 +340,212 @@ export function SessionLauncher() {
   return (
     <>
       <LaunchTransitionOverlay open={launchTransitionOpen} targetDir={targetDir} />
-      <div className="relative mx-auto flex min-h-screen w-full max-w-[1280px] flex-col items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
-        {/* Abstract Background Accents */}
-        <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="absolute -top-[10%] -left-[10%] h-[40%] w-[40%] rounded-full bg-primary/5 blur-[120px]" />
-          <div className="absolute top-[20%] -right-[10%] h-[30%] w-[30%] rounded-full bg-primary/3 blur-[100px]" />
-        </div>
+      <div className="mx-auto flex min-h-screen w-full max-w-[1320px] flex-col px-4 py-6 sm:px-6 lg:px-8">
 
         <motion.div
           initial={{ opacity: 0, scale: 0.98, y: 30 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-          className="relative w-full"
+          className="w-full"
         >
-          <section className="relative overflow-hidden rounded-[8px] border border-on-surface/8 bg-surface-container-lowest/40 p-1 shadow-[0_32px_120px_-20px_rgba(0,0,0,0.08)] backdrop-blur-xl">
-            <div className="relative rounded-[6px] border border-on-surface/5 bg-surface-container-lowest p-6 sm:p-10 lg:p-12">
-               {/* Decorative Grid Backdrop */}
-               <div className="absolute inset-0 z-0 opacity-[0.03] [mask-image:radial-gradient(ellipse_at_center,black,transparent)]" style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
-               
-               <div className="relative z-10 grid gap-12 lg:grid-cols-[1fr_360px]">
-                  <div className="space-y-12">
-                    <div className="space-y-6">
-                      <div className="inline-flex items-center gap-2.5 rounded-[4px] border border-primary/12 bg-primary/6 px-4 py-2 text-[12px] font-black uppercase tracking-[0.2em] text-primary/70">
-                        <Sparkles className="h-4 w-4" />
-                        新任务入口
+          <section className="overflow-hidden rounded-[10px] border border-on-surface/8 bg-surface-container-lowest shadow-[0_20px_48px_rgba(0,0,0,0.05)]">
+            <div className="p-6 sm:p-8">
+               <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
+                  <div className="space-y-8">
+                    <div className="space-y-4">
+                      <div className="inline-flex items-center gap-2 rounded-full border border-primary/15 bg-primary/5 px-4 py-1.5 text-[11px] font-black uppercase tracking-widest text-primary">
+                        <Sparkles className="h-3.5 w-3.5" />
+                        任务启动台
                       </div>
-                      <h1 className="max-w-xl font-headline text-[3rem] font-black leading-[1.02] tracking-tighter text-on-surface sm:text-[4rem] lg:text-[4.8rem]">
-                        选择目录，<br/>
-                        <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">开始整理。</span>
+                      <h1 className="font-headline text-[32px] font-black leading-tight tracking-tight text-on-surface sm:text-[40px]">
+                        开始整理工作
                       </h1>
-                      <p className="max-w-[460px] text-[16px] font-medium leading-relaxed text-ui-muted opacity-80 lg:text-[17px]">
-                        先选择一个目录。系统会扫描当前结构、生成整理方案，并在执行前让你确认影响范围。
+                      <p className="max-w-[560px] text-[15px] leading-relaxed tracking-tight text-ui-muted/80">
+                        选择一个目录开始整理。在执行前，你可以预览并确认 AI 生成的整理计划。
                       </p>
                     </div>
 
                     <div className="space-y-6">
-                      <div className="group relative">
-                        <div className="absolute -inset-4 rounded-[12px] bg-primary/3 opacity-0 transition-opacity group-focus-within:opacity-100" />
-                        <div className="relative rounded-[8px] border border-on-surface/10 bg-surface px-5 py-6 shadow-[0_8px_30px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,0.8)] transition-all focus-within:border-primary/30">
-                          <div className="grid gap-6 lg:grid-cols-[auto_1fr_auto] lg:items-center">
-                            <Button
-                              variant="ghost"
-                              onClick={handleSelectDir}
-                              disabled={loading}
-                              className="h-16 w-16 rounded-[4px] bg-on-surface/[0.03] text-primary transition-all hover:bg-primary/8 active:scale-95"
-                              title="浏览文件夹"
-                            >
-                              <FolderOpen className="h-7 w-7" />
-                            </Button>
-                            <div className="min-w-0">
-                               <div className="mb-2.5 flex items-center gap-2">
-                                 <div className="h-1.5 w-1.5 rounded-full bg-primary" />
-                                 <span className="text-[10px] font-black uppercase tracking-[0.3em] text-primary/60">整理目标目录</span>
-                               </div>
-                               <input
-                                 value={targetDir}
-                                 onChange={(event) => setTargetDir(event.target.value)}
-                                 disabled={loading}
-                                 className="h-10 w-full min-w-0 bg-transparent text-[1.1rem] font-bold tracking-tight text-on-surface outline-none placeholder:text-on-surface-variant/20 disabled:opacity-70"
-                                 placeholder="粘贴路径或点击图标选择整理目标..."
-                                 onKeyDown={(e) => {
-                                   if (e.key === "Enter") void handlePrimaryLaunch();
-                                 }}
-                               />
+                      <div className="group relative overflow-hidden rounded-[16px] border border-on-surface/10 bg-surface shadow-[0_8px_40px_rgba(0,0,0,0.04)] transition-all hover:shadow-[0_12px_50px_rgba(0,0,0,0.06)]">
+                          <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.02] to-transparent pointer-events-none" />
+                          <div className="relative p-6 sm:p-7">
+                            <div className="grid gap-6 lg:grid-cols-[1fr_auto]">
+                              <div className="min-w-0 flex-1">
+                                <div className="mb-4 flex items-center gap-2.5">
+                                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary">
+                                    <FolderTree className="h-3.5 w-3.5" />
+                                  </div>
+                                  <span className="text-[11px] font-black uppercase tracking-[0.25em] text-primary/70">整理目标目录</span>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                  <button
+                                    onClick={handleSelectDir}
+                                    disabled={loading}
+                                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[12px] border border-on-surface/8 bg-on-surface/[0.03] text-on-surface transition-all hover:bg-primary/5 hover:text-primary active:scale-95"
+                                  >
+                                    <FolderOpen className="h-5.5 w-5.5" />
+                                  </button>
+                                  <input
+                                    value={targetDir}
+                                    onChange={(event) => setTargetDir(event.target.value)}
+                                    disabled={loading}
+                                    title={targetDir}
+                                    className="h-10 w-full min-w-0 flex-1 truncate bg-transparent text-[15px] font-bold tracking-tight text-on-surface outline-none placeholder:text-on-surface-variant/20 disabled:opacity-70 sm:text-[16px]"
+                                    placeholder="粘贴路径或点击左侧图标选择"
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") void handlePrimaryLaunch();
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                              <div className="flex flex-col sm:flex-row items-center gap-3 pt-4 lg:pt-0">
+                                <Button
+                                  variant="ghost"
+                                  onClick={() => openStrategyDialog()}
+                                  disabled={loading || !targetDir.trim()}
+                                  className="h-12 rounded-[10px] px-4 text-[13px] font-bold text-ui-muted hover:text-on-surface bg-on-surface/[0.03] transition-colors sm:h-14 sm:rounded-[12px] sm:px-5 sm:text-[14px]"
+                                >
+                                  <Layers3 className="mr-2 sm:mr-2.5 h-4 w-4 sm:h-4.5 sm:w-4.5" />
+                                  自定义配置
+                                </Button>
+                                <Button
+                                  variant="primary"
+                                  onClick={() => void handlePrimaryLaunch()}
+                                  disabled={loading || !targetDir.trim()}
+                                  loading={loading}
+                                  className="h-12 min-w-[140px] rounded-[10px] px-6 text-[14px] font-black tracking-tight sm:h-14 sm:min-w-[160px] sm:rounded-[12px] sm:px-8 sm:text-[16px]"
+                                >
+                                  {loading ? "载入中" : "开始整理"}
+                                  {!loading && <ArrowRight className="ml-2 sm:ml-2.5 h-4 w-4 sm:h-5 sm:w-5" />}
+                                </Button>
+                              </div>
                             </div>
-                            <Button
-                              variant="primary"
-                              size="lg"
-                              onClick={() => void handlePrimaryLaunch()}
-                              disabled={loading || !targetDir.trim()}
-                              loading={loading}
-                              className="h-16 w-full rounded-[4px] px-10 text-[16px] font-black tracking-tight shadow-[0_12px_24px_-4px_rgba(var(--primary-rgb),0.2)] lg:min-w-[240px]"
-                            >
-                              {loading ? "载入中" : "开始分析整理"}
-                              {!loading && <ArrowRight className="ml-2 h-5 w-5" />}
-                            </Button>
+
+                            {/* 快捷按钮整合进主卡片底部 */}
+                            {commonDirs.length > 0 && (
+                              <div className="mt-6 flex items-center gap-3 border-t border-on-surface/5 pt-5 sm:mt-8 sm:pt-6">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-ui-muted opacity-50 sm:text-[11px]">快捷选择</span>
+                                <div className="flex flex-wrap gap-2">
+                                  {commonDirs.map((dir) => {
+                                    const IconComponent = dir.label === "下载" ? Download : dir.label === "桌面" ? Monitor : FileText;
+                                    return (
+                                      <button
+                                        key={dir.path}
+                                        type="button"
+                                        onClick={() => setTargetDir(dir.path)}
+                                        disabled={loading}
+                                        className="inline-flex items-center gap-1.5 rounded-full border border-on-surface/8 bg-on-surface/[0.01] px-3 py-1.5 text-[11px] font-bold text-on-surface-variant/70 transition-all hover:border-primary/30 hover:bg-primary/5 hover:text-primary active:scale-95 disabled:opacity-40 sm:gap-2 sm:px-3.5"
+                                      >
+                                        <IconComponent className="h-3 w-3" />
+                                        {dir.label}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        </div>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-6 pt-2">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-[4px] border border-on-surface/5 bg-on-surface/[0.02] text-primary/40 shadow-sm">
-                            <FolderTree className="h-5 w-5" />
+                      {/* 三步流程引导 - 更加精致的横向步骤，增加大小和占位 */}
+                      <div className="mx-auto flex w-full max-w-[85%] items-center justify-between py-4 sm:py-6">
+                        {[
+                          { step: "1", label: "选择目录", icon: FolderOpen },
+                          { step: "2", label: "扫描分析", icon: Search },
+                          { step: "3", label: "核对并执行", icon: ShieldCheck },
+                        ].map((item, idx) => (
+                          <div key={item.step} className="flex flex-1 items-center last:flex-none">
+                            <div className="flex flex-col items-center gap-3">
+                              <div className={cn(
+                                "flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-full transition-all duration-300 shadow-sm",
+                                idx === 0 ? "bg-primary text-white shadow-primary/20 scale-105" : "bg-on-surface/[0.03] text-on-surface-variant/40"
+                              )}>
+                                <item.icon className="h-4 w-4 sm:h-5 sm:w-5" />
+                              </div>
+                              <span className={cn("text-[11px] sm:text-[12px] font-black uppercase tracking-widest whitespace-nowrap", idx === 0 ? "text-primary" : "text-ui-muted/50")}>
+                                {item.label}
+                              </span>
+                            </div>
+                            {idx < 2 && (
+                              <div className="mx-4 sm:mx-8 h-px flex-1 bg-gradient-to-r from-on-surface/5 via-on-surface/10 to-on-surface/5" />
+                            )}
                           </div>
-                          <div className="space-y-0.5">
-                             <p className="text-[11px] font-black uppercase tracking-widest text-ui-muted">目录结构</p>
-                             <p className="text-[12px] font-bold text-on-surface/70">扫描后生成整理方案</p>
-                          </div>
-                        </div>
-                        <div className="h-8 w-px bg-on-surface/5 hidden sm:block" />
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-[4px] border border-on-surface/5 bg-on-surface/[0.02] text-primary/40 shadow-sm">
-                            <Palette className="h-5 w-5" />
-                          </div>
-                          <div className="space-y-0.5">
-                             <p className="text-[11px] font-black uppercase tracking-widest text-ui-muted">命名与图标</p>
-                             <p className="text-[12px] font-bold text-on-surface/70">统一目录命名与显示图标</p>
-                          </div>
-                        </div>
+                        ))}
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-5 lg:pt-12">
-                     <div className="rounded-[8px] border border-primary/10 bg-primary/[0.02] p-5 lg:p-6 transition-all hover:bg-primary/[0.03]">
+                  <div className="flex flex-col gap-5">
+                     <div className="rounded-[10px] border border-on-surface/8 bg-surface p-5 lg:p-6">
                         <div className="mb-5 flex items-center justify-between">
-                           <div className="flex items-center gap-2 text-primary">
-                             <ShieldCheck className="h-4.5 w-4.5" />
-                             <span className="text-[11px] font-black uppercase tracking-[0.25em]">当前默认预设</span>
+                           <div className="flex items-center gap-2 text-on-surface">
+                             <History className="h-4.5 w-4.5 text-primary" />
+                             <span className="text-[11px] font-black uppercase tracking-[0.22em] text-primary/70">最近任务</span>
                            </div>
                         </div>
 
+                        {historyLoading ? (
+                          <div className="flex items-center gap-3 py-3 text-ui-muted opacity-60">
+                            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                            <span className="text-[12px] font-bold">同步历史记录...</span>
+                          </div>
+                        ) : latestHistory ? (
+                          <div className="space-y-6">
+                            <div className="space-y-1.5">
+                              <p className="line-clamp-1 text-[16px] font-black tracking-tight text-on-surface">{latestHistoryName}</p>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-primary/60">{latestHistory.is_session ? "会话" : "记录"}</span>
+                                <div className="h-1 w-1 rounded-full bg-on-surface/10" />
+                                <span className="line-clamp-1 flex-1 font-mono text-[10px] text-ui-muted/60 lowercase tracking-tight">{latestHistory.target_dir}</span>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4 rounded-[12px] bg-on-surface/[0.02] p-4">
+                              <div className="flex flex-col">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-ui-muted/50">当前阶段</span>
+                                <span className="text-[12px] font-black text-on-surface/70 truncate">{latestHistoryStage}</span>
+                              </div>
+                              <div className="flex flex-col border-l border-on-surface/6 pl-4">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-ui-muted/50">规模</span>
+                                <span className="text-[12px] font-black text-on-surface/70">{latestHistory.item_count || 0} 项</span>
+                              </div>
+                            </div>
+                            <div className="grid gap-2 pt-2 sm:grid-cols-2">
+                              <Button variant="secondary" onClick={handleOpenLatestContinue} className="h-11 rounded-[10px] text-[13px] font-bold">
+                                {latestHistory.is_session ? "继续" : "预览"}
+                              </Button>
+                              <Button variant="secondary" onClick={handleOpenLatestReadonly} className="h-11 rounded-[10px] text-[13px] font-bold">
+                                详情
+                              </Button>
+                            </div>
+                            <Button variant="primary" onClick={() => void handleRestartLatest()} className="h-12 w-full rounded-[10px] text-[14px] font-black tracking-tight" disabled={!latestHistory.target_dir}>
+                              以此开启新任务
+                            </Button>
+                          </div>
+                        ) : (
+                          <p className="text-[12px] leading-6 text-ui-muted opacity-50">还没有记录，开始整理后会显示在这里。</p>
+                        )}
+                     </div>
+
+                     <div className="rounded-[16px] border border-primary/10 bg-primary/[0.02] p-5 lg:p-6 transition-all hover:bg-primary/[0.03]">
+                         <div className="mb-5 flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-primary">
+                              <ShieldCheck className="h-4.5 w-4.5" />
+                              <span className="text-[11px] font-black uppercase tracking-[0.25em]">当前任务策略预设</span>
+                            </div>
+                         </div>
+
                         <div className="space-y-4">
                            {launchPreferencesLoaded ? (
-                             <>
-                               <div className="space-y-1">
-                                 <p className="text-[14px] font-black text-on-surface">{currentTemplate.label}</p>
-                                 <p className="text-[11.5px] leading-relaxed text-ui-muted/80">{currentTemplate.applicableScenarios}</p>
+                               <div className="group relative">
+                                 <div className="space-y-1.5">
+                                   <p className="text-[15px] font-black tracking-tight text-on-surface">{currentTemplate.label}</p>
+                                   <p className="text-[12px] leading-relaxed text-ui-muted/80">{currentTemplate.applicableScenarios}</p>
+                                 </div>
+                                 <div className="mt-4 flex flex-wrap gap-2">
+                                   <span className="rounded-full border border-primary/10 bg-primary/5 px-3 py-1 text-[11px] font-black text-primary/80">{namingLabel}</span>
+                                   <span className="rounded-full border border-primary/10 bg-primary/5 px-3 py-1 text-[11px] font-black text-primary/80">{cautionLabel}</span>
+                                 </div>
                                </div>
-                               <div className="mt-3 flex flex-wrap gap-2">
-                                 <span className="rounded-[4px] border border-on-surface/8 bg-surface-container-low px-2 px-2.5 py-1 text-[11px] font-bold text-on-surface-variant/70">{namingLabel}</span>
-                                 <span className="rounded-[4px] border border-on-surface/8 bg-surface-container-low px-2 px-2.5 py-1 text-[11px] font-bold text-on-surface-variant/70">{cautionLabel}</span>
-                               </div>
-                             </>
                            ) : (
                              <div className="flex items-center gap-3 py-4 text-ui-muted">
                                <Loader2 className="h-4 w-4 animate-spin" />
@@ -379,27 +554,23 @@ export function SessionLauncher() {
                            )}
                         </div>
 
-                        <div className="mt-8 space-y-2.5 border-t border-on-surface/5 pt-6">
-                           <div className="flex items-center justify-between text-[11px] font-bold text-ui-muted">
-                              <span className="uppercase tracking-widest">扫描模式</span>
-                              <span className="text-on-surface/60">按当前配置扫描</span>
+                        <div className="mt-8 space-y-3 border-t border-on-surface/5 pt-6">
+                           <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-widest text-ui-muted/50">
+                              <span>扫描核心</span>
+                              <span className="text-on-surface/40">启发式深度遍历</span>
                            </div>
-                           <div className="flex items-center justify-between text-[11px] font-bold text-ui-muted">
-                              <span className="uppercase tracking-widest">确认逻辑</span>
-                              <span className="text-on-surface/60">预检后手动执行</span>
-                           </div>
-                           <div className="flex items-center justify-between text-[11px] font-bold text-ui-muted">
-                              <span className="uppercase tracking-widest">回退保障</span>
-                              <span className="text-success-dim">已开启 (Journal)</span>
+                           <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-widest text-ui-muted/60">
+                              <span>回退保护</span>
+                              <span className="font-bold text-success-dim/80">Active (Journal)</span>
                            </div>
                         </div>
                      </div>
 
-                     <div className="rounded-[8px] border border-on-surface/8 bg-on-surface/[0.02] p-5 transition-all hover:bg-on-surface/[0.03]">
-                        <p className="text-[12px] font-bold leading-relaxed text-ui-muted">
+                     <div className="rounded-[16px] border border-on-surface/8 bg-on-surface/[0.02] p-5 transition-all hover:bg-on-surface/[0.03]">
+                        <p className="text-[12px] font-bold leading-relaxed tracking-tight text-ui-muted/70">
                           {launchSkipPrompt 
-                            ? "已启用直接开始。点击主按钮后，会按这组默认预设立即创建任务。"
-                            : "这组预设会作为默认起点。开始前仍会打开启动配置，方便再调整一次。"}
+                            ? "已开启快速直达模式。点击开始整理后，系统将按当前默认预设立即执行初始化扫描。"
+                            : "当前处于配置确认模式。开始前仍会打开策略对话框，确认无误后开启 AI 分析。"}
                         </p>
                      </div>
                   </div>

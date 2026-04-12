@@ -12,6 +12,7 @@ interface PrecheckViewProps {
     readOnly?: boolean;
     onRequestExecute: () => void;
     onBack: () => void;
+    onLocateIssue?: (itemIds: string[], filter?: "unresolved" | "review" | "invalidated" | "changed") => void;
 }
 
 function reviewMoveCount(summary: PrecheckSummary) {
@@ -20,7 +21,7 @@ function reviewMoveCount(summary: PrecheckSummary) {
     ).length;
 }
 
-export function PrecheckView({ summary, isBusy, readOnly = false, onRequestExecute, onBack }: PrecheckViewProps) {
+export function PrecheckView({ summary, isBusy, readOnly = false, onRequestExecute, onBack, onLocateIssue }: PrecheckViewProps) {
     const [filter, setFilter] = useState<DirectoryTreeFilter>("all");
 
     if (!summary) {
@@ -62,7 +63,7 @@ export function PrecheckView({ summary, isBusy, readOnly = false, onRequestExecu
     };
 
     return (
-        <div className="mx-auto max-w-[1360px] space-y-4 py-5">
+        <div className="mx-auto max-w-[1360px] space-y-4 py-5 @container">
             <section className="overflow-hidden rounded-[8px] border border-on-surface/8 bg-surface-container-lowest shadow-[0_12px_44px_rgba(0,0,0,0.06)]">
                 {/* Header Section - Refined and Focused */}
                 <div className="relative overflow-hidden border-b border-on-surface/4 bg-on-surface/[0.01] px-6 py-6 lg:px-8">
@@ -72,7 +73,7 @@ export function PrecheckView({ summary, isBusy, readOnly = false, onRequestExecu
                         <div className="flex items-center justify-between">
                             <div className="inline-flex items-center gap-2 rounded-full border border-primary/10 bg-primary/5 px-3 py-1 text-[9px] font-black uppercase tracking-[0.2em] text-primary/70">
                                 <ListChecks className="h-3 w-3" />
-                                Execution Precheck
+                                执行前预检
                             </div>
                             <div className="flex gap-1.5">
                                 {!hasErrors && !hasWarnings ? (
@@ -128,7 +129,7 @@ export function PrecheckView({ summary, isBusy, readOnly = false, onRequestExecu
                 </div>
 
                 {/* Metrics Stats - Refined and Exquisite */}
-                <div className="grid grid-cols-1 divide-y divide-on-surface/4 border-b border-on-surface/4 md:grid-cols-3 md:divide-x md:divide-y-0">
+                <div className="grid grid-cols-1 divide-y divide-on-surface/4 border-b border-on-surface/4 @3xl:grid-cols-3 @3xl:divide-x @3xl:divide-y-0">
                     {/* Move Items Stat */}
                     <div className="group relative bg-on-surface/[0.01] px-6 py-5 transition-colors hover:bg-on-surface/[0.02] lg:px-8">
                         <div className="flex items-center gap-4">
@@ -206,7 +207,7 @@ export function PrecheckView({ summary, isBusy, readOnly = false, onRequestExecu
                     </div>
                     {reviewCount > 0 && (
                         <p className="text-[11px] text-warning/80 font-bold tracking-tight">
-                            * 建议执行前检查右侧 `Review` 文件夹内容
+                            * 建议执行前检查右侧 `Review（待核对）` 文件夹内容
                         </p>
                     )}
                 </div>
@@ -252,37 +253,34 @@ export function PrecheckView({ summary, isBusy, readOnly = false, onRequestExecu
                         <h3 className="text-[16px] font-bold font-headline tracking-tight text-on-surface">预检详情与异常</h3>
                     </div>
 
-                    {summary.blocking_errors.map((err, index) => (
-                        <div key={`${err}-${index}`} className="flex items-start gap-3 rounded-[4px] border border-error/15 bg-surface-container-lowest px-4 py-4">
-                            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-error" />
-                            <div>
-                                <p className="text-[14px] font-semibold text-on-surface">必须先处理</p>
-                                <p className="mt-1 text-[13px] leading-6 text-ui-muted">{err}</p>
+                    {(summary.issues?.length ? summary.issues : []).map((issue) => {
+                        const isBlocking = issue.severity === "blocking";
+                        const isWarning = issue.severity === "warning";
+                        const tone = isBlocking ? "border-error/15" : isWarning ? "border-warning/15" : "border-primary/15";
+                        const Icon = isBlocking ? AlertCircle : isWarning ? ShieldAlert : FolderPlus;
+                        const title = isBlocking ? "必须先处理" : isWarning ? "建议执行前确认" : "Review（待核对）提醒";
+                        const locateFilter = issue.severity === "review" ? "review" : issue.severity === "blocking" ? "changed" : "changed";
+                        return (
+                            <div key={issue.id} className={cn("flex items-start justify-between gap-4 rounded-[4px] bg-surface-container-lowest px-4 py-4", tone)}>
+                                <div className="flex items-start gap-3">
+                                    <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", isBlocking ? "text-error" : isWarning ? "text-warning" : "text-primary")} />
+                                    <div>
+                                        <p className="text-[14px] font-semibold text-on-surface">{title}</p>
+                                        <p className="mt-1 text-[13px] leading-6 text-ui-muted">{issue.message}</p>
+                                    </div>
+                                </div>
+                                {onLocateIssue && issue.related_item_ids?.length ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => onLocateIssue(issue.related_item_ids, locateFilter)}
+                                        className="shrink-0 rounded-[6px] border border-on-surface/8 bg-surface px-3 py-1.5 text-[12px] font-semibold text-on-surface"
+                                    >
+                                        定位到相关条目
+                                    </button>
+                                ) : null}
                             </div>
-                        </div>
-                    ))}
-
-                    {summary.warnings.map((warn, index) => (
-                        <div key={`${warn}-${index}`} className="flex items-start gap-3 rounded-[4px] border border-warning/15 bg-surface-container-lowest px-4 py-4">
-                            <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
-                            <div>
-                                <p className="text-[14px] font-semibold text-on-surface">建议执行前确认</p>
-                                <p className="mt-1 text-[13px] leading-6 text-ui-muted">{warn}</p>
-                            </div>
-                        </div>
-                    ))}
-
-                    {reviewCount > 0 ? (
-                        <div className="flex items-start gap-3 rounded-[4px] border border-primary/15 bg-surface-container-lowest px-4 py-4">
-                            <FolderPlus className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                            <div>
-                                <p className="text-[14px] font-semibold text-on-surface">Review 提醒</p>
-                                <p className="mt-1 text-[13px] leading-6 text-ui-muted">
-                                    这次有 {reviewCount} 项会先进入 `Review`。这些条目会先保留在待确认区域，之后仍可继续整理或重新归类。
-                                </p>
-                            </div>
-                        </div>
-                    ) : null}
+                        );
+                    })}
                 </section>
             ) : null}
 

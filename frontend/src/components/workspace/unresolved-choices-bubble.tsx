@@ -82,10 +82,10 @@ export function UnresolvedChoicesBubble({
             <div className="flex h-5 w-5 items-center justify-center rounded-full bg-warning/10 text-warning">
               <Sparkles className="h-3 w-3" />
             </div>
-            待确认项目
+            待决策项目
           </h4>
           <p className="text-[12px] font-medium leading-relaxed text-on-surface-variant/70">
-            {block.summary || "请为以下文件选择合适的归类位置。"}
+            {block.summary || "请先为以下文件选择更稳妥的归类位置。"}
           </p>
         </div>
         <button
@@ -194,7 +194,7 @@ export function UnresolvedChoicesBubble({
         className="mt-5 flex w-full items-center justify-center gap-2.5 rounded-[4px] border border-primary/20 bg-primary py-2.5 text-[13px] font-black text-white transition-all hover:bg-primary/90 hover:shadow-lg hover:shadow-primary/20 active:scale-[0.98] disabled:opacity-40"
       >
         {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-        确认这些归类
+        记录这些决策
       </button>
     </div>
   );

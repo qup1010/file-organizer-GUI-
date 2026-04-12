@@ -24,7 +24,7 @@ from file_organizer.shared.logging_utils import append_debug_event
 
 
 logger = logging.getLogger(__name__)
-CURRENT_PLANNING_SCHEMA_VERSION = 2
+CURRENT_PLANNING_SCHEMA_VERSION = 3
 
 
 class OrganizerSessionService:
@@ -86,6 +86,7 @@ class OrganizerSessionService:
                     "display_name": entry.get("display_name") or Path(source_relpath).name,
                     "suggested_purpose": entry.get("suggested_purpose", ""),
                     "summary": entry.get("summary", ""),
+                    "confidence": entry.get("confidence", existing.get("confidence") if existing else None),
                     "entry_type": entry.get("entry_type", ""),
                     "ext": entry.get("ext") or self._entry_extension(source_relpath),
                     "parent_hint": parent_hint,
@@ -131,6 +132,79 @@ class OrganizerSessionService:
         source_relpath = self._planner_source_for_item_id(session, item_id) or str(item_id or "").strip()
         planner_item = self._planner_items_by_source(session).get(source_relpath, {})
         return str(planner_item.get("display_name") or Path(source_relpath).name or item_id)
+
+    @staticmethod
+    def _target_dir_for_move(target_relpath: str) -> str:
+        normalized = str(target_relpath or "").replace("\\", "/").strip("/")
+        if "/" not in normalized:
+            return ""
+        return normalized.rsplit("/", 1)[0]
+
+    def _related_item_ids_for_message(
+        self,
+        message: str,
+        planner_by_source: dict[str, dict],
+        moves: list[PlanMove],
+    ) -> list[str]:
+        normalized_message = str(message or "")
+        related: list[str] = []
+        for move in moves:
+            source = str(move.source or "").replace("\\", "/")
+            target = str(move.target or "").replace("\\", "/")
+            if source and source in normalized_message or target and target in normalized_message:
+                related.append(str(planner_by_source.get(source, {}).get("planner_id") or source))
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for item_id in related:
+            if item_id and item_id not in seen:
+                seen.add(item_id)
+                ordered.append(item_id)
+        return ordered
+
+    def _precheck_issues(
+        self,
+        blocking_errors: list[str],
+        warnings: list[str],
+        plan_moves: list[PlanMove],
+        planner_by_source: dict[str, dict],
+    ) -> list[dict]:
+        issues: list[dict] = []
+        for index, message in enumerate(blocking_errors):
+            issues.append(
+                {
+                    "id": f"blocking-{index + 1}",
+                    "severity": "blocking",
+                    "issue_type": "precheck_blocking_error",
+                    "message": message,
+                    "related_item_ids": self._related_item_ids_for_message(message, planner_by_source, plan_moves),
+                }
+            )
+        for index, message in enumerate(warnings):
+            issues.append(
+                {
+                    "id": f"warning-{index + 1}",
+                    "severity": "warning",
+                    "issue_type": "precheck_warning",
+                    "message": message,
+                    "related_item_ids": self._related_item_ids_for_message(message, planner_by_source, plan_moves),
+                }
+            )
+        review_item_ids = [
+            str(planner_by_source.get(str(move.source or "").replace("\\", "/"), {}).get("planner_id") or move.source)
+            for move in plan_moves
+            if self._target_dir_for_move(move.target) == "Review"
+        ]
+        if review_item_ids:
+            issues.append(
+                {
+                    "id": "review-items",
+                    "severity": "review",
+                    "issue_type": "review_items",
+                    "message": f"这次有 {len(review_item_ids)} 项会先进入 Review，建议执行前先核对。",
+                    "related_item_ids": review_item_ids,
+                }
+            )
+        return issues
 
     def _ensure_planner_items(self, session: OrganizerSession, scan_lines: str | None = None) -> bool:
         source_scan_lines = scan_lines if scan_lines is not None else session.scan_lines
@@ -940,19 +1014,28 @@ class OrganizerSessionService:
         final_plan = self._final_plan_from_session(session)
         plan = execution_service.build_execution_plan(final_plan, Path(session.target_dir))
         precheck = execution_service.validate_execution_preconditions(plan)
+        planner_by_source = self._planner_items_by_source(session)
+        move_preview = [
+            {
+                "item_id": str(planner_by_source.get(action.source.relative_to(plan.base_dir).as_posix(), {}).get("planner_id") or action.source.relative_to(plan.base_dir).as_posix()),
+                "source": action.source.relative_to(plan.base_dir).as_posix(),
+                "target": action.target.relative_to(plan.base_dir).as_posix(),
+            }
+            for action in plan.move_actions
+            if action.source is not None
+        ]
         session.precheck_summary = {
             "can_execute": precheck.can_execute,
             "blocking_errors": list(precheck.blocking_errors),
             "warnings": list(precheck.warnings),
             "mkdir_preview": [action.target.relative_to(plan.base_dir).as_posix() for action in plan.mkdir_actions],
-            "move_preview": [
-                {
-                    "source": action.source.relative_to(plan.base_dir).as_posix(),
-                    "target": action.target.relative_to(plan.base_dir).as_posix(),
-                }
-                for action in plan.move_actions
-                if action.source is not None
-            ],
+            "move_preview": move_preview,
+            "issues": self._precheck_issues(
+                list(precheck.blocking_errors),
+                list(precheck.warnings),
+                final_plan.moves,
+                planner_by_source,
+            ),
         }
         session.stage = "ready_to_execute" if precheck.can_execute else "planning"
         self.store.save(session)
@@ -2066,10 +2149,11 @@ class OrganizerSessionService:
                 "display_name": planner_meta.get("display_name", Path(move.source).name),
                 "source_relpath": move.source,
                 "target_relpath": move.target,
-                "suggested_purpose": scan_meta.get("suggested_purpose", ""),
-                "content_summary": scan_meta.get("summary", ""),
+                "suggested_purpose": scan_meta.get("suggested_purpose") or planner_meta.get("suggested_purpose", ""),
+                "content_summary": scan_meta.get("summary") or planner_meta.get("summary", ""),
                 "is_unresolved": move.source in plan.unresolved_items,
                 "reason": getattr(move, "reason", ""),
+                "confidence": scan_meta.get("confidence", planner_meta.get("confidence")),
                 "status": status,
             }
             items.append(item)
@@ -2220,11 +2304,17 @@ class OrganizerSessionService:
             entry_path = ""
             suggested_purpose = ""
             summary = ""
+            confidence = None
             if "|" in line:
                 parts = [part.strip() for part in line.split("|")]
                 entry_path = parts[0] if parts else ""
                 suggested_purpose = parts[1] if len(parts) > 1 else ""
                 summary = parts[2] if len(parts) > 2 else ""
+                if len(parts) > 3:
+                    try:
+                        confidence = float(parts[3])
+                    except (TypeError, ValueError):
+                        confidence = None
             else:
                 parts = line.split(":", 1)
                 if len(parts) >= 2:
@@ -2237,6 +2327,7 @@ class OrganizerSessionService:
                 "source_relpath": entry_path,
                 "suggested_purpose": suggested_purpose,
                 "summary": summary,
+                "confidence": confidence,
                 "entry_type": "file" if Path(entry_path).suffix else "",
                 "ext": self._entry_extension(entry_path),
             })

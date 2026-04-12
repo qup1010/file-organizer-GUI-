@@ -41,7 +41,7 @@ export function IconWorkbenchFooterBar({
 
   return (
     <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 animate-slideUp">
-      <div className="flex items-center gap-4 rounded-[8px] border border-white/40 bg-white/72 p-1.5 shadow-[0_12px_44px_rgba(0,0,0,0.15)] backdrop-blur-xl">
+      <div className="flex items-center gap-4 rounded-[12px] border border-on-surface/8 bg-surface-container-lowest/80 p-1.5 shadow-[0_12px_44px_rgba(0,0,0,0.18)] backdrop-blur-xl">
         <div className="flex items-center gap-3.5 pl-4 pr-1">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[4px] bg-primary/10 text-primary shadow-[inset_0_0_15px_rgba(var(--primary-rgb),0.1)]">
             <FolderDown className="h-5.5 w-5.5" />
@@ -73,7 +73,7 @@ export function IconWorkbenchFooterBar({
                 <span className="ml-2">{isGenerating ? "正在生成..." : `生成 ${targetCount} 个预览`}</span>
               </Button>
 
-              <div className="flex items-center gap-1.5 rounded-[4px] bg-white/40 p-1 border border-white/20 shrink-0">
+              <div className="flex items-center gap-1.5 rounded-[6px] bg-on-surface/5 p-1 border border-on-surface/5 shrink-0">
                 <Button
                   variant="secondary"
                   size="md"
@@ -82,7 +82,7 @@ export function IconWorkbenchFooterBar({
                     onRemoveBgBatch();
                   }}
                   disabled={!canRemoveBgBatch || isGenerating || isApplying || isRemovingBgBatch}
-                  className="h-9 shrink-0 rounded-[4px] border-none bg-transparent px-4 text-[13px] font-bold text-on-surface hover:bg-white/90 transition-all disabled:opacity-30 whitespace-nowrap shadow-none"
+                  className="h-9 shrink-0 rounded-[4px] border-none bg-transparent px-4 text-[13px] font-bold text-on-surface hover:bg-on-surface/10 transition-all disabled:opacity-30 whitespace-nowrap shadow-none"
                 >
                   {isRemovingBgBatch ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <span className="text-[14px] leading-none mb-0.5">✂</span>}
                   <span className="ml-1.5">{isRemovingBgBatch ? "正在处理背景..." : "批量去除背景"}</span>
@@ -98,7 +98,7 @@ export function IconWorkbenchFooterBar({
                     onApplyBatch();
                   }}
                   disabled={!canApplyBatch || isGenerating || isApplying || isRemovingBgBatch}
-                  className="h-9 shrink-0 rounded-[4px] border-none bg-transparent px-4 text-[13px] font-bold text-on-surface hover:bg-white/90 transition-all disabled:opacity-30 whitespace-nowrap shadow-none"
+                  className="h-9 shrink-0 rounded-[4px] border-none bg-transparent px-4 text-[13px] font-bold text-on-surface hover:bg-on-surface/10 transition-all disabled:opacity-30 whitespace-nowrap shadow-none"
                 >
                   {isApplying ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
                   <span className="ml-1.5">{isApplying ? "正在应用..." : "批量应用图标"}</span>
@@ -119,7 +119,7 @@ export function IconWorkbenchFooterBar({
 
           <div className="group relative ml-1">
             <Info className="h-4 w-4 cursor-help text-on-surface/25 transition-colors hover:text-on-surface/50" />
-            <div className="pointer-events-none absolute bottom-full left-1/2 mb-3 w-52 -translate-x-1/2 scale-95 rounded-[4px] border border-white/40 bg-white/95 p-4 text-[11px] font-medium leading-relaxed text-on-surface opacity-0 shadow-2xl backdrop-blur-md transition-all group-hover:scale-100 group-hover:opacity-100 italic">
+            <div className="pointer-events-none absolute bottom-full left-1/2 mb-3 w-52 -translate-x-1/2 scale-95 rounded-[8px] border border-on-surface/10 bg-surface-container-lowest/95 p-4 text-[11px] font-medium leading-relaxed text-on-surface opacity-0 shadow-2xl backdrop-blur-md transition-all group-hover:scale-100 group-hover:opacity-100 italic">
               生成结果会先保留为预览。点击“批量应用图标”后，才会写入目标文件夹的图标设置。
             </div>
           </div>

@@ -103,8 +103,8 @@ function cloneValue<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
-function createSecretDraft(): SecretDraft {
-  return { action: "keep", value: "", visible: false };
+function createSecretDraft(initialValue: string = ""): SecretDraft {
+  return { action: "keep", value: initialValue, visible: false };
 }
 
 function clampConcurrencyInput(value: string, fallback: number): number {
@@ -149,12 +149,12 @@ function buildSecretPayload(secret: SecretDraft) {
 
 function describeSecret(secretState: SecretState, secret: SecretDraft) {
   if (secret.action === "replace" && secret.value.trim()) {
-    return "将用新的密钥替换已保存值";
+    return "新密钥已输入，保存全部配置后生效。";
   }
   if (secret.action === "clear") {
-    return "保存后会清空已保存密钥";
+    return "已标记为移除，保存全部配置后生效。";
   }
-  return secretState === "stored" ? "当前已有密钥保存在本地" : "当前还没有保存密钥";
+  return secretState === "stored" ? "密钥已在本地安全存储。" : "当前还没有保存密钥。";
 }
 
 function buildFingerprint(
@@ -233,22 +233,28 @@ export default function SettingsPage() {
 
   const hydrate = (nextSnapshot: SettingsSnapshot) => {
     const nextDraft = snapshotToDraft(nextSnapshot);
-    const emptySecrets = {
-      text: createSecretDraft(),
-      vision: createSecretDraft(),
-      icon_image: createSecretDraft(),
-      bg_removal: createSecretDraft(),
+    const textKey = nextSnapshot.families.text.active_preset.OPENAI_API_KEY || "";
+    const visionKey = nextSnapshot.families.vision.active_preset.IMAGE_ANALYSIS_API_KEY || "";
+    const iconKey = nextSnapshot.families.icon_image.active_preset.image_model.api_key || "";
+    const bgKey = nextSnapshot.families.bg_removal.active_preset.hf_api_token || "";
+
+    const currentSecrets = {
+      text: createSecretDraft(textKey),
+      vision: createSecretDraft(visionKey),
+      icon_image: createSecretDraft(iconKey),
+      bg_removal: createSecretDraft(bgKey),
     };
+
     setSnapshot(nextSnapshot);
     setDraft(nextDraft);
-    setTextSecret(emptySecrets.text);
-    setVisionSecret(emptySecrets.vision);
-    setIconSecret(emptySecrets.icon_image);
-    setBgRemovalSecret(emptySecrets.bg_removal);
+    setTextSecret(currentSecrets.text);
+    setVisionSecret(currentSecrets.vision);
+    setIconSecret(currentSecrets.icon_image);
+    setBgRemovalSecret(currentSecrets.bg_removal);
     setAnalysisConcurrencyInput(String(nextDraft.icon_image.analysis_concurrency_limit));
     setImageConcurrencyInput(String(nextDraft.icon_image.image_concurrency_limit));
     setBaseline(
-      buildFingerprint(nextDraft, emptySecrets, {
+      buildFingerprint(nextDraft, currentSecrets, {
         analysisConcurrencyInput: String(nextDraft.icon_image.analysis_concurrency_limit),
         imageConcurrencyInput: String(nextDraft.icon_image.image_concurrency_limit),
       }),
@@ -725,20 +731,25 @@ export default function SettingsPage() {
             <p className="text-[12px] text-on-surface-variant/70">{describeSecret(state, secret)}</p>
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setSecret((current) => ({ ...current, action: "keep", value: "", visible: false }))}
-            >
-              保持
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setSecret((current) => ({ ...current, action: "clear", value: "", visible: false }))}
-            >
-              清空
-            </Button>
+            {secret.action !== "keep" ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setSecret((current) => ({ ...current, action: "keep", value: "", visible: false }))}
+                className="h-8 px-3 text-[12px]"
+              >
+                撤销修改
+              </Button>
+            ) : state === "stored" ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setSecret((current) => ({ ...current, action: "clear", value: "", visible: false }))}
+                className="h-8 px-3 text-[12px]"
+              >
+                清空已存
+              </Button>
+            ) : null}
           </div>
         </div>
         <div className="mt-3 flex items-center gap-2 rounded-[4px] border border-on-surface/8 bg-surface-container-lowest px-3 py-2">

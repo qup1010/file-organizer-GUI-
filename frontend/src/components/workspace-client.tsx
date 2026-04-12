@@ -17,7 +17,7 @@ import { MinimalScanningView } from "./workspace/minimal-scanning-view";
 import { PrecheckView } from "./workspace/precheck-view";
 import { CompletionView } from "./workspace/completion-view";
 import { ConversationPanel, type ConversationNotice } from "./workspace/conversation-panel";
-import { PreviewPanel } from "./workspace/preview-panel";
+import { PreviewFilter, PreviewFocusRequest, PreviewPanel } from "./workspace/preview-panel";
 
 const DEFAULT_LEFT_WIDTH = 50;
 
@@ -83,11 +83,15 @@ export default function WorkspaceClient() {
   const [layoutReady, setLayoutReady] = useState(false);
   const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
   const [executeConfirmOpen, setExecuteConfirmOpen] = useState(false);
+  const [executeConfirmText, setExecuteConfirmText] = useState("");
   const [scanAbortConfirmOpen, setScanAbortConfirmOpen] = useState(false);
   const [showExitMenu, setShowExitMenu] = useState(false);
   const [dividerLeft, setDividerLeft] = useState<number | null>(null);
+  const [previewFocusRequest, setPreviewFocusRequest] = useState<PreviewFocusRequest | null>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const leftPaneRef = React.useRef<HTMLElement>(null);
+  const rightPaneRef = React.useRef<HTMLElement>(null);
+  const draggedWidthRef = React.useRef(DEFAULT_LEFT_WIDTH);
   const [isResizingState, setIsResizingState] = useState(false);
   const isResizing = React.useRef(false);
 
@@ -186,6 +190,15 @@ export default function WorkspaceClient() {
     }
     return "当前任务正在继续推进。";
   }, [isReadOnly, plan.readiness.can_precheck, stage]);
+  const reviewMoveCount = useMemo(
+    () => precheck?.move_preview.filter((move) => move.target.split(/[\\/]/).some((part) => part.toLowerCase() === "review")).length ?? 0,
+    [precheck],
+  );
+  const isRootTarget = useMemo(() => /^[a-zA-Z]:[\\/]?$/.test((snapshot?.target_dir || "").trim()), [snapshot?.target_dir]);
+  const requiresTypedExecuteConfirm = useMemo(
+    () => (precheck?.move_preview.length ?? 0) >= 50 || reviewMoveCount >= 10 || isRootTarget,
+    [isRootTarget, precheck?.move_preview.length, reviewMoveCount],
+  );
 
   const handleMouseMove = React.useCallback((event: MouseEvent) => {
     if (!isResizing.current) {
@@ -202,12 +215,20 @@ export default function WorkspaceClient() {
       return;
     }
 
-    const minLeftPx = 360;
-    const minRightPx = 320;
-    const maxLeftPx = Math.max(minLeftPx, rect.width - minRightPx);
-    const boundedX = Math.min(Math.max(event.clientX - rect.left, minLeftPx), maxLeftPx);
+    // 限制范围：左侧至少 380px 且至少占 20%，右侧至少 420px 且至少占 30%
+    const minLeft = Math.max(380, rect.width * 0.2);
+    const maxLeft = Math.min(rect.width - 420, rect.width * 0.7);
+    
+    // 确保 max 不小于 min (极端小窗口兼容)
+    const finalMaxLeft = Math.max(minLeft, maxLeft);
+    const boundedX = Math.min(Math.max(event.clientX - rect.left, minLeft), finalMaxLeft);
     const newWidth = (boundedX / rect.width) * 100;
-    setLeftWidth(newWidth);
+
+    if (leftPaneRef.current && rightPaneRef.current) {
+      leftPaneRef.current.style.width = `${newWidth}%`;
+      rightPaneRef.current.style.width = `${100 - newWidth}%`;
+    }
+    draggedWidthRef.current = newWidth;
   }, []);
 
   const stopResizing = React.useCallback(() => {
@@ -218,8 +239,10 @@ export default function WorkspaceClient() {
     document.body.style.cursor = "default";
     document.body.style.userSelect = "";
     document.body.style.webkitUserSelect = "";
-    saveWidth(leftWidth);
-  }, [handleMouseMove, leftWidth, saveWidth]);
+    const finalWidth = draggedWidthRef.current;
+    setLeftWidth(finalWidth);
+    saveWidth(finalWidth);
+  }, [handleMouseMove, saveWidth]);
 
   const handleStartResizing = (event: React.MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -420,6 +443,14 @@ export default function WorkspaceClient() {
     window.localStorage.setItem(ACTIVE_WORKSPACE_ROUTE_KEY, `/workspace${window.location.search}`);
   }, [ACTIVE_WORKSPACE_ROUTE_KEY, dirParam, isReadOnly, sessionIdParam]);
 
+  const focusPreviewItems = React.useCallback((itemIds: string[], filter?: PreviewFilter) => {
+    setPreviewFocusRequest({
+      token: Date.now(),
+      itemIds,
+      filter,
+    });
+  }, []);
+
   const renderPreviewContent = () => {
     return (
       <AnimatePresence mode="wait">
@@ -454,7 +485,7 @@ export default function WorkspaceClient() {
                     targetDir={snapshot?.target_dir || ""}
                     isBusy={isBusy}
                     readOnly={isReadOnly}
-                    onOpenExplorer={() => void openExplorer(snapshot?.target_dir || "")}
+                    onOpenExplorer={(path) => void openExplorer(path || snapshot?.target_dir || "")}
                     onCleanupDirs={() => {
                       if (!isReadOnly) {
                         void cleanupEmptyDirs();
@@ -480,6 +511,7 @@ export default function WorkspaceClient() {
                     readOnly={isReadOnly}
                     onRequestExecute={() => {
                       if (!isReadOnly) {
+                        setExecuteConfirmText("");
                         setExecuteConfirmOpen(true);
                       }
                     }}
@@ -487,6 +519,15 @@ export default function WorkspaceClient() {
                       if (!isReadOnly) {
                         void returnToPlanning();
                       }
+                    }}
+                    onLocateIssue={(itemIds, filter) => {
+                      if (isReadOnly) {
+                        return;
+                      }
+                      void (async () => {
+                        await returnToPlanning();
+                        focusPreviewItems(itemIds, filter as PreviewFilter | undefined);
+                      })();
                     }}
                   />
                 </div>
@@ -541,15 +582,16 @@ export default function WorkspaceClient() {
                         stage={stage}
                         isBusy={isBusy}
                         readOnly={isReadOnly}
+                        focusRequest={previewFocusRequest}
                         precheckSummary={snapshot?.precheck_summary}
                         onRunPrecheck={() => {
                           if (!isReadOnly) {
                             void runPrecheck();
                           }
                         }}
-                        onUpdateItem={(id, payload) => {
+                        onUpdateItem={async (id, payload) => {
                           if (!isReadOnly) {
-                            void updateItem({ item_id: id, ...payload });
+                            await updateItem({ item_id: id, ...payload });
                           }
                         }}
                       />
@@ -729,6 +771,7 @@ export default function WorkspaceClient() {
             ) : null}
 
             <section
+              ref={rightPaneRef as any}
               style={{ width: showConversationPane ? `${100 - leftWidth}%` : "100%" }}
               className="flex h-full min-h-0 min-w-[320px] flex-col overflow-hidden bg-surface-container-lowest/30"
             >
@@ -761,13 +804,18 @@ export default function WorkspaceClient() {
       />
       <ConfirmDialog
         open={executeConfirmOpen}
-        title="确认执行这次整理？"
-        description="执行后会真实移动本地文件。请在最后确认一次影响范围，避免误触发落盘。"
-        confirmLabel="开始执行"
+        title={requiresTypedExecuteConfirm ? "高风险整理，确认执行？" : "确认执行这次整理？"}
+        description={requiresTypedExecuteConfirm
+          ? "这次整理涉及较多移动、较多 Review 条目，或目标目录处于根路径。请输入大写 YES 后再执行。"
+          : "执行后会真实移动本地文件。请在最后确认一次影响范围，避免误触发落盘。"}
+        confirmLabel={requiresTypedExecuteConfirm ? "输入 YES 后执行" : "开始执行"}
         cancelLabel="再看看"
         tone="primary"
         loading={loading}
         onConfirm={async () => {
+          if (requiresTypedExecuteConfirm && executeConfirmText.trim() !== "YES") {
+            return;
+          }
           const success = await execute();
           if (success) {
             setExecuteConfirmOpen(false);
@@ -787,9 +835,20 @@ export default function WorkspaceClient() {
           <div className="flex items-center justify-between rounded-[10px] bg-surface-container-low px-3 py-2">
             <span className="text-ui-muted">将进入 Review</span>
             <span className="font-semibold text-on-surface">
-              {precheck?.move_preview.filter((move) => move.target.split(/[\\/]/).some((part) => part.toLowerCase() === "review")).length ?? 0} 项
+              {reviewMoveCount} 项
             </span>
           </div>
+          {requiresTypedExecuteConfirm ? (
+            <label className="grid gap-2 pt-2">
+              <span className="text-ui-muted">请输入大写 YES 以确认高风险执行</span>
+              <input
+                value={executeConfirmText}
+                onChange={(event) => setExecuteConfirmText(event.target.value)}
+                className="h-11 rounded-[10px] border border-on-surface/8 bg-surface-container-low px-3 text-[13px] font-semibold text-on-surface outline-none"
+                placeholder="YES"
+              />
+            </label>
+          ) : null}
         </div>
       </ConfirmDialog>
     </div>

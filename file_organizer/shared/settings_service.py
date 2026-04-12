@@ -403,6 +403,7 @@ class SettingsService:
             "name": str(preset.get("name") or DEFAULT_TEXT_PRESET["name"]),
             "OPENAI_BASE_URL": str(preset.get("OPENAI_BASE_URL") or "").strip(),
             "OPENAI_MODEL": str(preset.get("OPENAI_MODEL") or "").strip(),
+            "OPENAI_API_KEY": str(preset.get(TEXT_SECRET_KEY, "") or ""),
             "secret_state": _secret_state(str(preset.get(TEXT_SECRET_KEY, "") or "")),
         }
 
@@ -413,6 +414,7 @@ class SettingsService:
             "IMAGE_ANALYSIS_NAME": str(preset.get("IMAGE_ANALYSIS_NAME") or preset.get("name") or ""),
             "IMAGE_ANALYSIS_BASE_URL": str(preset.get("IMAGE_ANALYSIS_BASE_URL") or "").strip(),
             "IMAGE_ANALYSIS_MODEL": str(preset.get("IMAGE_ANALYSIS_MODEL") or "").strip(),
+            "IMAGE_ANALYSIS_API_KEY": str(preset.get(VISION_SECRET_KEY, "") or ""),
             "secret_state": _secret_state(str(preset.get(VISION_SECRET_KEY, "") or "")),
         }
 
@@ -424,6 +426,7 @@ class SettingsService:
             "image_model": {
                 "base_url": str(image_model.get("base_url", "") or "").strip(),
                 "model": str(image_model.get("model", "") or "").strip(),
+                "api_key": str(image_model.get("api_key", "") or ""),
                 "secret_state": _secret_state(str(image_model.get("api_key", "") or "")),
             },
             "image_size": str(preset.get("image_size") or DEFAULT_ICON_IMAGE_PRESET["image_size"]),
@@ -438,6 +441,7 @@ class SettingsService:
             "name": str(active.get("name") or DEFAULT_TEXT_PRESET["name"]),
             "base_url": str(active.get("OPENAI_BASE_URL") or "").strip(),
             "model": str(active.get("OPENAI_MODEL") or "").strip(),
+            "api_key": str(active.get(TEXT_SECRET_KEY, "") or ""),
             "secret_state": _secret_state(str(active.get(TEXT_SECRET_KEY, "") or "")),
             "configured": self.is_text_configured(),
         }
@@ -455,6 +459,7 @@ class SettingsService:
             "model_id": custom["model_id"],
             "api_type": custom["api_type"],
             "payload_template": custom["payload_template"],
+            "hf_api_token": custom["hf_api_token"],
             "secret_state": _secret_state(custom.get("hf_api_token", "")),
         }
 
@@ -467,6 +472,7 @@ class SettingsService:
             "model_id": preset["model_id"],
             "api_type": preset["api_type"],
             "payload_template": preset["payload_template"],
+            "hf_api_token": str(self._bg_removal.get("custom", {}).get("hf_api_token", "") or ""),
             "secret_state": _secret_state(str(self._bg_removal.get("custom", {}).get("hf_api_token", "") or "")),
         }
 
