@@ -89,6 +89,7 @@ export default function WorkspaceClient() {
   const [dividerLeft, setDividerLeft] = useState<number | null>(null);
   const [previewFocusRequest, setPreviewFocusRequest] = useState<PreviewFocusRequest | null>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
+  const dividerRef = React.useRef<HTMLDivElement>(null);
   const leftPaneRef = React.useRef<HTMLElement>(null);
   const rightPaneRef = React.useRef<HTMLElement>(null);
   const draggedWidthRef = React.useRef(DEFAULT_LEFT_WIDTH);
@@ -215,11 +216,8 @@ export default function WorkspaceClient() {
       return;
     }
 
-    // 限制范围：左侧至少 380px 且至少占 20%，右侧至少 420px 且至少占 30%
     const minLeft = Math.max(380, rect.width * 0.2);
     const maxLeft = Math.min(rect.width - 420, rect.width * 0.7);
-    
-    // 确保 max 不小于 min (极端小窗口兼容)
     const finalMaxLeft = Math.max(minLeft, maxLeft);
     const boundedX = Math.min(Math.max(event.clientX - rect.left, minLeft), finalMaxLeft);
     const newWidth = (boundedX / rect.width) * 100;
@@ -228,6 +226,11 @@ export default function WorkspaceClient() {
       leftPaneRef.current.style.width = `${newWidth}%`;
       rightPaneRef.current.style.width = `${100 - newWidth}%`;
     }
+    
+    if (dividerRef.current) {
+      dividerRef.current.style.left = `${boundedX - 1.25}px`;
+    }
+    
     draggedWidthRef.current = newWidth;
   }, []);
 
@@ -270,7 +273,6 @@ export default function WorkspaceClient() {
       router.push("/");
       return;
     }
-
     setExitConfirmOpen(true);
   };
 
@@ -295,7 +297,6 @@ export default function WorkspaceClient() {
       router.push("/");
     }
   };
-
 
   const statusNotice = useMemo<ConversationNotice | null>(() => {
     if (streamStatus === "offline") {
@@ -404,17 +405,16 @@ export default function WorkspaceClient() {
     }
 
     const updateDivider = () => {
+      if (isResizing.current) return;
       setDividerLeft(leftPane.getBoundingClientRect().width);
     };
 
     updateDivider();
-
     const observer = new ResizeObserver(() => {
       updateDivider();
     });
     observer.observe(container);
     observer.observe(leftPane);
-
     return () => {
       observer.disconnect();
     };
@@ -451,160 +451,146 @@ export default function WorkspaceClient() {
     });
   }, []);
 
-  const renderPreviewContent = () => {
-    return (
-      <AnimatePresence mode="wait">
-        <motion.div
-           key={stage}
-           initial={{ opacity: 0, y: 4 }}
-           animate={{ opacity: 1, y: 0 }}
-           exit={{ opacity: 0, y: -4 }}
-           transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-           className="h-full w-full"
-        >
-          {(() => {
-            if (stage === "scanning") {
-              return (
-                <MinimalScanningView
-                  scanner={scanner}
-                  progressPercent={progressPercent}
-                  onAbort={() => setScanAbortConfirmOpen(true)}
-                  aborting={loading}
-                  isModelConfigured={isTextModelConfigured}
-                />
-              );
-            }
-
-            if (stage === "completed") {
-              return (
-                <div className="mx-auto h-full w-full max-w-[1360px] overflow-y-auto p-5 scrollbar-thin">
-                  <CompletionView
-                    journal={journal}
-                    summary={snapshot?.summary || ""}
-                    loading={journalLoading || !journal}
-                    targetDir={snapshot?.target_dir || ""}
-                    isBusy={isBusy}
-                    readOnly={isReadOnly}
-                    onOpenExplorer={(path) => void openExplorer(path || snapshot?.target_dir || "")}
-                    onCleanupDirs={() => {
-                      if (!isReadOnly) {
-                        void cleanupEmptyDirs();
-                      }
-                    }}
-                    onRollback={() => {
-                      if (!isReadOnly) {
-                        void rollback();
-                      }
-                    }}
-                    onGoHome={handleExitWorkbench}
-                  />
-                </div>
-              );
-            }
-
-            if (stage === "ready_to_execute") {
-              return (
-                <div className="mx-auto h-full w-full max-w-[1360px] overflow-y-auto p-5 scrollbar-thin">
-                  <PrecheckView
-                    summary={precheck}
-                    isBusy={isBusy}
-                    readOnly={isReadOnly}
-                    onRequestExecute={() => {
-                      if (!isReadOnly) {
-                        setExecuteConfirmText("");
-                        setExecuteConfirmOpen(true);
-                      }
-                    }}
-                    onBack={() => {
-                      if (!isReadOnly) {
-                        void returnToPlanning();
-                      }
-                    }}
-                    onLocateIssue={(itemIds, filter) => {
-                      if (isReadOnly) {
-                        return;
-                      }
-                      void (async () => {
-                        await returnToPlanning();
-                        focusPreviewItems(itemIds, filter as PreviewFilter | undefined);
-                      })();
-                    }}
-                  />
-                </div>
-              );
-            }
-
+  const renderPreviewContent = () => (
+    <AnimatePresence mode="wait">
+      <motion.div
+         key={stage}
+         initial={{ opacity: 0, y: 4 }}
+         animate={{ opacity: 1, y: 0 }}
+         exit={{ opacity: 0, y: -4 }}
+         transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+         className="h-full w-full"
+      >
+        {(() => {
+          if (stage === "scanning") {
             return (
-              <ErrorBoundary fallbackTitle="预览区加载失败">
-                {stage === "idle" || stage === "draft" ? (
-                  <EmptyState
-                    icon={Layers}
-                    title="整理预览准备中"
-                    description="先开始扫描，系统会在这里显示整理前后的目录变化。"
-                    className="mx-auto h-[70vh] max-w-[1360px]"
-                  />
-                ) : (
-                  <div className="flex h-full flex-col">
-                    {(stage === "stale" || stage === "interrupted") && (
-                      <div className="z-10 border-b border-warning/15 bg-warning-container/8 px-4 py-2.5 backdrop-blur-sm">
-                        <div className="flex items-center justify-between gap-4">
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-warning/15 text-warning">
-                              <AlertTriangle className="h-4 w-4" />
-                            </div>
-            <p className="text-[13px] font-medium text-on-surface">
-                              {stage === "stale" ? "当前方案已过期，建议重新扫描以同步目录状态。" : "任务已中断，建议重新扫描后再继续。"}
-                            </p>
+              <MinimalScanningView
+                scanner={scanner}
+                progressPercent={progressPercent}
+                onAbort={() => setScanAbortConfirmOpen(true)}
+                aborting={loading}
+                isModelConfigured={isTextModelConfigured}
+              />
+            );
+          }
+
+          if (stage === "completed") {
+            return (
+              <div className="mx-auto h-full w-full max-w-[1360px] overflow-y-auto p-5 scrollbar-thin">
+                <CompletionView
+                  journal={journal}
+                  summary={snapshot?.summary || ""}
+                  loading={journalLoading || !journal}
+                  targetDir={snapshot?.target_dir || ""}
+                  isBusy={isBusy}
+                  readOnly={isReadOnly}
+                  onOpenExplorer={(path) => void openExplorer(path || snapshot?.target_dir || "")}
+                  onCleanupDirs={() => {
+                    if (!isReadOnly) void cleanupEmptyDirs();
+                  }}
+                  onRollback={() => {
+                    if (!isReadOnly) void rollback();
+                  }}
+                  onGoHome={handleExitWorkbench}
+                />
+              </div>
+            );
+          }
+
+          if (stage === "ready_to_execute") {
+            return (
+              <div className="mx-auto h-full w-full max-w-[1360px] overflow-y-auto p-5 scrollbar-thin">
+                <PrecheckView
+                  summary={precheck}
+                  isBusy={isBusy}
+                  readOnly={isReadOnly}
+                  onRequestExecute={() => {
+                    if (!isReadOnly) {
+                      setExecuteConfirmText("");
+                      setExecuteConfirmOpen(true);
+                    }
+                  }}
+                  onBack={() => {
+                    if (!isReadOnly) void returnToPlanning();
+                  }}
+                  onLocateIssue={(itemIds, filter) => {
+                    if (isReadOnly) return;
+                    void (async () => {
+                      await returnToPlanning();
+                      focusPreviewItems(itemIds, filter as PreviewFilter | undefined);
+                    })();
+                  }}
+                />
+              </div>
+            );
+          }
+
+          return (
+            <ErrorBoundary fallbackTitle="预览区加载失败">
+              {stage === "idle" || stage === "draft" ? (
+                <EmptyState
+                  icon={Layers}
+                  title="整理预览准备中"
+                  description="先开始扫描，系统会在这里显示整理前后的目录变化。"
+                  className="mx-auto h-[70vh] max-w-[1360px]"
+                />
+              ) : (
+                <div className="flex h-full flex-col">
+                  {(stage === "stale" || stage === "interrupted") && (
+                    <div className="z-10 border-b border-warning/15 bg-warning-container/8 px-4 py-2.5 backdrop-blur-sm">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-warning/15 text-warning">
+                            <AlertTriangle className="h-4 w-4" />
                           </div>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={handleExitWorkbench}
-                              className="rounded-[6px] px-3 py-1.5 text-[12px] font-semibold text-on-surface-variant transition-colors hover:bg-on-surface/5"
-                            >
-                              稍后再说
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => void refreshPlan()}
-                              className="inline-flex items-center gap-1.5 rounded-[8px] bg-warning px-3 py-1.5 text-[12px] font-bold text-white shadow-sm transition-opacity hover:opacity-90"
-                            >
-                              <RefreshCw className="h-3.5 w-3.5" />
-                              重新扫描
-                            </button>
-                          </div>
+                          <p className="text-[13px] font-medium text-on-surface">
+                            {stage === "stale" ? "当前方案已过期，建议重新扫描以同步目录状态。" : "任务已中断，建议重新扫描后再继续。"}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handleExitWorkbench}
+                            className="rounded-[6px] px-3 py-1.5 text-[12px] font-semibold text-on-surface-variant transition-colors hover:bg-on-surface/5"
+                          >
+                            稍后再说
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void refreshPlan()}
+                            className="inline-flex items-center gap-1.5 rounded-[8px] bg-warning px-3 py-1.5 text-[12px] font-bold text-white shadow-sm transition-opacity hover:opacity-90"
+                          >
+                            <RefreshCw className="h-3.5 w-3.5" />
+                            重新扫描
+                          </button>
                         </div>
                       </div>
-                    )}
-                    <div className="flex-1 overflow-hidden">
-                      <PreviewPanel
-                        plan={plan}
-                        stage={stage}
-                        isBusy={isBusy}
-                        readOnly={isReadOnly}
-                        focusRequest={previewFocusRequest}
-                        precheckSummary={snapshot?.precheck_summary}
-                        onRunPrecheck={() => {
-                          if (!isReadOnly) {
-                            void runPrecheck();
-                          }
-                        }}
-                        onUpdateItem={async (id, payload) => {
-                          if (!isReadOnly) {
-                            await updateItem({ item_id: id, ...payload });
-                          }
-                        }}
-                      />
                     </div>
+                  )}
+                  <div className="flex-1 overflow-hidden">
+                    <PreviewPanel
+                      plan={plan}
+                      stage={stage}
+                      isBusy={isBusy}
+                      readOnly={isReadOnly}
+                      focusRequest={previewFocusRequest}
+                      precheckSummary={snapshot?.precheck_summary}
+                      onRunPrecheck={() => {
+                        if (!isReadOnly) void runPrecheck();
+                      }}
+                      onUpdateItem={async (id, payload) => {
+                        if (!isReadOnly) await updateItem({ item_id: id, ...payload });
+                      }}
+                    />
                   </div>
-                )}
-              </ErrorBoundary>
-            );
-          })()}
-        </motion.div>
-      </AnimatePresence>
-    );
-  };
+                </div>
+              )}
+            </ErrorBoundary>
+          );
+        })()}
+      </motion.div>
+    </AnimatePresence>
+  );
 
   const renderLayoutSkeleton = () => (
     <div className="flex flex-1 min-h-0 animate-pulse">
@@ -653,9 +639,7 @@ export default function WorkspaceClient() {
       onSendMessage={handleSendMessage}
       onStartScan={() => void scan()}
       onResolveUnresolved={(payload) => {
-        if (!isReadOnly) {
-          void resolveUnresolvedChoices(payload);
-        }
+        if (!isReadOnly) void resolveUnresolvedChoices(payload);
       }}
       unresolvedCount={plan.unresolved_items.length}
       notice={statusNotice}
@@ -667,8 +651,6 @@ export default function WorkspaceClient() {
   const conversationHeader = (
     <div className="z-20 flex shrink-0 items-center justify-between gap-3 border-b border-on-surface/8 bg-surface px-4 py-2.5 lg:px-5">
       <div className="flex min-w-0 items-center gap-4">
-        {/* Task title removed because it's redundant with navbar breadcrumb */}
-        
         <div className="flex flex-wrap items-center gap-2">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-on-surface/8 bg-surface-container-low px-2 py-0.5 text-[11px] font-bold text-on-surface-variant">
             <span className={cn(
@@ -677,15 +659,13 @@ export default function WorkspaceClient() {
             )} />
             {getFriendlyStage(stage)}
           </span>
-          
-          {assistantRuntime ? (
+          {assistantRuntime && (
             <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/10 bg-primary/6 px-2 py-0.5 text-[11px] font-bold text-primary/75">
               <Loader2 className="h-3 w-3 animate-spin-slow" />
               {assistantRuntime.label}
             </span>
-          ) : null}
-
-          {streamStatus !== "connected" ? (
+          )}
+          {streamStatus !== "connected" && (
             <span
               className={cn(
                 "rounded-full border px-2 py-0.5 text-[11px] font-bold",
@@ -694,22 +674,15 @@ export default function WorkspaceClient() {
                 streamStatus === "offline" && "border-on-surface/10 bg-surface-container-low text-ui-muted",
               )}
             >
-              {streamStatus === "connecting"
-                ? "正在连接"
-                : streamStatus === "reconnecting"
-                  ? "连接中断，重连中"
-                  : "连接已断开"}
+              {streamStatus === "connecting" ? "正在连接" : streamStatus === "reconnecting" ? "重连中" : "连接已断开"}
             </span>
-          ) : null}
+          )}
         </div>
-
         <div className="h-3 w-[1px] bg-on-surface/10 hidden md:block" />
-
         <p className="hidden md:block truncate text-[12px] font-medium text-on-surface-variant/70" title={targetPath}>
           {nextStepHint}
         </p>
       </div>
-
       <div className="flex items-center gap-3 shrink-0">
         <button
           type="button"
@@ -728,7 +701,7 @@ export default function WorkspaceClient() {
       <ErrorBoundary fallbackTitle="页面加载出错了" className="flex-1">
         {layoutReady ? (
           <div className="flex flex-1 min-h-0 bg-transparent">
-            {showConversationPane ? (
+            {showConversationPane && (
               <section
                 ref={leftPaneRef}
                 style={{ width: `${leftWidth}%` }}
@@ -737,10 +710,11 @@ export default function WorkspaceClient() {
                 {conversationHeader}
                 {conversationPanel}
               </section>
-            ) : null}
+            )}
 
-            {showConversationPane ? (
+            {showConversationPane && (
               <div
+                ref={dividerRef}
                 onMouseDown={handleStartResizing}
                 className={cn(
                   "absolute top-0 bottom-0 w-2.5 z-40 transition-colors cursor-col-resize flex items-center justify-center select-none group",
@@ -768,14 +742,14 @@ export default function WorkspaceClient() {
                   <div className={cn("w-[1.5px] h-3 rounded-sm transition-colors", isResizingState ? "bg-primary/40" : "bg-on-surface/15")} />
                 </div>
               </div>
-            ) : null}
+            )}
 
             <section
               ref={rightPaneRef as any}
               style={{ width: showConversationPane ? `${100 - leftWidth}%` : "100%" }}
-              className="flex h-full min-h-0 min-w-[320px] flex-col overflow-hidden bg-surface-container-lowest/30"
+              className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-surface-container-lowest/30"
             >
-              <div className="flex-1 min-h-0">{renderPreviewContent()}</div>
+              <div className="flex-1 min-h-0 w-full overflow-hidden flex flex-col">{renderPreviewContent()}</div>
             </section>
           </div>
         ) : renderLayoutSkeleton()}
@@ -813,13 +787,9 @@ export default function WorkspaceClient() {
         tone="primary"
         loading={loading}
         onConfirm={async () => {
-          if (requiresTypedExecuteConfirm && executeConfirmText.trim() !== "YES") {
-            return;
-          }
+          if (requiresTypedExecuteConfirm && executeConfirmText.trim() !== "YES") return;
           const success = await execute();
-          if (success) {
-            setExecuteConfirmOpen(false);
-          }
+          if (success) setExecuteConfirmOpen(false);
         }}
         onCancel={() => setExecuteConfirmOpen(false)}
       >
@@ -834,11 +804,9 @@ export default function WorkspaceClient() {
           </div>
           <div className="flex items-center justify-between rounded-[10px] bg-surface-container-low px-3 py-2">
             <span className="text-ui-muted">将进入 Review</span>
-            <span className="font-semibold text-on-surface">
-              {reviewMoveCount} 项
-            </span>
+            <span className="font-semibold text-on-surface">{reviewMoveCount} 项</span>
           </div>
-          {requiresTypedExecuteConfirm ? (
+          {requiresTypedExecuteConfirm && (
             <label className="grid gap-2 pt-2">
               <span className="text-ui-muted">请输入大写 YES 以确认高风险执行</span>
               <input
@@ -848,7 +816,7 @@ export default function WorkspaceClient() {
                 placeholder="YES"
               />
             </label>
-          ) : null}
+          )}
         </div>
       </ConfirmDialog>
     </div>

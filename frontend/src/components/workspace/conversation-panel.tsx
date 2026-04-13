@@ -96,9 +96,7 @@ export function ConversationPanel({
       const next = { ...prev };
       for (const message of messages) {
         for (const block of message.blocks || []) {
-          if (block.type !== "unresolved_choices") {
-            continue;
-          }
+          if (block.type !== "unresolved_choices") continue;
           const existing = next[block.request_id] || {};
           const merged: ResolutionDraftMap = { ...existing };
           for (const item of block.items) {
@@ -115,35 +113,23 @@ export function ConversationPanel({
 
 
   useEffect(() => {
-    if (!isPinnedToBottom) {
-      return;
-    }
+    if (!isPinnedToBottom) return;
     const container = scrollContainerRef.current;
-    if (!container) {
-      return;
-    }
-    container.scrollTo({
-      top: container.scrollHeight,
-      behavior: "smooth",
-    });
+    if (!container) return;
+    container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
   }, [messages, assistantDraft, isPinnedToBottom]);
 
   const handleScroll = () => {
     const container = scrollContainerRef.current;
-    if (!container) {
-      return;
-    }
+    if (!container) return;
     const threshold = 32;
-    const pinned =
-      container.scrollHeight - container.scrollTop - container.clientHeight <= threshold;
+    const pinned = container.scrollHeight - container.scrollTop - container.clientHeight <= threshold;
     setIsPinnedToBottom(pinned);
   };
 
   const handleJumpToBottom = () => {
     const container = scrollContainerRef.current;
-    if (!container) {
-      return;
-    }
+    if (!container) return;
     container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
     setIsPinnedToBottom(true);
   };
@@ -211,7 +197,7 @@ export function ConversationPanel({
         </div>
         {(notice.primaryAction || notice.secondaryAction) && (
           <div className="flex flex-wrap gap-3">
-            {notice.primaryAction ? (
+            {notice.primaryAction && (
               <button
                 type="button"
                 onClick={notice.primaryAction.onClick}
@@ -219,8 +205,8 @@ export function ConversationPanel({
               >
                 {notice.primaryAction.label}
               </button>
-            ) : null}
-            {notice.secondaryAction ? (
+            )}
+            {notice.secondaryAction && (
               <button
                 type="button"
                 onClick={notice.secondaryAction.onClick}
@@ -228,12 +214,13 @@ export function ConversationPanel({
               >
                 {notice.secondaryAction.label}
               </button>
-            ) : null}
+            )}
           </div>
         )}
       </div>
     </div>
   ) : null;
+
   const scanningItems = [...(scanner?.recent_analysis_items || [])].slice(-5).reverse();
   const currentScanningItem = scanner?.current_item || scanningItems[0]?.display_name || "正在准备扫描";
   const scanningPercent = Math.max(0, Math.min(100, Math.round(progressPercent)));
@@ -279,6 +266,7 @@ export function ConversationPanel({
             </div>
           </motion.div>
         )}
+        
         {stage === "scanning" && (
           <motion.div
             initial={{ opacity: 0, scale: 0.98 }}
@@ -305,8 +293,7 @@ export function ConversationPanel({
                     {scanningPercent}%
                   </div>
                 </div>
-
-                {scanningItems.length > 0 ? (
+                {scanningItems.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
                     {scanningItems.slice(0, 3).map((item) => (
                       <span
@@ -318,7 +305,7 @@ export function ConversationPanel({
                       </span>
                     ))}
                   </div>
-                ) : null}
+                )}
               </div>
             </div>
           </motion.div>
@@ -352,7 +339,6 @@ export function ConversationPanel({
                   isGrouped ? "pb-0.5" : "pb-1"
                 )}
               >
-                {/* 垂直连接引导线 (Thread Line) */}
                 {isAssistant && (
                   <div className={cn(
                     "absolute left-[13px] w-[1px] bg-on-surface-variant/10 transition-all pointer-events-none",
@@ -360,7 +346,6 @@ export function ConversationPanel({
                     messages[idx + 1]?.role === "assistant" ? "bottom-[-1.5rem]" : "bottom-0"
                   )} />
                 )}
-
                 <div className={cn(
                   "flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-[6px] border border-on-surface/8 transition-opacity z-10",
                   isAssistant ? "bg-surface-container-lowest text-primary" : "bg-primary text-white",
@@ -368,7 +353,6 @@ export function ConversationPanel({
                 )}>
                   {isAssistant ? <Bot className="w-3 h-3" /> : <User className="w-3 h-3" />}
                 </div>
-                
                 <div className="flex-1 flex flex-col gap-2 min-w-0">
                   {message.content && (
                     <div
@@ -384,11 +368,8 @@ export function ConversationPanel({
                       <MarkdownProse content={message.content} />
                     </div>
                   )}
-
                   {isAssistant && (message.blocks || []).map((block) => {
-                    if (block.type !== "unresolved_choices") {
-                      return null;
-                    }
+                    if (block.type !== "unresolved_choices") return null;
                     return (
                       <div key={block.request_id} className="max-w-[90%] 2xl:max-w-[88%] transform group">
                         <UnresolvedChoicesBubble
@@ -397,37 +378,20 @@ export function ConversationPanel({
                           warning={resolutionWarnings[block.request_id] || null}
                           isSubmitting={submittingRequestId === block.request_id}
                           onPickFolder={(itemId, folder) => {
-                            updateDraft(block.request_id, itemId, (draft) => ({
-                              ...draft,
-                              selected_folder: folder,
-                              custom_selected: false,
-                            }));
+                            updateDraft(block.request_id, itemId, (draft) => ({ ...draft, selected_folder: folder, custom_selected: false }));
                           }}
                           onPickCustom={(itemId) => {
-                            updateDraft(block.request_id, itemId, (draft) => ({
-                              ...draft,
-                              selected_folder: "",
-                              custom_selected: true,
-                            }));
+                            updateDraft(block.request_id, itemId, (draft) => ({ ...draft, selected_folder: "", custom_selected: true }));
                           }}
                           onChangeNote={(itemId, note) => {
-                            updateDraft(block.request_id, itemId, (draft) => ({
-                              ...draft,
-                              note,
-                              custom_selected: true,
-                              selected_folder: "",
-                            }));
+                            updateDraft(block.request_id, itemId, (draft) => ({ ...draft, note, custom_selected: true, selected_folder: "" }));
                           }}
                           onSetAllReview={() => {
                             setResolutionDrafts((prev) => ({
                               ...prev,
                               [block.request_id]: Object.fromEntries(
                                 block.items.map((item) => {
-                                  const current = prev[block.request_id]?.[item.item_id] || {
-                                    selected_folder: "",
-                                    note: "",
-                                    custom_selected: false,
-                                  };
+                                  const current = prev[block.request_id]?.[item.item_id] || { selected_folder: "", note: "", custom_selected: false };
                                   return [item.item_id, { ...current, selected_folder: "Review", custom_selected: false }];
                                 }),
                               ),
@@ -449,56 +413,40 @@ export function ConversationPanel({
               key="assistant-streaming-bubble"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-            className="flex gap-3 mt-5.5"
-          >
+              className="flex gap-3 mt-5.5"
+            >
               <div className="flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-[6px] border border-on-surface/8 bg-surface-container-lowest text-primary">
                 <Bot className="w-3 h-3" />
               </div>
               <div className="flex-1 rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-3.5 py-2.5 text-ui-body leading-relaxed text-on-surface shadow-sm shadow-black/[0.01]">
                 <div className="mb-3 flex items-center gap-2 text-primary/70">
                   <div className="flex gap-0.5">
-                    <motion.span 
-                      animate={{ scale: [1, 1.2, 1], opacity: [0.4, 1, 0.4] }} 
-                      transition={{ repeat: Infinity, duration: 2, delay: 0 }}
-                      className="w-1.5 h-1.5 bg-current rounded-full" 
-                    />
-                    <motion.span 
-                      animate={{ scale: [1, 1.2, 1], opacity: [0.4, 1, 0.4] }} 
-                      transition={{ repeat: Infinity, duration: 2, delay: 0.2 }}
-                      className="w-1.5 h-1.5 bg-current rounded-full" 
-                    />
-                    <motion.span 
-                      animate={{ scale: [1, 1.2, 1], opacity: [0.4, 1, 0.4] }} 
-                      transition={{ repeat: Infinity, duration: 2, delay: 0.4 }}
-                      className="w-1.5 h-1.5 bg-current rounded-full" 
-                    />
+                    {[0, 0.2, 0.4].map((delay) => (
+                      <motion.span key={delay} animate={{ scale: [1, 1.2, 1], opacity: [0.4, 1, 0.4] }} transition={{ repeat: Infinity, duration: 2, delay }} className="w-1.5 h-1.5 bg-current rounded-full" />
+                    ))}
                   </div>
                   <span className="ml-1 text-[12px] font-medium">正在整理回复...</span>
                 </div>
                 <div className="relative">
                   <MarkdownProse content={assistantDraft} />
-                  <motion.span 
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: [0, 1, 0] }}
-                    transition={{ repeat: Infinity, duration: 0.8 }}
-                    className="inline-block w-1.5 h-4 bg-primary/40 ml-1 translate-y-0.5"
-                  />
+                  <motion.span initial={{ opacity: 0 }} animate={{ opacity: [0, 1, 0] }} transition={{ repeat: Infinity, duration: 0.8 }} className="inline-block w-1.5 h-4 bg-primary/40 ml-1 translate-y-0.5" />
                 </div>
               </div>
             </motion.div>
           )}
-
         </div>
 
         {!isPinnedToBottom && (messages.length > 0 || assistantDraft) && (
-          <button
-            type="button"
-            onClick={handleJumpToBottom}
-            className="sticky bottom-6 z-20 mx-auto flex items-center gap-2 rounded-full border border-black/10 bg-on-surface/90 px-5 py-2.5 text-[12px] font-black tracking-tight text-surface shadow-2xl backdrop-blur-md transition-all hover:scale-105 active:scale-95 sm:bottom-8"
-          >
-            回到底部
-            <ChevronDown className="h-4 w-4" />
-          </button>
+          <div className="sticky bottom-4 z-40 flex justify-end pr-2 pb-2">
+            <button
+              type="button"
+              onClick={handleJumpToBottom}
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-primary/20 bg-surface shadow-xl shadow-primary/10 transition-all hover:scale-110 hover:border-primary/40 active:scale-95 text-primary backdrop-blur-sm"
+              title="回到底部"
+            >
+              <ChevronDown className="h-5 w-5" />
+            </button>
+          </div>
         )}
       </div>
 

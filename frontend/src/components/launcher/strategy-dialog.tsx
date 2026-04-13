@@ -75,7 +75,7 @@ export function StrategyDialog({
                   <div className="text-ui-meta text-ui-muted">目标目录</div>
                   <p className="mt-1 max-w-[260px] truncate font-mono text-[12px] font-medium text-on-surface" title={targetDir}>{targetDir}</p>
                 </div>
-                <Button variant="secondary" size="sm" onClick={onClose} className="h-10 w-10 rounded-[10px] p-0" title="关闭">
+                <Button variant="secondary" size="sm" onClick={onClose} className="h-10 w-10 rounded-[8px] p-0" title="关闭">
                   <X className="h-4.5 w-4.5" />
                 </Button>
               </div>

@@ -308,10 +308,10 @@ export function PreviewPanel(props: PreviewPanelProps) {
         : "方案正在同步，稍后即可预检。";
 
   return (
-    <div className="flex h-full flex-col bg-transparent @container">
-      <div className="flex-1 overflow-y-auto px-4 py-4 lg:px-6">
-        <div className="mx-auto max-w-[1380px] space-y-4">
-          <section className="rounded-[12px] border border-on-surface/8 bg-surface-container-lowest shadow-[0_20px_40px_rgba(0,0,0,0.04)]">
+    <div className="flex h-full w-full min-w-0 flex-col bg-transparent @container overflow-hidden">
+      <div className="flex-1 overflow-x-hidden overflow-y-auto px-4 py-4 lg:px-6">
+        <div className="mx-auto w-full max-w-[1380px] space-y-4 min-w-0">
+          <section className="min-w-0 rounded-[12px] border border-on-surface/8 bg-surface-container-lowest shadow-[0_20px_40px_rgba(0,0,0,0.04)]">
             <div className="border-b border-on-surface/6 px-5 py-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                 <div className="space-y-1">
@@ -387,7 +387,7 @@ export function PreviewPanel(props: PreviewPanelProps) {
                 </div>
               </section>
 
-              <aside className="w-full shrink-0 space-y-3 @4xl:w-[380px]">
+              <aside className="w-full shrink-0 flex-1 space-y-3 min-w-0 @4xl:w-[360px] @4xl:flex-none">
                 <QueueCard title="需重新确认" items={invalidatedItems} selectedItemId={selectedItemId} onSelectItem={setSelectedItemId} onShowAll={() => setFilter("invalidated")} tone="border-error/12 bg-error-container/20" />
                 <QueueCard title="待决策" items={unresolvedItems} selectedItemId={selectedItemId} onSelectItem={setSelectedItemId} onShowAll={() => setFilter("unresolved")} tone="border-warning/12 bg-warning-container/25" />
                 <QueueCard title="待核对" items={reviewItems} selectedItemId={selectedItemId} onSelectItem={setSelectedItemId} onShowAll={() => setFilter("review")} tone="border-primary/12 bg-primary/5" />
@@ -408,11 +408,11 @@ export function PreviewPanel(props: PreviewPanelProps) {
                   {selectedItem ? (
                     <div className="mt-4 space-y-4">
                       <div className="grid gap-2">
-                        <div className="rounded-[8px] border border-on-surface/8 bg-surface-container-lowest px-3 py-2">
+                        <div className="min-w-0 flex-1 rounded-[8px] border border-on-surface/8 bg-surface-container-lowest px-3 py-2">
                           <div className="text-[11px] font-semibold text-ui-muted">原路径</div>
                           <div className="mt-1 break-all text-[12px] text-on-surface">{selectedItem.source_relpath}</div>
                         </div>
-                        <div className="rounded-[8px] border border-on-surface/8 bg-surface-container-lowest px-3 py-2">
+                        <div className="min-w-0 flex-1 rounded-[8px] border border-on-surface/8 bg-surface-container-lowest px-3 py-2">
                           <div className="text-[11px] font-semibold text-ui-muted">目标路径</div>
                           <div className="mt-1 break-all text-[12px] text-on-surface">{selectedItem.target_relpath || "当前目录"}</div>
                         </div>
@@ -464,9 +464,9 @@ export function PreviewPanel(props: PreviewPanelProps) {
                               {showManualInput ? "收起高级路径输入" : "高级路径输入"}
                             </button>
                             {showManualInput ? (
-                              <div className="flex gap-2">
-                                <input value={manualTarget} onChange={(event) => setManualTarget(event.target.value)} placeholder="输入相对目录，例如 项目资料/归档" className="h-10 min-w-0 flex-1 rounded-[8px] border border-on-surface/8 bg-surface-container-lowest px-3 text-[12px] text-on-surface outline-none" />
-                                <button type="button" onClick={() => void applyItemTarget(selectedItem.item_id, { target_dir: manualTarget.trim() })} className="shrink-0 rounded-[8px] bg-on-surface px-4 text-[12px] font-semibold text-surface">
+                              <div className="flex gap-2 min-w-0 items-center">
+                                <input value={manualTarget} onChange={(event) => setManualTarget(event.target.value)} placeholder="项目资料/归档" className="h-10 min-w-0 flex-1 rounded-[8px] border border-on-surface/8 bg-surface-container-lowest px-3 text-[12px] text-on-surface outline-none" />
+                                <button type="button" onClick={() => void applyItemTarget(selectedItem.item_id, { target_dir: manualTarget.trim() })} className="shrink-0 h-10 rounded-[8px] bg-on-surface px-4 text-[12px] font-semibold text-surface transition-transform active:scale-95">
                                   应用
                                 </button>
                               </div>

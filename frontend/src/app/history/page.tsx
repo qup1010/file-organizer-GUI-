@@ -279,8 +279,7 @@ export default function HistoryPage() {
           ) : null}
 
           <div className="relative flex-1 overflow-y-auto bg-surface-container-low px-4 py-4 scrollbar-thin">
-            {/* Timeline Thread Line */}
-            <div className="absolute left-[1.75rem] top-0 bottom-0 w-[0.5px] bg-on-surface/10 pointer-events-none" />
+
 
             {loading ? (
               <div className="flex h-full min-h-[16rem] flex-col items-center justify-center gap-4">
@@ -301,6 +300,7 @@ export default function HistoryPage() {
                       initial={{ opacity: 0, y: 12 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: idx * 0.03, duration: 0.35, ease: [0.23, 1, 0.32, 1] }}
+                      whileTap={{ scale: 0.985 }}
                       role="button"
                       tabIndex={0}
                       onClick={() => setSelectedSessionId(entry.execution_id)}
@@ -311,22 +311,35 @@ export default function HistoryPage() {
                         }
                       }}
                       className={cn(
-                        "group relative overflow-hidden rounded-[4px] border transition-all duration-300 cursor-pointer",
+                        "group relative overflow-hidden rounded-[8px] border transition-[border-color,box-shadow] duration-300 cursor-pointer",
                         active
-                          ? "border-primary/25 bg-primary/[0.04] shadow-[inset_0_0_0_1px_rgba(var(--primary-rgb),0.05),0_12px_24px_-8px_rgba(0,0,0,0.06)]"
-                          : "border-on-surface/5 bg-surface-container-lowest hover:border-primary/15 hover:bg-surface-container-lowest hover:shadow-lg hover:shadow-black/[0.02]",
+                          ? "border-primary/25 shadow-[0_12px_24px_-8px_rgba(0,0,0,0.06)]"
+                          : "border-on-surface/5 bg-surface-container-lowest hover:border-primary/15 hover:shadow-lg hover:shadow-black/[0.02]",
                       )}
                     >
-                      {/* Floating Accent Indicator */}
+                      {/* Smooth Active Indicator & Background Overlay */}
                       <AnimatePresence>
                         {active && (
-                          <motion.div
-                            layoutId="history-active-pill"
-                            initial={{ opacity: 0, x: -4, scaleY: 0.5 }}
-                            animate={{ opacity: 1, x: 0, scaleY: 1 }}
-                            exit={{ opacity: 0, x: -4, scaleY: 0.5 }}
-                            className="absolute left-0 inset-y-0 z-10 w-[4px] bg-primary shadow-[2px_0_12px_rgba(var(--primary-rgb),0.3)]"
-                          />
+                          <>
+                             {/* Background Highlight */}
+                             <motion.div
+                                layoutId="history-active-bg"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                transition={{ type: "spring", bounce: 0.2, duration: 0.5 }}
+                                className="absolute inset-0 z-0 bg-primary/[0.05]"
+                             />
+                             {/* Side Pill */}
+                             <motion.div
+                                layoutId="history-active-pill"
+                                initial={{ opacity: 0, x: -4, scaleY: 0.5 }}
+                                animate={{ opacity: 1, x: 0, scaleY: 1 }}
+                                exit={{ opacity: 0, x: -4, scaleY: 0.5 }}
+                                transition={{ type: "spring", bounce: 0.2, duration: 0.5 }}
+                                className="absolute left-0 top-3 bottom-3 z-10 w-[3.5px] rounded-r-full bg-primary"
+                             />
+                          </>
                         )}
                       </AnimatePresence>
 

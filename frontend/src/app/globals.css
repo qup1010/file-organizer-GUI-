@@ -322,7 +322,7 @@
 .ui-dialog {
   border: 1px solid color-mix(in srgb, var(--on-surface) 8%, transparent);
   background: color-mix(in srgb, var(--surface-container-lowest) 96%, white 4%);
-  border-radius: 8px;
+  border-radius: 16px;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.14), 0 2px 6px rgba(0, 0, 0, 0.06);
 }
 

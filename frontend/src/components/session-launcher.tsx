@@ -348,7 +348,7 @@ export function SessionLauncher() {
           transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
           className="w-full"
         >
-          <section className="overflow-hidden rounded-[10px] border border-on-surface/8 bg-surface-container-lowest shadow-[0_20px_48px_rgba(0,0,0,0.05)]">
+          <section className="overflow-hidden rounded-[12px] border border-on-surface/8 bg-surface-container-lowest shadow-[0_20px_48px_rgba(0,0,0,0.05)]">
             <div className="p-6 sm:p-8">
                <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
                   <div className="space-y-8">
@@ -366,10 +366,10 @@ export function SessionLauncher() {
                     </div>
 
                     <div className="space-y-6">
-                      <div className="group relative overflow-hidden rounded-[16px] border border-on-surface/10 bg-surface shadow-[0_8px_40px_rgba(0,0,0,0.04)] transition-all hover:shadow-[0_12px_50px_rgba(0,0,0,0.06)]">
+                      <div className="group relative overflow-hidden rounded-[12px] border border-on-surface/10 bg-surface shadow-[0_8px_40px_rgba(0,0,0,0.04)] transition-all hover:shadow-[0_12px_50px_rgba(0,0,0,0.06)]">
                           <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.02] to-transparent pointer-events-none" />
                           <div className="relative p-6 sm:p-7">
-                            <div className="grid gap-6 lg:grid-cols-[1fr_auto]">
+                            <div className="grid gap-6 xl:grid-cols-[1fr_auto]">
                               <div className="min-w-0 flex-1">
                                 <div className="mb-4 flex items-center gap-2.5">
                                   <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -377,35 +377,35 @@ export function SessionLauncher() {
                                   </div>
                                   <span className="text-[11px] font-black uppercase tracking-[0.25em] text-primary/70">整理目标目录</span>
                                 </div>
-                                <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-3">
                                   <button
                                     onClick={handleSelectDir}
                                     disabled={loading}
-                                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[12px] border border-on-surface/8 bg-on-surface/[0.03] text-on-surface transition-all hover:bg-primary/5 hover:text-primary active:scale-95"
+                                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] border border-on-surface/8 bg-on-surface/[0.03] text-on-surface transition-all hover:bg-primary/5 hover:text-primary active:scale-95 sm:h-11 sm:w-11"
                                   >
-                                    <FolderOpen className="h-5.5 w-5.5" />
+                                    <FolderOpen className="h-5 w-5" />
                                   </button>
                                   <input
                                     value={targetDir}
                                     onChange={(event) => setTargetDir(event.target.value)}
                                     disabled={loading}
                                     title={targetDir}
-                                    className="h-10 w-full min-w-0 flex-1 truncate bg-transparent text-[15px] font-bold tracking-tight text-on-surface outline-none placeholder:text-on-surface-variant/20 disabled:opacity-70 sm:text-[16px]"
-                                    placeholder="粘贴路径或点击左侧图标选择"
+                                    className="h-10 w-full min-w-0 flex-1 bg-transparent text-[15px] font-bold tracking-tight text-on-surface outline-none placeholder:text-on-surface-variant/20 disabled:opacity-70 sm:text-[16px]"
+                                    placeholder="粘贴路径或点击左边图标选择"
                                     onKeyDown={(e) => {
                                       if (e.key === "Enter") void handlePrimaryLaunch();
                                     }}
                                   />
                                 </div>
                               </div>
-                              <div className="flex flex-col sm:flex-row items-center gap-3 pt-4 lg:pt-0">
+                              <div className="flex flex-col sm:flex-row items-center justify-end gap-3 xl:pt-0">
                                 <Button
                                   variant="ghost"
                                   onClick={() => openStrategyDialog()}
                                   disabled={loading || !targetDir.trim()}
-                                  className="h-12 rounded-[10px] px-4 text-[13px] font-bold text-ui-muted hover:text-on-surface bg-on-surface/[0.03] transition-colors sm:h-14 sm:rounded-[12px] sm:px-5 sm:text-[14px]"
+                                  className="h-11 w-full rounded-[8px] px-4 text-[13px] font-bold text-ui-muted hover:text-on-surface bg-on-surface/[0.03] transition-colors sm:h-12 sm:w-auto sm:px-5"
                                 >
-                                  <Layers3 className="mr-2 sm:mr-2.5 h-4 w-4 sm:h-4.5 sm:w-4.5" />
+                                  <Layers3 className="mr-2 h-4 w-4" />
                                   自定义配置
                                 </Button>
                                 <Button
@@ -413,10 +413,10 @@ export function SessionLauncher() {
                                   onClick={() => void handlePrimaryLaunch()}
                                   disabled={loading || !targetDir.trim()}
                                   loading={loading}
-                                  className="h-12 min-w-[140px] rounded-[10px] px-6 text-[14px] font-black tracking-tight sm:h-14 sm:min-w-[160px] sm:rounded-[12px] sm:px-8 sm:text-[16px]"
+                                  className="h-11 w-full min-w-[140px] rounded-[8px] px-6 text-[14px] font-black tracking-tight sm:h-12 sm:w-auto sm:min-w-[160px] sm:px-8"
                                 >
                                   {loading ? "载入中" : "开始整理"}
-                                  {!loading && <ArrowRight className="ml-2 sm:ml-2.5 h-4 w-4 sm:h-5 sm:w-5" />}
+                                  {!loading && <ArrowRight className="ml-2 h-4 w-4" />}
                                 </Button>
                               </div>
                             </div>
@@ -434,7 +434,7 @@ export function SessionLauncher() {
                                         type="button"
                                         onClick={() => setTargetDir(dir.path)}
                                         disabled={loading}
-                                        className="inline-flex items-center gap-1.5 rounded-full border border-on-surface/8 bg-on-surface/[0.01] px-3 py-1.5 text-[11px] font-bold text-on-surface-variant/70 transition-all hover:border-primary/30 hover:bg-primary/5 hover:text-primary active:scale-95 disabled:opacity-40 sm:gap-2 sm:px-3.5"
+                                        className="inline-flex items-center gap-1.5 rounded-[8px] border border-on-surface/8 bg-on-surface/[0.01] px-3 py-1.5 text-[11px] font-bold text-on-surface-variant/70 transition-all hover:border-primary/30 hover:bg-primary/5 hover:text-primary active:scale-95 disabled:opacity-40 sm:gap-2 sm:px-3.5"
                                       >
                                         <IconComponent className="h-3 w-3" />
                                         {dir.label}
@@ -476,7 +476,7 @@ export function SessionLauncher() {
                   </div>
 
                   <div className="flex flex-col gap-5">
-                     <div className="rounded-[10px] border border-on-surface/8 bg-surface p-5 lg:p-6">
+                     <div className="rounded-[12px] border border-on-surface/8 bg-surface p-5 lg:p-6">
                         <div className="mb-5 flex items-center justify-between">
                            <div className="flex items-center gap-2 text-on-surface">
                              <History className="h-4.5 w-4.5 text-primary" />
@@ -510,14 +510,14 @@ export function SessionLauncher() {
                               </div>
                             </div>
                             <div className="grid gap-2 pt-2 sm:grid-cols-2">
-                              <Button variant="secondary" onClick={handleOpenLatestContinue} className="h-11 rounded-[10px] text-[13px] font-bold">
+                              <Button variant="secondary" onClick={handleOpenLatestContinue} className="h-11 rounded-[8px] text-[13px] font-bold">
                                 {latestHistory.is_session ? "继续" : "预览"}
                               </Button>
-                              <Button variant="secondary" onClick={handleOpenLatestReadonly} className="h-11 rounded-[10px] text-[13px] font-bold">
+                              <Button variant="secondary" onClick={handleOpenLatestReadonly} className="h-11 rounded-[8px] text-[13px] font-bold">
                                 详情
                               </Button>
                             </div>
-                            <Button variant="primary" onClick={() => void handleRestartLatest()} className="h-12 w-full rounded-[10px] text-[14px] font-black tracking-tight" disabled={!latestHistory.target_dir}>
+                            <Button variant="primary" onClick={() => void handleRestartLatest()} className="h-12 w-full rounded-[8px] text-[14px] font-black tracking-tight" disabled={!latestHistory.target_dir}>
                               以此开启新任务
                             </Button>
                           </div>
@@ -526,7 +526,7 @@ export function SessionLauncher() {
                         )}
                      </div>
 
-                     <div className="rounded-[16px] border border-primary/10 bg-primary/[0.02] p-5 lg:p-6 transition-all hover:bg-primary/[0.03]">
+                     <div className="rounded-[12px] border border-primary/10 bg-primary/[0.02] p-5 lg:p-6 transition-all hover:bg-primary/[0.03]">
                          <div className="mb-5 flex items-center justify-between">
                             <div className="flex items-center gap-2 text-primary">
                               <ShieldCheck className="h-4.5 w-4.5" />
@@ -566,7 +566,7 @@ export function SessionLauncher() {
                         </div>
                      </div>
 
-                     <div className="rounded-[16px] border border-on-surface/8 bg-on-surface/[0.02] p-5 transition-all hover:bg-on-surface/[0.03]">
+                     <div className="rounded-[12px] border border-on-surface/8 bg-on-surface/[0.02] p-5 transition-all hover:bg-on-surface/[0.03]">
                         <p className="text-[12px] font-bold leading-relaxed tracking-tight text-ui-muted/70">
                           {launchSkipPrompt 
                             ? "已开启快速直达模式。点击开始整理后，系统将按当前默认预设立即执行初始化扫描。"

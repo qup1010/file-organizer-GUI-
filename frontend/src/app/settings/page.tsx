@@ -4,13 +4,21 @@ import { motion } from "framer-motion";
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import {
   AlertCircle,
+  ArrowLeft,
   CheckCircle2,
+  ChevronRight,
+  ClipboardCopy,
   Cpu,
   Eye,
   EyeOff,
   Globe,
   ImageIcon,
+  Key,
   Layers3,
+  Loader2,
+  Lock,
+  LogOut,
+  RefreshCcw,
   RefreshCw,
   Scissors,
   Settings as SettingsIcon,
@@ -710,72 +718,51 @@ export default function SettingsPage() {
     secret: SecretDraft,
     setSecret: Dispatch<SetStateAction<SecretDraft>>,
   ) => (
-    <FieldGroup label={label}>
-      <div className="rounded-[12px] border border-on-surface/8 bg-surface px-4 py-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="space-y-1">
-                <div className="flex flex-wrap items-center gap-2">
-              <span className={cn(
-                "rounded-[4px] px-2.5 py-1 text-[11px] font-bold",
-                state === "stored" ? "border border-primary/12 bg-primary/8 text-primary" : "border border-on-surface/8 bg-surface-container-low text-on-surface-variant",
-              )}>
-                {state === "stored" ? "已保存" : "未保存"}
-              </span>
-              {secret.action === "replace" && secret.value.trim() ? (
-                <span className="rounded-[4px] border border-success/12 bg-success/5 px-2.5 py-1 text-[11px] font-bold text-success-dim">待替换</span>
-              ) : null}
-              {secret.action === "clear" ? (
-                <span className="rounded-[4px] border border-error/12 bg-error/5 px-2.5 py-1 text-[11px] font-bold text-error">待清空</span>
-              ) : null}
-            </div>
-            <p className="text-[12px] text-on-surface-variant/70">{describeSecret(state, secret)}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            {secret.action !== "keep" ? (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setSecret((current) => ({ ...current, action: "keep", value: "", visible: false }))}
-                className="h-8 px-3 text-[12px]"
-              >
-                撤销修改
-              </Button>
-            ) : state === "stored" ? (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setSecret((current) => ({ ...current, action: "clear", value: "", visible: false }))}
-                className="h-8 px-3 text-[12px]"
-              >
-                清空已存
-              </Button>
-            ) : null}
-          </div>
-        </div>
-        <div className="mt-3 flex items-center gap-2 rounded-[4px] border border-on-surface/8 bg-surface-container-lowest px-3 py-2">
-          <input
-            type={secret.visible ? "text" : "password"}
-            value={secret.value}
-            onChange={(event) => {
-              const nextValue = event.target.value;
-              setSecret((current) => ({
-                ...current,
-                value: nextValue,
-                action: nextValue.trim() ? "replace" : "keep",
-              }));
-            }}
-            className="w-full bg-transparent py-2 text-sm font-mono font-medium text-on-surface outline-none placeholder:text-on-surface-variant/35"
-            placeholder={state === "stored" ? "输入新密钥以替换当前已保存值" : "输入要保存的新密钥"}
-          />
+    <FieldGroup label={label} hint={describeSecret(state, secret)}>
+      <InputShell icon={Key} className="group flex items-center gap-2">
+        <input
+          type={secret.visible ? "text" : "password"}
+          value={secret.value}
+          onChange={(event) => {
+            const nextValue = event.target.value;
+            setSecret((current) => ({
+              ...current,
+              value: nextValue,
+              action: nextValue.trim() ? "replace" : "keep",
+            }));
+          }}
+          className="flex-1 bg-transparent py-2 text-sm font-mono font-medium text-on-surface outline-none placeholder:text-on-surface-variant/35"
+          placeholder={state === "stored" ? "输入新密钥以替换当前值" : "输入要保存的新密钥"}
+        />
+        <div className="flex shrink-0 items-center gap-1 pr-1">
           <button
             type="button"
             onClick={() => setSecret((current) => ({ ...current, visible: !current.visible }))}
-            className="rounded-[8px] p-2 text-on-surface-variant/45 transition-colors hover:bg-surface-container-low hover:text-on-surface"
+            className="rounded-[6px] p-2 text-on-surface-variant/45 transition-colors hover:bg-surface-container-low hover:text-on-surface"
+            title={secret.visible ? "隐藏" : "显示"}
           >
-            {secret.visible ? <EyeOff className="h-4.5 w-4.5" /> : <Eye className="h-4.5 w-4.5" />}
+            {secret.visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
+          
+          {secret.action !== "keep" ? (
+            <button
+               type="button"
+               onClick={() => setSecret((current) => ({ ...current, action: "keep", value: "", visible: false }))}
+               className="rounded-[6px] px-2 py-1 text-[11px] font-bold text-primary hover:bg-primary/5 transition-colors"
+            >
+              撤销
+            </button>
+          ) : state === "stored" ? (
+            <button
+               type="button"
+               onClick={() => setSecret((current) => ({ ...current, action: "clear", value: "", visible: false }))}
+               className="rounded-[6px] px-2 py-1 text-[11px] font-bold text-on-surface-variant/60 hover:bg-on-surface/5 transition-colors"
+            >
+              清空
+            </button>
+          ) : null}
         </div>
-      </div>
+      </InputShell>
     </FieldGroup>
   );
 
@@ -863,14 +850,14 @@ export default function SettingsPage() {
           <div className="mt-12 rounded-[12px] border border-on-surface/8 bg-on-surface/[0.02] p-5">
              <div className="flex items-center gap-2 text-primary">
                 <Cpu className="h-4.5 w-4.5" />
-                <span className="text-[11px] font-black uppercase tracking-[0.2em] text-primary/70">引擎就绪度监控</span>
+                <span className="text-[11px] font-black uppercase tracking-[0.2em] text-primary/70">引擎状态</span>
              </div>
              <div className="mt-5 space-y-4">
                 {[
-                  { label: "文本逻辑分析", pass: snapshot.status.text_configured, icon: Layers3 },
-                  { label: "视觉增强算法", pass: snapshot.status.vision_configured, icon: Globe },
-                  { label: "图标生成引擎", pass: snapshot.status.icon_image_configured, icon: ImageIcon },
-                  { label: "背景擦除工具", pass: snapshot.status.bg_removal_configured, icon: Scissors },
+                  { label: "文本分析", pass: snapshot.status.text_configured, icon: Layers3 },
+                  { label: "多模态分析", pass: snapshot.status.vision_configured, icon: Globe },
+                  { label: "图标生成", pass: snapshot.status.icon_image_configured, icon: ImageIcon },
+                  { label: "背景处理", pass: snapshot.status.bg_removal_configured, icon: Scissors },
                 ].map((item) => (
                   <div key={item.label} className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2.5 min-w-0">
@@ -893,7 +880,7 @@ export default function SettingsPage() {
              </div>
              <div className="mt-6 border-t border-on-surface/5 pt-4">
                 <p className="text-[11px] font-bold leading-relaxed text-on-surface/30">
-                   建议在开始大规模整理任务前，确保所有显示为 <span className="text-success-dim/60">Active</span> 的模型均已通过端到端连接测试。
+                    Active 引擎已就绪并可用。若显示为 Idle 请检查连接。
                 </p>
              </div>
           </div>
