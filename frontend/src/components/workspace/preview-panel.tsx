@@ -20,6 +20,7 @@ interface PreviewPanelProps {
   plan: PlanSnapshot;
   stage: SessionStage;
   isBusy: boolean;
+  isPlanSyncing?: boolean;
   readOnly?: boolean;
   onRunPrecheck: () => void;
   onUpdateItem: (itemId: string, payload: { target_dir?: string; move_to_review?: boolean }) => Promise<void> | void;
@@ -221,7 +222,7 @@ function QueueCard({
 }
 
 export function PreviewPanel(props: PreviewPanelProps) {
-  const { plan, isBusy, readOnly = false, onRunPrecheck, onUpdateItem, precheckSummary, focusRequest } = props;
+  const { plan, stage, isBusy, isPlanSyncing = false, readOnly = false, onRunPrecheck, onUpdateItem, precheckSummary, focusRequest } = props;
   const allItems = useMemo(() => {
     const merged = new Map<string, PlanItem>();
     [...(plan.items || []), ...(plan.invalidated_items || [])].forEach((item) => {
@@ -267,7 +268,7 @@ export function PreviewPanel(props: PreviewPanelProps) {
     });
     return Array.from(dirs).sort((a, b) => a.localeCompare(b, "zh-CN"));
   }, [allItems, plan.groups]);
-  const canRunPrecheck = plan.readiness.can_precheck;
+  const canRunPrecheck = stage === "ready_for_precheck" && plan.readiness.can_precheck && !isPlanSyncing;
 
   useEffect(() => {
     if (!selectedItem && filteredItems[0]?.item_id) {
@@ -312,49 +313,49 @@ export function PreviewPanel(props: PreviewPanelProps) {
       <div className="flex-1 overflow-x-hidden overflow-y-auto px-4 py-4 lg:px-6">
         <div className="mx-auto w-full max-w-[1380px] space-y-4 min-w-0">
           <section className="min-w-0 rounded-[12px] border border-on-surface/8 bg-surface-container-lowest shadow-[0_20px_40px_rgba(0,0,0,0.04)]">
-            <div className="border-b border-on-surface/6 px-5 py-4">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                <div className="space-y-1">
+            <div className="border-b border-on-surface/6 px-4 py-4 @lg:px-5">
+              <div className="grid gap-4 @5xl:grid-cols-[minmax(0,1fr)_auto] @5xl:items-start">
+                <div className="min-w-0 space-y-1">
                   <div className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-primary/70">
                     <Layers className="h-3.5 w-3.5" />
                     当前整理方案
                   </div>
-                  <h2 className="text-[18px] font-bold tracking-tight text-on-surface">先看待处理，再核对目标结构</h2>
-                  <div className="mt-2 text-[13px] text-ui-muted opacity-80 overflow-hidden [&>div>p]:mb-1 [&>div>p:last-child]:mb-0">
+                  <h2 className="max-w-[14ch] text-[18px] font-bold tracking-tight text-on-surface @4xl:max-w-none">先看待处理，再核对目标结构</h2>
+                  <div className="mt-2 max-w-[44rem] text-[13px] text-ui-muted opacity-80 overflow-hidden [&>div>p]:mb-1 [&>div>p:last-child]:mb-0">
                     {plan.summary ? <MarkdownProse content={plan.summary} /> : "目录树、待处理队列和条目检查器会在这里同步更新。"}
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-full border border-on-surface/8 bg-surface px-3 py-1 text-[12px] font-semibold text-on-surface">移动 {plan.stats.move_count}</span>
-                  <span className="rounded-full border border-on-surface/8 bg-surface px-3 py-1 text-[12px] font-semibold text-on-surface">新目录 {plan.stats.directory_count}</span>
-                  <span className={cn("rounded-full border px-3 py-1 text-[12px] font-semibold", blockingQueueCount > 0 ? "border-warning/18 bg-warning/10 text-warning" : "border-success/18 bg-success/10 text-success-dim")}>
-                    {blockingQueueCount > 0 ? `待处理 ${blockingQueueCount}` : "可开始预检"}
+                <div className="grid grid-cols-2 gap-2 @3xl:max-w-[320px] @5xl:w-[292px]">
+                  <span className="rounded-full border border-on-surface/8 bg-surface px-3 py-1.5 text-center text-[12px] font-semibold text-on-surface">移动 {plan.stats.move_count}</span>
+                  <span className="rounded-full border border-on-surface/8 bg-surface px-3 py-1.5 text-center text-[12px] font-semibold text-on-surface">新目录 {plan.stats.directory_count}</span>
+                  <span className={cn("col-span-2 rounded-full border px-3 py-1.5 text-center text-[12px] font-semibold", blockingQueueCount > 0 || !canRunPrecheck ? "border-warning/18 bg-warning/10 text-warning" : "border-success/18 bg-success/10 text-success-dim")}>
+                    {blockingQueueCount > 0 ? `待处理 ${blockingQueueCount}` : canRunPrecheck ? "可开始预检" : "方案同步中"}
                   </span>
                 </div>
               </div>
             </div>
 
-            <div className="border-b border-on-surface/6 px-5 py-4">
-              <div className="flex flex-wrap items-center gap-3">
+            <div className="border-b border-on-surface/6 px-4 py-4 @lg:px-5">
+              <div className="grid gap-3 @4xl:grid-cols-[auto_minmax(0,1fr)] @6xl:grid-cols-[auto_auto_minmax(0,1fr)_auto_auto] @6xl:items-center">
                 <div className="inline-flex rounded-[8px] border border-on-surface/8 bg-surface p-1">
                   <button type="button" onClick={() => setViewMode("before")} className={cn("rounded-[6px] px-3 py-1.5 text-[12px] font-semibold", viewMode === "before" ? "bg-on-surface text-surface" : "text-on-surface-variant")}>整理前</button>
                   <button type="button" onClick={() => setViewMode("after")} className={cn("rounded-[6px] px-3 py-1.5 text-[12px] font-semibold", viewMode === "after" ? "bg-primary text-white" : "text-on-surface-variant")}>整理后</button>
                 </div>
-                <select value={filter} onChange={(event) => setFilter(event.target.value as PreviewFilter)} className="h-10 rounded-[8px] border border-on-surface/8 bg-surface px-3 text-[12px] text-on-surface outline-none">
+                <select value={filter} onChange={(event) => setFilter(event.target.value as PreviewFilter)} className="h-10 min-w-0 rounded-[8px] border border-on-surface/8 bg-surface px-3 text-[12px] text-on-surface outline-none @4xl:max-w-[220px]">
                   <option value="all">全部条目</option>
                   <option value="changed">只看变更</option>
                   <option value="unresolved">只看待决策</option>
                   <option value="review">只看待核对</option>
                   <option value="invalidated">只看需重新确认</option>
                 </select>
-                <label className="flex h-10 min-w-[200px] flex-1 items-center gap-2 rounded-[8px] border border-on-surface/8 bg-surface px-3">
+                <label className="flex h-10 min-w-0 items-center gap-2 rounded-[8px] border border-on-surface/8 bg-surface px-3 @4xl:col-span-2 @6xl:col-span-1">
                   <Search className="h-4 w-4 text-ui-muted" />
                   <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索文件名、路径、摘要" className="w-full bg-transparent text-[12px] text-on-surface outline-none placeholder:text-ui-muted" />
                 </label>
-                <select value={extensionFilter} onChange={(event) => setExtensionFilter(event.target.value)} className="h-10 rounded-[8px] border border-on-surface/8 bg-surface px-3 text-[12px] text-on-surface outline-none">
+                <select value={extensionFilter} onChange={(event) => setExtensionFilter(event.target.value)} className="h-10 min-w-0 rounded-[8px] border border-on-surface/8 bg-surface px-3 text-[12px] text-on-surface outline-none @6xl:min-w-[140px]">
                   {extensionOptions.map((option) => <option key={option} value={option}>{option === "all" ? "全部类型" : option}</option>)}
                 </select>
-                <div className="flex items-center rounded-[8px] border border-on-surface/8 bg-surface px-3 text-[12px] text-ui-muted">当前显示 {filteredItems.length} / {allItems.length}</div>
+                <div className="flex h-10 items-center justify-center rounded-[8px] border border-on-surface/8 bg-surface px-3 text-[12px] text-ui-muted @4xl:justify-start @6xl:justify-center">当前显示 {filteredItems.length} / {allItems.length}</div>
               </div>
             </div>
 
@@ -515,7 +516,7 @@ export function PreviewPanel(props: PreviewPanelProps) {
           </div>
           <button type="button" onClick={onRunPrecheck} disabled={isBusy || !canRunPrecheck} className={cn("flex w-full items-center justify-center gap-2 rounded-[10px] py-3 text-[14px] font-semibold transition-colors", canRunPrecheck && !isBusy ? "bg-primary text-white" : "cursor-not-allowed border border-on-surface/8 bg-on-surface/[0.05] text-ui-muted")}>
             <Layers className="h-4 w-4" />
-            {isBusy ? "正在更新方案" : canRunPrecheck ? "开始预检" : "先处理待处理队列"}
+            {isBusy ? "正在更新方案" : canRunPrecheck ? "开始预检" : blockingQueueCount > 0 ? "先处理待处理队列" : "等待方案同步完成"}
           </button>
         </div>
       ) : null}

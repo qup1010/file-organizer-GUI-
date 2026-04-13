@@ -151,6 +151,8 @@ export default function WorkspaceClient() {
 
   const precheck = snapshot?.precheck_summary ?? null;
   const isBusy = ["scanning", "executing", "rolling_back"].includes(stage) || loading;
+  const isPlanSyncing = (stage === "planning" || stage === "ready_for_precheck") && Boolean(composerStatus);
+  const canRunPrecheck = stage === "ready_for_precheck" && plan.readiness.can_precheck && !isPlanSyncing;
   const progressPercent = scanner.total_count > 0 ? (scanner.processed_count / scanner.total_count) * 100 : 0;
   const showConversationPane = true;
   const effectiveComposerMode = isReadOnly ? "hidden" : composerMode;
@@ -170,12 +172,12 @@ export default function WorkspaceClient() {
       return "扫描完成后会自动显示整理方案。";
     }
     if (stage === "planning") {
-      return plan.readiness.can_precheck
+      return canRunPrecheck
         ? "下一步建议运行预检，确认目录创建和文件移动是否可以执行。"
         : "可以继续补充要求或调整条目，直到方案进入可预检状态。";
     }
     if (stage === "ready_for_precheck") {
-      return "下一步建议运行预检，确认目录创建和文件移动范围。";
+      return canRunPrecheck ? "下一步建议运行预检，确认目录创建和文件移动范围。" : "方案正在同步，完成后即可开始预检。";
     }
     if (stage === "ready_to_execute") {
       return "预检已完成。请结合右侧影响范围决定执行或返回修改。";
@@ -190,7 +192,7 @@ export default function WorkspaceClient() {
       return "建议先重新扫描，确认目录状态后再继续整理。";
     }
     return "当前任务正在继续推进。";
-  }, [isReadOnly, plan.readiness.can_precheck, stage]);
+  }, [canRunPrecheck, isReadOnly, stage]);
   const reviewMoveCount = useMemo(
     () => precheck?.move_preview.filter((move) => move.target.split(/[\\/]/).some((part) => part.toLowerCase() === "review")).length ?? 0,
     [precheck],
@@ -277,14 +279,11 @@ export default function WorkspaceClient() {
   };
 
   const handleConfirmExitWorkbench = async () => {
-    const success = await abandonSession();
-    if (success) {
-      if (typeof window !== "undefined") {
-        window.localStorage.removeItem(ACTIVE_WORKSPACE_ROUTE_KEY);
-      }
-      setExitConfirmOpen(false);
-      router.push("/");
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(ACTIVE_WORKSPACE_ROUTE_KEY);
     }
+    setExitConfirmOpen(false);
+    router.push("/");
   };
 
   const handleConfirmAbortScan = async () => {
@@ -323,7 +322,7 @@ export default function WorkspaceClient() {
       };
     }
 
-    if (stage === "ready_for_precheck" || (stage === "planning" && plan.readiness.can_precheck)) {
+    if (canRunPrecheck) {
       return null;
     }
 
@@ -384,7 +383,7 @@ export default function WorkspaceClient() {
     }
 
     return null;
-  }, [isReadOnly, plan.readiness.can_precheck, refreshPlan, returnToPlanning, retryStream, snapshot?.last_error, stage, streamStatus]);
+  }, [canRunPrecheck, isReadOnly, refreshPlan, returnToPlanning, retryStream, snapshot?.last_error, stage, streamStatus]);
 
   React.useEffect(() => {
     if (stage === "completed" && !journal && !journalLoading && !isBusy) {
@@ -572,6 +571,7 @@ export default function WorkspaceClient() {
                       plan={plan}
                       stage={stage}
                       isBusy={isBusy}
+                      isPlanSyncing={isPlanSyncing}
                       readOnly={isReadOnly}
                       focusRequest={previewFocusRequest}
                       precheckSummary={snapshot?.precheck_summary}

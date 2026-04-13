@@ -30,6 +30,12 @@ export function ComposerBar({
   onSendMessage,
 }: ComposerBarProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const canShowPrecheckHint =
+    unresolvedCount === 0 &&
+    stage === "ready_for_precheck" &&
+    composerMode === "editable" &&
+    !isBusy &&
+    !composerStatus;
 
   // Auto-resize textarea logic can be added if needed or just use simple rows
 
@@ -83,7 +89,7 @@ export function ComposerBar({
             <AlertTriangle className="h-3 w-3" />
             还有 {unresolvedCount} 项归类需要你确认
           </motion.div>
-        ) : (unresolvedCount === 0 && stage === "planning" && composerMode === "editable" && !isBusy) ? (
+        ) : canShowPrecheckHint ? (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

@@ -24,6 +24,89 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+type PipelineStepState = "active" | "done" | "pending";
+
+interface PipelineStep {
+  id: string;
+  title: string;
+  detail: string;
+  state: PipelineStepState;
+  icon: React.ComponentType<{ className?: string }>;
+}
+
+const GENERIC_SCAN_ITEMS = new Set([
+  "当前目录",
+  "正在准备扫描任务",
+  "正在等待模型响应",
+  "正在读取目录...",
+]);
+
+function isSpecificScanItem(value: string | null | undefined): boolean {
+  const text = String(value || "").trim();
+  if (!text || GENERIC_SCAN_ITEMS.has(text)) {
+    return false;
+  }
+  return !text.startsWith("已启动 ") && !text.startsWith("第 ");
+}
+
+function derivePipelineSteps(scanner: ScannerProgress): PipelineStep[] {
+  const message = String(scanner.message || "").trim();
+  const currentItem = String(scanner.current_item || "").trim();
+  const totalCount = Math.max(0, Number(scanner.total_count || 0));
+  const processedCount = Math.max(0, Number(scanner.processed_count || 0));
+  const recentCount = (scanner.recent_analysis_items || []).length;
+  const batchCount = Math.max(0, Number(scanner.batch_count || 0));
+  const completedBatches = Math.max(0, Number(scanner.completed_batches || 0));
+  const isRetrying = Boolean(scanner.is_retrying);
+  const isThinking = Boolean(scanner.ai_thinking);
+  const hasSpecificItem = isSpecificScanItem(currentItem);
+  const hasStartedReading = processedCount > 0 || recentCount > 0 || hasSpecificItem || batchCount > 0;
+  const isSummarizing = isThinking || /汇总|输出|结论|完成|校验|修正/.test(message);
+  const analysisTitle = batchCount > 1 ? "并行批次分析" : "逐项读取与分析";
+  const analysisDetail = batchCount > 1
+    ? `已完成 ${completedBatches}/${batchCount} 个批次`
+    : hasSpecificItem
+      ? `当前处理：${currentItem}`
+      : processedCount > 0
+        ? `已处理 ${processedCount}/${totalCount || "?"} 项`
+        : "等待进入逐项分析";
+
+  return [
+    {
+      id: "prepare",
+      title: "建立扫描任务",
+      detail: totalCount > 0 ? `已发现 ${totalCount} 个待分析条目，正在建立扫描上下文` : "正在确认目录范围与可见条目",
+      state: hasStartedReading || isSummarizing ? "done" : "active",
+      icon: Search,
+    },
+    {
+      id: "read-structure",
+      title: "读取目录结构",
+      detail: message.includes("目录结构") ? message : "确认当前目录中的文件与子目录边界",
+      state: hasStartedReading || isSummarizing ? "done" : "active",
+      icon: Layers,
+    },
+    {
+      id: "analyze",
+      title: analysisTitle,
+      detail: analysisDetail,
+      state: isSummarizing ? "done" : hasStartedReading ? "active" : "pending",
+      icon: FileText,
+    },
+    {
+      id: "summarize",
+      title: isRetrying ? "交叉校验纠错" : "汇总扫描结论",
+      detail: isRetrying
+        ? (message || "正在重新校验扫描结果")
+        : isSummarizing
+          ? (message || "正在整理扫描结果")
+          : "等待进入结果汇总与结论输出",
+      state: isSummarizing || isRetrying ? "active" : "pending",
+      icon: isRetrying ? RefreshCw : Sparkles,
+    },
+  ];
+}
+
 interface MinimalScanningViewProps {
   scanner: ScannerProgress;
   progressPercent: number;
@@ -43,6 +126,7 @@ export function MinimalScanningView({
   const recentItems = scanner.recent_analysis_items || [];
   const isRetrying = scanner.is_retrying;
   const isThinking = scanner.ai_thinking;
+  const pipelineSteps = React.useMemo(() => derivePipelineSteps(scanner), [scanner]);
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-transparent">
