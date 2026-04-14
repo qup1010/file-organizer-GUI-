@@ -201,22 +201,27 @@ export function AppShell({ children }: { children: ReactNode }) {
         data-tauri-drag-region
         className="z-50 grid h-[46px] shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center border-b border-on-surface/5 bg-surface-container-lowest px-2 backdrop-blur sm:px-3"
       >
-        <div className="flex shrink-0 items-center gap-3 pr-4 select-none pointer-events-none">
-           <img src="/app-icon.png" alt="FilePilot" className="h-[18px] w-[18px]" />
-           <span className="text-[12px] font-black tracking-[0.05em] text-on-surface/90 uppercase">File Pilot</span>
-           <div className="ml-2 h-4 w-[1px] bg-on-surface/15" />
+        <div className="flex shrink-0 items-center gap-2.5 pr-4 select-none">
+           <div className="flex h-6 w-6 items-center justify-center rounded-[7px] bg-primary/10 ring-1 ring-primary/20 shadow-sm">
+              <img src="/app-icon.png" alt="FilePilot" className="h-[15px] w-[15px] object-contain" />
+           </div>
+           
+           <div className="flex items-center tracking-[-0.03em] pointer-events-none">
+              <span className="text-[13.5px] font-black text-on-surface">File</span>
+              <span className="text-[13.5px] font-black text-primary ml-0.5">Pilot</span>
+           </div>
+           
+           <div className="ml-3 h-3.5 w-[1.5px] bg-on-surface/10 rounded-full" />
         </div>
 
-        <div className="flex min-w-0 flex-1 items-center gap-3 border-none px-1 overflow-hidden pointer-events-none">
-          <div className="flex min-w-0 items-center">
-            <div className="flex flex-col">
-              <div className="flex items-center gap-2.5">
-                <p className="truncate text-[13px] font-medium tracking-tight text-on-surface/60">{moduleCopy.title}</p>
-                <ChevronRight className="h-3 w-3 shrink-0 opacity-20" />
-                <p className="truncate text-[10px] font-bold uppercase tracking-widest text-on-surface/30">{moduleCopy.detail}</p>
-              </div>
-            </div>
-          </div>
+        <div className="flex min-w-0 flex-1 items-center gap-2.5 border-none px-1 overflow-hidden pointer-events-none">
+          <p className="truncate text-[13.5px] font-bold tracking-tight text-on-surface/85">
+            {moduleCopy.title}
+          </p>
+          <span className="text-[14px] leading-none text-on-surface/15 select-none font-thin mt-0.5">/</span>
+          <p className="truncate text-[11.5px] font-medium text-on-surface/45 tracking-normal">
+            {moduleCopy.detail}
+          </p>
         </div>
 
         <div className="flex items-center justify-end gap-1 sm:gap-2">

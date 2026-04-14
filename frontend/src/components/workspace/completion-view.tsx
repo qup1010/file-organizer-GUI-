@@ -76,11 +76,18 @@ export function CompletionView({
     subtitle: "执行前参与本次整理的原始文件位置。",
     leafEntries: moveItems
       .filter((item): item is typeof item & { source: string } => Boolean(item.source))
-      .map<DirectoryTreeLeafEntry>((item) => ({ path: item.source })),
+      .map<DirectoryTreeLeafEntry>((item) => ({ path: itemSourceToPath(item.source) })),
     basePath: targetDir,
     baseLabel,
     emptyLabel: "当前没有可展示的原始文件结构。",
   };
+
+  /**
+   * Helper to fix TS issues with item models vs path strings
+   */
+  function itemSourceToPath(source: any): string {
+    return typeof source === 'string' ? source : (source?.path || "");
+  }
 
   const afterTree = {
     title: "整理后目录树",
@@ -104,92 +111,102 @@ export function CompletionView({
   };
 
   return (
-    <div className="mx-auto max-w-[1360px] animate-in fade-in slide-in-from-bottom-4 space-y-5 py-5 duration-500 @container">
-      <section className="overflow-hidden rounded-[12px] border border-on-surface/8 bg-surface-container-lowest shadow-[0_18px_44px_rgba(0,0,0,0.04)]">
-        <div className="border-b border-on-surface/8 bg-surface px-4 py-3.5 lg:px-5">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div className="space-y-1.5">
-              <div
-                className={cn(
-                  "inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-widest",
-                  isPartial ? "bg-error-container/40 text-error border border-error/20" : "bg-success/10 text-success-dim border border-success/20",
-                )}
-              >
-                {isPartial ? <AlertTriangle className="h-3.5 w-3.5" /> : <ShieldCheck className="h-3.5 w-3.5" />}
-                {isPartial ? "部分完成" : "整理完成"}
+    <div className="mx-auto flex h-full w-full max-w-[1360px] flex-col overflow-hidden px-4 py-5 lg:px-6 animate-in fade-in slide-in-from-bottom-4 duration-500 @container">
+      <div className="shrink-0 space-y-4">
+      <section className="overflow-hidden rounded-[8px] border border-on-surface/8 bg-surface-container-lowest shadow-[0_12px_44px_rgba(0,0,0,0.06)]">
+        <div className="border-b border-on-surface/6 bg-on-surface/[0.015] px-5 py-4 lg:px-6">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <div className={cn("flex h-6 w-6 items-center justify-center rounded-[4px]", isPartial ? "bg-error/10 text-error" : "bg-success/10 text-success-dim")}>
+                  {isPartial ? <AlertTriangle className="h-3.5 w-3.5" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+                </div>
+                <h2 className="font-headline text-[14px] font-bold tracking-tight text-on-surface">
+                  {isPartial ? "部分条目整理未完成" : "本次整理已顺利执行"}
+                </h2>
               </div>
-              <h2 className="text-[1.35rem] font-bold font-headline tracking-tight text-on-surface lg:text-[1.8rem] leading-[1.1]">
-                {isPartial ? "请检查未完成的条目" : "这次整理已经完成"}
-              </h2>
-                            <div className="max-w-2xl text-[14px] leading-7 text-ui-muted opacity-80 [&>div>p]:mb-1 [&>div>p:last-child]:mb-0">
-                {summary ? <MarkdownProse content={summary} /> : "文件已按方案完成移动。建议先看下方结果对比；如果结果不符合预期，可以回退这次整理。"}
+              <div className="text-[11.5px] leading-relaxed text-ui-muted pl-8 md:max-w-[500px] truncate">
+                {summary ? <span className="truncate">{summary}</span> : "文件已按方案完成移动。"}
               </div>
             </div>
 
-            <div className="rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-4 py-2.5 font-mono">
-              <div className="text-ui-meta text-ui-muted">目标目录</div>
-              <div className="mt-1 text-[12px] font-medium text-on-surface">{targetDir}</div>
+            <div className="flex shrink-0 items-center justify-end">
+                <div className="flex flex-col items-end gap-1 text-right">
+                  <span className="text-[10px] font-medium text-ui-muted uppercase tracking-widest">目标目录</span>
+                  <span className="text-[11px] font-mono text-on-surface max-w-[200px] truncate" title={targetDir}>{targetDir}</span>
+                </div>
             </div>
           </div>
         </div>
 
-        <div className="grid gap-2.5 p-4 @sm:grid-cols-2 @2xl:grid-cols-4 lg:px-5 lg:pb-5">
-          <div className="rounded-[12px] border border-on-surface/8 bg-surface-container-lowest px-5 py-5 shadow-sm">
-            <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-ui-muted opacity-60">
-              <CheckCircle2 className="h-3.5 w-3.5 text-success-dim" />
-              成功移动
+        <div className="flex flex-wrap items-center gap-6 border-b border-on-surface/4 bg-surface-container-lowest px-5 py-2.5 lg:px-6">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[4px] bg-primary/6 text-primary">
+              <CheckCircle2 className="h-3.5 w-3.5" />
             </div>
-            <p className="mt-2 text-[2.2rem] font-bold font-headline tracking-tighter text-success-dim leading-none">{journal.success_count || 0}</p>
+            <div className="flex items-baseline gap-1.5">
+              <span className="font-headline text-[14px] font-bold tracking-tight text-on-surface leading-none">{journal.success_count || 0}</span>
+              <span className="text-[10px] font-medium text-ui-muted opacity-80">成功移动</span>
+            </div>
           </div>
-          <div className={cn(
-            "rounded-[12px] border px-5 py-5 transition-colors shadow-sm",
-            isPartial ? "border-error/25 bg-error-container/10 ring-1 ring-error/5" : "border-on-surface/8 bg-surface-container-lowest",
-          )}>
-            <div className={cn("flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider", isPartial ? "text-error" : "text-ui-muted opacity-60")}>
+
+          <div className="h-3.5 w-px bg-on-surface/10" />
+
+          <div className="flex items-center gap-2.5">
+            <div className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-[4px]", isPartial ? "bg-error/15 text-error" : "bg-on-surface/5 text-ui-muted")}>
               <AlertTriangle className="h-3.5 w-3.5" />
-              执行失败
             </div>
-            <p className={cn("mt-2 text-[2.2rem] font-bold font-headline tracking-tighter leading-none", isPartial ? "text-error" : "text-on-surface")}>
-              {journal.failure_count || 0}
-            </p>
+            <div className="flex items-baseline gap-1.5">
+              <span className={cn("font-headline text-[14px] font-bold tracking-tight leading-none", isPartial ? "text-error" : "text-on-surface")}>{journal.failure_count || 0}</span>
+              <span className="text-[10px] font-medium text-ui-muted opacity-80">执行失败</span>
+            </div>
           </div>
-          <div className="rounded-[12px] border border-on-surface/8 bg-surface-container-lowest px-5 py-5 shadow-sm">
-            <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-ui-muted opacity-60">
-              <Layers className="h-3.5 w-3.5 text-primary" />
-              Review 保留
+
+          <div className="h-3.5 w-px bg-on-surface/10" />
+
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[4px] bg-warning/15 text-warning">
+              <Layers className="h-3.5 w-3.5" />
             </div>
-            <p className="mt-2 text-[2.2rem] font-bold font-headline tracking-tighter text-on-surface leading-none">{reviewItems.length}</p>
+            <div className="flex items-baseline gap-1.5">
+              <span className="font-headline text-[14px] font-bold tracking-tight text-on-surface leading-none">{reviewItems.length}</span>
+              <span className="text-[10px] font-medium text-ui-muted opacity-80">Review 保留</span>
+            </div>
           </div>
-          <div className="rounded-[12px] border border-on-surface/8 bg-surface-container-lowest px-5 py-5 shadow-sm">
-            <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-ui-muted opacity-60">
-              <Folder className="h-3.5 w-3.5 text-primary" />
-              合计项
+          
+          <div className="h-3.5 w-px bg-on-surface/10" />
+
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[4px] bg-on-surface/5 text-ui-muted">
+              <Folder className="h-3.5 w-3.5" />
             </div>
-            <p className="mt-2 text-[2.2rem] font-bold font-headline tracking-tighter text-on-surface leading-none">{journal.item_count || 0}</p>
+            <div className="flex items-baseline gap-1.5">
+              <span className="font-headline text-[14px] font-bold tracking-tight text-on-surface leading-none">{journal.item_count || 0}</span>
+              <span className="text-[10px] font-medium text-ui-muted opacity-80">总计条目</span>
+            </div>
           </div>
         </div>
       </section>
+      </div>
 
-      <section className="space-y-4 rounded-[12px] border border-on-surface/8 bg-surface-container-lowest p-5 shadow-[0_18px_44px_rgba(0,0,0,0.04)]">
-        <div className="flex items-end justify-between gap-4 border-b border-on-surface/8 pb-4">
-          <div className="space-y-1">
-            <p className="text-[11px] font-bold uppercase tracking-widest text-ui-muted opacity-45">结果对比</p>
-            <h3 className="text-[16px] font-bold font-headline tracking-tight text-on-surface">执行前后对比</h3>
-          </div>
-          <div className="flex items-center gap-1.5 rounded-[10px] border border-on-surface/8 bg-surface-container p-1">
+      <div className="mt-3 flex-1 min-h-0 flex flex-col gap-3 pr-1">
+      <section className="flex-1 flex flex-col min-h-0 overflow-hidden rounded-[8px] border border-on-surface/8 bg-surface-container-lowest shadow-[0_4px_16px_rgba(0,0,0,0.02)]">
+        <div className="shrink-0 flex items-center justify-between border-b border-on-surface/6 bg-on-surface/[0.01] px-4 py-2">
+            <h3 className="text-[12.5px] font-bold font-headline text-on-surface">执行前后结构变化</h3>
+          <div className="flex items-center gap-0.5 rounded-[4px] border border-on-surface/8 bg-surface p-0.5 shadow-sm">
             {[
-              { id: "all", label: "全部结果" },
-              { id: "failed", label: `失败项 (${journal.failure_count || 0})` },
+              { id: "all", label: "全部" },
+              { id: "failed", label: `失败 (${journal.failure_count || 0})` },
               { id: "review", label: `Review (${reviewItems.length})` },
             ].map((btn) => (
               <button
                 key={btn.id}
                 onClick={() => setFilter(btn.id as DirectoryTreeFilter)}
                 className={cn(
-                  "rounded-[9px] px-5 py-2.2 text-[13px] font-bold transition-all",
+                  "rounded-[3px] px-3 py-1 text-[11px] font-semibold transition-colors",
                   filter === btn.id
-                    ? "bg-surface-container-lowest text-primary shadow-md shadow-on-surface/5"
-                    : "text-on-surface-variant/60 hover:text-on-surface",
+                    ? "bg-on-surface/[0.06] text-on-surface"
+                    : "text-ui-muted hover:text-on-surface hover:bg-on-surface/[0.03]",
                 )}
               >
                 {btn.label}
@@ -197,100 +214,110 @@ export function CompletionView({
             ))}
           </div>
         </div>
-        <DirectoryTreeDiff before={beforeTree} after={afterTree} filter={filter} />
+        <div className="flex-1 overflow-y-auto min-h-0 bg-surface">
+          <DirectoryTreeDiff before={beforeTree} after={afterTree} filter={filter} />
+        </div>
       </section>
 
       {(failedItems.length > 0 || reviewItems.length > 0) ? (
-        <section className="grid gap-3 lg:grid-cols-2">
-          {failedItems.length > 0 ? (
-            <div className={cn("rounded-[12px] border p-4 shadow-[0_12px_28px_rgba(0,0,0,0.04)]", journal.failure_count && journal.failure_count > 0 ? "border-error/15 bg-error-container/25" : "border-error/12 bg-error-container/15")}>
-              <div className="flex items-center gap-3">
-                <AlertTriangle className="h-5 w-5 text-error" />
-                <h3 className="text-[16px] font-bold font-headline tracking-tight text-on-surface">异常项分析</h3>
+        <section className="shrink-0 max-h-[35%] overflow-y-auto space-y-3 scrollbar-thin">
+          <div className="grid gap-3 lg:grid-cols-2">
+            {failedItems.length > 0 ? (
+              <div className={cn("rounded-[6px] border p-4 shadow-sm", journal.failure_count && journal.failure_count > 0 ? "border-error/15 bg-error-container/25" : "border-error/12 bg-error-container/15")}>
+                <div className="flex items-center gap-2.5">
+                  <AlertTriangle className="h-4 w-4 text-error" />
+                  <h3 className="text-[14px] font-bold text-on-surface">异常项分析</h3>
+                </div>
+                <p className="mt-1.5 text-[12px] leading-5 text-ui-muted">
+                  这些文件可能被其他程序占用，或者缺失写入权限。
+                </p>
+                <div className="mt-2.5 space-y-2">
+                  {failedItems.slice(0, 6).map((item) => (
+                    <div key={`${item.display_name}-${item.target}`} className="rounded-[4px] border border-error/10 bg-surface-container-lowest px-3 py-2 text-sm">
+                      <p className="truncate font-medium text-[13px] text-on-surface" title={item.display_name}>{item.display_name}</p>
+                      <p className="mt-0.5 truncate text-[11.5px] text-ui-muted" title={item.target || ""}>
+                        目标位置：{item.target || "未知"}
+                      </p>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <p className="mt-2 text-[13px] leading-6 text-ui-muted">
-                这些文件通常是因为正在被其他程序占用，或者当前目录没有写入权限。
-              </p>
-              <div className="mt-3 space-y-2">
-                {failedItems.slice(0, 6).map((item) => (
-                  <div key={`${item.display_name}-${item.target}`} className="rounded-[9px] border border-error/10 bg-surface-container-lowest px-3.5 py-2.5 text-sm">
-                    <p className="truncate font-medium text-on-surface" title={item.display_name}>{item.display_name}</p>
-                    <p className="mt-1 truncate text-[12px] text-ui-muted" title={item.target || ""}>
-                      目标位置：{item.target || "未知"}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
+            ) : null}
 
-          {reviewItems.length > 0 ? (
-            <div className="rounded-[12px] border border-warning/12 bg-warning-container/22 p-4 shadow-[0_12px_28px_rgba(0,0,0,0.04)]">
-              <div className="flex items-center gap-3">
-                <Info className="h-5 w-5 text-warning" />
-                <h3 className="text-[16px] font-bold font-headline tracking-tight text-on-surface">Review 归档记录</h3>
+            {reviewItems.length > 0 ? (
+              <div className="rounded-[6px] border border-warning/12 bg-warning-container/22 p-4 shadow-sm">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-warning">
+                    <Info className="h-4 w-4" />
+                  </span>
+                  <h3 className="text-[14px] font-bold text-on-surface">Review 归档记录</h3>
+                </div>
+                <p className="mt-1.5 text-[12px] leading-5 text-ui-muted">
+                  文件按策略暂时存放在 `Review` 目录，建议手动查看确认。
+                </p>
+                <div className="mt-2.5 space-y-2">
+                  {reviewItems.slice(0, 6).map((item) => (
+                    <div key={`${item.display_name}-${item.target}`} className="rounded-[4px] border border-warning/10 bg-surface-container-lowest px-3 py-2 text-sm">
+                      <p className="truncate font-medium text-[13px] text-on-surface" title={item.display_name}>{item.display_name}</p>
+                      <p className="mt-0.5 truncate text-[11.5px] text-ui-muted" title={item.target || ""}>
+                        当前位置：{item.target || "Review"}
+                      </p>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <p className="mt-2 text-[13px] leading-6 text-ui-muted">
-                这部分不是执行失败，而是按策略先放在 `Review` 中，方便你稍后逐项确认。
-              </p>
-              <div className="mt-3 space-y-2">
-                {reviewItems.slice(0, 6).map((item) => (
-                  <div key={`${item.display_name}-${item.target}`} className="rounded-[9px] border border-warning/10 bg-surface-container-lowest px-3.5 py-2.5 text-sm">
-                    <p className="truncate font-medium text-on-surface" title={item.display_name}>{item.display_name}</p>
-                    <p className="mt-1 truncate text-[12px] text-ui-muted" title={item.target || ""}>
-                      当前位置：{item.target || "Review"}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
         </section>
       ) : null}
+      </div>
 
-      <section className={cn("rounded-[12px] border border-on-surface/8 bg-surface px-4 py-4 shadow-[0_18px_44px_rgba(0,0,0,0.04)]", readOnly ? "flex flex-col gap-3" : "flex flex-col gap-3 md:flex-row md:items-center")}>
-        <button
-          type="button"
-          onClick={onGoHome}
-          disabled={isBusy}
-          className="order-0 flex items-center justify-center gap-3 rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-5 py-3 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface disabled:opacity-40"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          返回主页
-        </button>
-        <button
-          type="button"
-          onClick={() => onOpenExplorer(targetDir)}
-          disabled={isBusy}
-          className="order-1 flex items-center justify-center gap-3 rounded-[10px] border border-primary/20 bg-primary px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary-dim active:scale-[0.98] disabled:opacity-40"
-        >
-          <Folder className="h-4 w-4" />
-          打开目录
-        </button>
+      <div className="mt-3 shrink-0">
+      <section className={cn("rounded-[8px] border border-on-surface/8 bg-surface px-4 py-3 shadow-sm", readOnly ? "flex flex-col gap-3" : "flex flex-col gap-3 md:flex-row md:items-center md:justify-between")}>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onGoHome}
+            disabled={isBusy}
+            className="flex h-8 items-center justify-center gap-1.5 rounded-[4px] border border-on-surface/10 bg-surface-container-lowest px-4 text-[12px] font-bold text-on-surface-variant transition-colors hover:bg-on-surface/5 active:scale-95 disabled:opacity-50"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            返回首页
+          </button>
+          <button
+            type="button"
+            onClick={() => onOpenExplorer(targetDir)}
+            disabled={isBusy}
+            className="flex h-8 items-center justify-center gap-1.5 rounded-[4px] bg-primary px-4 text-[12px] font-bold text-white transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
+          >
+            <Folder className="h-3.5 w-3.5" />
+            打开目录
+          </button>
+        </div>
         {!readOnly ? (
-          <>
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={onCleanupDirs}
               disabled={isBusy}
-              className="order-2 flex items-center justify-center gap-3 rounded-[12px] border border-on-surface/8 bg-surface-container-lowest px-6 py-3 text-sm font-bold text-on-surface-variant transition-all hover:bg-surface-container hover:text-on-surface active:scale-95 disabled:opacity-40"
+              className="flex h-8 items-center justify-center gap-1.5 rounded-[4px] border border-on-surface/8 bg-surface-container-lowest px-4 text-[12px] font-bold text-on-surface-variant transition-colors hover:bg-on-surface/5 active:scale-95 disabled:opacity-50"
             >
-              <CheckCircle2 className="h-4 w-4 opacity-40" />
+              <CheckCircle2 className="h-3.5 w-3.5 opacity-60" />
               清理空目录
             </button>
-            <div className="hidden flex-1 md:block" />
             <button
               type="button"
               onClick={() => setRollbackConfirmOpen(true)}
               disabled={isBusy}
-              className="order-3 flex items-center justify-center gap-3 rounded-[12px] border border-error/10 bg-error-container/15 px-6 py-3 text-sm font-bold text-error transition-all hover:bg-error-container/30 active:scale-95 disabled:opacity-40"
+              className="flex h-8 items-center justify-center gap-1.5 rounded-[4px] border border-error/10 bg-error-container/15 px-4 text-[12px] font-bold text-error transition-colors hover:bg-error-container/30 active:scale-95 disabled:opacity-50"
             >
-              <RotateCcw className="h-4 w-4" />
-              回退这次整理
+              <RotateCcw className="h-3.5 w-3.5" />
+              危险：还原操作
             </button>
-          </>
+          </div>
         ) : null}
       </section>
+      </div>
 
       <ConfirmDialog
         open={rollbackConfirmOpen}

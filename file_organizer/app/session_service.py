@@ -10,7 +10,7 @@ from pathlib import Path
 
 from file_organizer.analysis import service as analysis_service
 from file_organizer.app.async_scanner import AsyncScanner
-from file_organizer.app.models import CreateSessionResult, OrganizerSession, SessionMutationResult
+from file_organizer.app.models import CreateSessionResult, OrganizerSession, SessionMutationResult, utc_now_iso
 from file_organizer.app.session_store import SessionStore
 from file_organizer.execution import service as execution_service
 from file_organizer.organize import service as organize_service
@@ -799,18 +799,26 @@ class OrganizerSessionService:
             session,
             payload={"content": content},
         )
-        def on_plan_event(event_type: str, data: dict):
-            self._forward_runtime_event("plan", session.session_id, event_type, data)
+        self._begin_planner_progress(session)
 
-        assistant_message, cycle_result = organize_service.run_organizer_cycle(
-            messages=list(session.messages),
-            scan_lines=session.scan_lines,
-            planner_items=session.planner_items,
-            pending_plan=pending_plan,
-            user_constraints=list(session.user_constraints),
-            strategy_instructions=self._strategy_prompt_fragment(session),
-            event_handler=on_plan_event,
-        )
+        def on_plan_event(event_type: str, data: dict):
+            self._forward_runtime_event("plan", session.session_id, event_type, data, session=session)
+
+        try:
+            assistant_message, cycle_result = organize_service.run_organizer_cycle(
+                messages=list(session.messages),
+                scan_lines=session.scan_lines,
+                planner_items=session.planner_items,
+                pending_plan=pending_plan,
+                user_constraints=list(session.user_constraints),
+                strategy_instructions=self._strategy_prompt_fragment(session),
+                event_handler=on_plan_event,
+            )
+        except Exception as exc:
+            session.last_error = str(exc)
+            self._fail_planner_progress(session, str(exc))
+            self.store.save(session)
+            raise
         updated_pending = cycle_result.get("pending_plan", pending_plan) if cycle_result else pending_plan
         session.pending_plan = self._pending_plan_to_dict(updated_pending)
         session.plan_snapshot = self._plan_snapshot(
@@ -827,7 +835,8 @@ class OrganizerSessionService:
         
         # 记录基准方案，用于后续手动操作的 Diff 计算
         session.last_ai_pending_plan = self._pending_plan_to_dict(updated_pending)
-        
+
+        self._complete_planner_progress(session)
         self.store.save(session)
         self._log_runtime_event("plan.updated", session, source="user_intent")
         self._write_session_debug_event(
@@ -955,18 +964,26 @@ class OrganizerSessionService:
         session.messages.append(summary_message)
 
         if has_note:
-            def on_plan_event(event_type: str, data: dict):
-                self._forward_runtime_event("plan", session.session_id, event_type, data)
+            self._begin_planner_progress(session)
 
-            assistant_message, cycle_result = organize_service.run_organizer_cycle(
-                messages=list(session.messages),
-                scan_lines=session.scan_lines,
-                planner_items=session.planner_items,
-                pending_plan=pending,
-                user_constraints=list(session.user_constraints),
-                strategy_instructions=self._strategy_prompt_fragment(session),
-                event_handler=on_plan_event,
-            )
+            def on_plan_event(event_type: str, data: dict):
+                self._forward_runtime_event("plan", session.session_id, event_type, data, session=session)
+
+            try:
+                assistant_message, cycle_result = organize_service.run_organizer_cycle(
+                    messages=list(session.messages),
+                    scan_lines=session.scan_lines,
+                    planner_items=session.planner_items,
+                    pending_plan=pending,
+                    user_constraints=list(session.user_constraints),
+                    strategy_instructions=self._strategy_prompt_fragment(session),
+                    event_handler=on_plan_event,
+                )
+            except Exception as exc:
+                session.last_error = str(exc)
+                self._fail_planner_progress(session, str(exc))
+                self.store.save(session)
+                raise
             updated_pending = cycle_result.get("pending_plan", pending) if cycle_result else pending
             session.pending_plan = self._pending_plan_to_dict(updated_pending)
             session.plan_snapshot = self._plan_snapshot(
@@ -981,6 +998,7 @@ class OrganizerSessionService:
             session.user_constraints = list(updated_pending.user_constraints or session.user_constraints)
             session.stage = self._planning_stage_for(updated_pending, session.scan_lines)
             session.precheck_summary = None
+            self._complete_planner_progress(session)
         else:
             session.pending_plan = self._pending_plan_to_dict(pending)
             session.plan_snapshot = self._plan_snapshot(
@@ -1464,7 +1482,18 @@ class OrganizerSessionService:
             "session_snapshot": self._build_snapshot(session),
         }
 
-    def _forward_runtime_event(self, phase: str, session_id: str, event_type: str, data: dict) -> None:
+    def _forward_runtime_event(self, phase: str, session_id: str, event_type: str, data: dict, session: OrganizerSession | None = None) -> None:
+        if phase == "plan" and session is not None:
+            changed = self._update_planner_progress_from_event(session, event_type, data)
+            if changed:
+                self.store.save(session)
+            if event_type in {"model_wait_start", "tool_start"}:
+                self._record_event(f"{phase}.action", session=session, action=data)
+            elif event_type == "ai_chunk":
+                self._record_event(f"{phase}.ai_typing", session=session, content=data.get("content"))
+            elif changed:
+                self._record_event(f"{phase}.progress", session=session, planner_event=event_type)
+            return
         if event_type in {"model_wait_start", "tool_start"}:
             self._record_event(f"{phase}.action", session_id=session_id, action=data)
         elif event_type == "ai_chunk":
@@ -1866,9 +1895,10 @@ class OrganizerSessionService:
         # Trigger initial organization cycle automatically if no plan suggestion yet
         if not session.assistant_message and not (session.plan_snapshot or {}).get("moves"):
             def on_plan_event(event_type: str, data: dict):
-                self._forward_runtime_event("plan", session.session_id, event_type, data)
+                self._forward_runtime_event("plan", session.session_id, event_type, data, session=session)
 
             try:
+                self._begin_planner_progress(session, preserving_previous_plan=self._has_existing_plan_content(session))
                 self._log_runtime_event("plan.auto_started", session)
                 self._write_session_debug_event("plan.auto_started", session)
                 assistant_message, cycle_result = organize_service.run_organizer_cycle(
@@ -1901,7 +1931,8 @@ class OrganizerSessionService:
                         session.stage = self._planning_stage_for(updated_pending, session.scan_lines)
                         # 记录基准方案
                         session.last_ai_pending_plan = self._pending_plan_to_dict(updated_pending)
-                
+
+                self._complete_planner_progress(session)
                 self.store.save(session)
                 self._log_runtime_event("plan.auto_completed", session, summary=session.summary)
                 self._write_session_debug_event(
@@ -1917,6 +1948,7 @@ class OrganizerSessionService:
                     session.target_dir,
                 )
                 session.last_error = f"自动规划失败: {str(exc)}"
+                self._fail_planner_progress(session, session.last_error)
                 session.stage = "interrupted"
                 self.store.save(session)
                 self._log_runtime_event("plan.auto_failed", session, level=logging.ERROR, error=str(exc))
@@ -2032,6 +2064,7 @@ class OrganizerSessionService:
             "stage": session.stage,
             "summary": session.summary,
             "scanner_progress": copy.deepcopy(session.scanner_progress),
+            "planner_progress": copy.deepcopy(self._planner_progress_snapshot(session)),
             "plan_snapshot": copy.deepcopy(session.plan_snapshot),
             "precheck_summary": copy.deepcopy(session.precheck_summary),
             "execution_report": copy.deepcopy(session.execution_report),
@@ -2055,6 +2088,198 @@ class OrganizerSessionService:
                 "note": session.strategy_note,
             }
         }
+
+    @staticmethod
+    def _planner_progress_defaults() -> dict:
+        return {
+            "status": "idle",
+            "phase": None,
+            "message": "",
+            "detail": None,
+            "attempt": 1,
+            "started_at": None,
+            "updated_at": None,
+            "last_completed_at": None,
+            "preserving_previous_plan": False,
+        }
+
+    def _planner_progress_snapshot(self, session: OrganizerSession) -> dict:
+        progress = dict(session.planner_progress or {})
+        normalized = self._planner_progress_defaults()
+        normalized.update(progress)
+        normalized["attempt"] = max(1, int(normalized.get("attempt") or 1))
+        normalized["preserving_previous_plan"] = bool(normalized.get("preserving_previous_plan"))
+        return normalized
+
+    @staticmethod
+    def _planner_phase_copy(phase: str) -> tuple[str, str | None]:
+        copies = {
+            "waiting_model": ("正在理解你的新要求", "正在结合目录状态与最新要求更新方案"),
+            "streaming_reply": ("正在生成整理方案", "内容会逐步更新到对话区"),
+            "validating": ("正在校验方案完整性", "正在检查条目完整性与目标结构"),
+            "retrying": ("发现问题，正在自动修正", "上一轮结果未通过校验，系统正在继续处理"),
+            "repairing": ("正在进行深度修复", "系统正在重建一版更完整的方案"),
+            "applying": ("正在应用本轮更新", "马上会同步到右侧预览"),
+        }
+        return copies.get(phase, ("正在更新方案", None))
+
+    @staticmethod
+    def _has_existing_plan_content(session: OrganizerSession) -> bool:
+        snapshot = session.plan_snapshot or {}
+        return bool(
+            snapshot.get("summary")
+            or snapshot.get("items")
+            or snapshot.get("groups")
+            or snapshot.get("review_items")
+            or snapshot.get("invalidated_items")
+        )
+
+    def _set_planner_progress(
+        self,
+        session: OrganizerSession,
+        *,
+        status: str | None = None,
+        phase: str | None = None,
+        attempt: int | None = None,
+        preserving_previous_plan: bool | None = None,
+        message: str | None = None,
+        detail: str | None = None,
+        started_at: str | None = None,
+        last_completed_at: str | None = None,
+    ) -> bool:
+        progress = self._planner_progress_snapshot(session)
+        changed = False
+        now = utc_now_iso()
+
+        def assign(key: str, value) -> None:
+            nonlocal changed
+            if progress.get(key) != value:
+                progress[key] = value
+                changed = True
+
+        if status is not None:
+            assign("status", status)
+        if phase is not None:
+            assign("phase", phase)
+        if attempt is not None:
+            assign("attempt", max(1, int(attempt)))
+        if preserving_previous_plan is not None:
+            assign("preserving_previous_plan", bool(preserving_previous_plan))
+        if started_at is not None:
+            assign("started_at", started_at)
+        if last_completed_at is not None:
+            assign("last_completed_at", last_completed_at)
+
+        effective_phase = phase if phase is not None else progress.get("phase")
+        if message is None and effective_phase:
+            phase_message, phase_detail = self._planner_phase_copy(str(effective_phase))
+            message = phase_message
+            if detail is None:
+                detail = phase_detail
+        if message is not None:
+            assign("message", message)
+        if detail is not None or effective_phase is None:
+            assign("detail", detail)
+
+        if changed:
+            progress["updated_at"] = now
+            session.planner_progress = progress
+        return changed
+
+    def _begin_planner_progress(self, session: OrganizerSession, *, preserving_previous_plan: bool | None = None) -> None:
+        started_at = utc_now_iso()
+        session.last_error = None
+        self._set_planner_progress(
+            session,
+            status="running",
+            phase="waiting_model",
+            attempt=1,
+            started_at=started_at,
+            preserving_previous_plan=self._has_existing_plan_content(session)
+            if preserving_previous_plan is None
+            else preserving_previous_plan,
+        )
+        self.store.save(session)
+        self._record_event("plan.progress", session, planner_event="planner_started")
+
+    def _complete_planner_progress(self, session: OrganizerSession) -> None:
+        completed_at = utc_now_iso()
+        self._set_planner_progress(
+            session,
+            status="completed",
+            phase=None,
+            message="方案已更新",
+            detail=None,
+            preserving_previous_plan=False,
+            last_completed_at=completed_at,
+        )
+
+    def _fail_planner_progress(self, session: OrganizerSession, error: str) -> None:
+        last_completed_at = self._planner_progress_snapshot(session).get("last_completed_at")
+        self._set_planner_progress(
+            session,
+            status="failed",
+            phase=None,
+            message="本轮方案更新失败",
+            detail=str(error or "请稍后重试"),
+            preserving_previous_plan=False,
+            last_completed_at=last_completed_at,
+        )
+
+    def _update_planner_progress_from_event(self, session: OrganizerSession, event_type: str, data: dict) -> bool:
+        progress = self._planner_progress_snapshot(session)
+        current_attempt = max(1, int(progress.get("attempt") or 1))
+        preserving_previous_plan = bool(progress.get("preserving_previous_plan"))
+
+        if event_type == "model_wait_start":
+            return self._set_planner_progress(
+                session,
+                status="running",
+                phase="waiting_model",
+                attempt=current_attempt,
+                preserving_previous_plan=preserving_previous_plan,
+            )
+        if event_type == "ai_chunk":
+            return self._set_planner_progress(
+                session,
+                status="running",
+                phase="streaming_reply",
+                attempt=current_attempt,
+                preserving_previous_plan=preserving_previous_plan,
+            )
+        if event_type == "ai_streaming_end":
+            return self._set_planner_progress(
+                session,
+                status="running",
+                phase="validating",
+                attempt=current_attempt,
+                preserving_previous_plan=preserving_previous_plan,
+            )
+        if event_type == "command_validation_fail":
+            return self._set_planner_progress(
+                session,
+                status="running",
+                phase="retrying",
+                attempt=current_attempt + 1,
+                preserving_previous_plan=preserving_previous_plan,
+            )
+        if event_type == "repair_mode_start":
+            return self._set_planner_progress(
+                session,
+                status="running",
+                phase="repairing",
+                attempt=current_attempt,
+                preserving_previous_plan=preserving_previous_plan,
+            )
+        if event_type == "command_validation_pass":
+            return self._set_planner_progress(
+                session,
+                status="running",
+                phase="applying",
+                attempt=current_attempt,
+                preserving_previous_plan=preserving_previous_plan,
+            )
+        return False
 
     def _pending_plan_from_session(self, session: OrganizerSession) -> PendingPlan:
         return self._pending_plan_from_dict(session.pending_plan, session)

@@ -20,6 +20,7 @@ from file_organizer.app.session_service import OrganizerSessionService
 from file_organizer.app.session_store import SessionStore
 from file_organizer.shared.config import SESSIONS_DIR, SPOOF_HEADERS
 from file_organizer.shared.logging_utils import setup_backend_logging
+from file_organizer.shared.path_utils import get_windows_shell_folder
 
 logger = logging.getLogger(__name__)
 
@@ -690,8 +691,21 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
     def common_dirs():
         home = Path.home()
         dirs = []
-        for label, name in [("下载", "Downloads"), ("桌面", "Desktop"), ("文档", "Documents")]:
-            p = home / name
+        # (标签, 逻辑名, 默认子目录名)
+        targets = [
+            ("下载", "Downloads", "Downloads"),
+            ("桌面", "Desktop", "Desktop"),
+            ("文档", "Documents", "Documents"),
+            ("图片", "Pictures", "Pictures"),
+            ("视频", "Videos", "Videos"),
+            ("音乐", "Music", "Music"),
+        ]
+
+        for label, logic_name, default_name in targets:
+            # 1. 尝试通过 Windows Shell API (注册表) 获取真实路径
+            path_str = get_windows_shell_folder(logic_name)
+            p = Path(path_str) if path_str else home / default_name
+
             if p.exists():
                 dirs.append({"label": label, "path": str(p)})
         return dirs

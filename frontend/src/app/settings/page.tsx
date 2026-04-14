@@ -1164,12 +1164,7 @@ export default function SettingsPage() {
                   </div>
                 </FieldGroup>
                 {renderResult("bg_removal")}
-                <div className="rounded-[12px] border border-on-surface/8 bg-surface px-4 py-3">
-                  <p className="text-[12px] font-semibold text-on-surface">当前执行约束</p>
-                  <p className="mt-1 text-[12px] leading-6 text-on-surface-variant/70">
-                    抠图测试与正式执行都走桌面端 Tauri。Web 环境只能编辑和保存配置，不能直接测试连接。
-                  </p>
-                </div>
+
 
                 {draft.bg_removal.mode === "preset" ? (
                   <FieldGroup label="内置预设">

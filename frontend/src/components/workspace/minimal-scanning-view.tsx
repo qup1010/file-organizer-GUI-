@@ -127,6 +127,7 @@ export function MinimalScanningView({
   const isRetrying = scanner.is_retrying;
   const isThinking = scanner.ai_thinking;
   const pipelineSteps = React.useMemo(() => derivePipelineSteps(scanner), [scanner]);
+  const hasLiveItems = recentItems.length > 0 || isThinking;
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-transparent">
@@ -259,72 +260,131 @@ export function MinimalScanningView({
               </div>
 
               <div className="min-h-[280px] max-h-[55vh] overflow-y-auto overflow-x-hidden p-2 scrollbar-thin">
-                <AnimatePresence initial={false}>
-                  {recentItems.length > 0 || isThinking ? (
-                    <div className="space-y-0.5 px-3 py-2">
-                      {recentItems.length > 0 ? (
-                        <div className="mb-2 px-1 text-[11px] font-semibold text-ui-muted">
-                          最近已扫描 / 正在分析的文件
-                        </div>
-                      ) : null}
-                      {isThinking && (
+                <div className="space-y-3 px-3 py-3">
+                  <div className="space-y-2">
+                    {pipelineSteps.map((step, idx) => {
+                      const Icon = step.icon;
+                      const isActiveStep = step.state === "active";
+                      const isDoneStep = step.state === "done";
+
+                      return (
                         <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: "auto" }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="mb-2"
+                          key={step.id}
+                          initial={{ opacity: 0, y: 6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: idx * 0.04 }}
+                          className={cn(
+                            "relative flex items-start gap-3 rounded-[10px] border px-3.5 py-3 transition-colors",
+                            isActiveStep && "border-primary/18 bg-primary/[0.045]",
+                            isDoneStep && "border-success/15 bg-success/5",
+                            step.state === "pending" && "border-on-surface/[0.05] bg-on-surface/[0.02]",
+                          )}
                         >
-                          {/* AI 思考时的流动骨架屏 */}
-                          <div className="group flex flex-col rounded-[8px] py-2 pr-1 transition-all min-w-0 bg-primary/5 pl-4 border-l-[2px] border-primary/20">
+                          <div className={cn(
+                            "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border",
+                            isActiveStep && "border-primary/20 bg-primary/10 text-primary",
+                            isDoneStep && "border-success/20 bg-success/10 text-success",
+                            step.state === "pending" && "border-on-surface/8 bg-surface text-on-surface-variant/45",
+                          )}>
+                            <Icon className={cn("h-4 w-4", isActiveStep && "animate-pulse")} />
+                          </div>
+                          <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
-                              <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary/60 animate-pulse" />
-                              <div className="flex-1 flex flex-col gap-1.5">
-                                <div className="h-3.5 w-48 rounded bg-primary/10 animate-pulse" />
-                                <div className="h-2.5 w-3/4 rounded bg-on-surface/[0.03] animate-pulse" />
-                              </div>
+                              <p className="text-[13px] font-bold text-on-surface">{step.title}</p>
+                              <span className={cn(
+                                "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em]",
+                                isActiveStep && "bg-primary/10 text-primary",
+                                isDoneStep && "bg-success/10 text-success",
+                                step.state === "pending" && "bg-on-surface/[0.05] text-on-surface-variant/45",
+                              )}>
+                                {isDoneStep ? "已完成" : isActiveStep ? "进行中" : "待开始"}
+                              </span>
                             </div>
+                            <p className="mt-1 text-[11px] leading-relaxed text-on-surface-variant/60">
+                              {step.detail}
+                            </p>
                           </div>
                         </motion.div>
-                      )}
+                      );
+                    })}
+                  </div>
 
-                      {recentItems.map((item, idx) => (
-                        <motion.div
-                          key={item.item_id + idx}
-                          initial={{ opacity: 0, x: -10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          className="group/item relative my-0.5 flex flex-col rounded-[8px] py-1.5 pr-1 transition-all min-w-0 hover:bg-on-surface/[0.02]"
-                          style={{ paddingLeft: "16px" }}
-                        >
-                          <div className="flex items-start gap-2.5 min-w-0">
-                            <FileText className="h-3.5 w-3.5 shrink-0 mt-0.5 text-on-surface-variant/40" />
-                            <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <span className="flex-1 truncate tracking-tight min-w-0 text-[13px] text-on-surface-variant/75 group-hover/item:text-on-surface transition-colors">
-                                  {item.display_name}
-                                </span>
-                                {item.suggested_purpose && (
-                                  <span className="rounded-[5px] bg-surface-container-highest/60 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-on-surface/60">
-                                    {item.suggested_purpose}
+                  <AnimatePresence initial={false}>
+                    {hasLiveItems ? (
+                      <motion.div
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -8 }}
+                        className="rounded-[12px] border border-on-surface/[0.05] bg-surface p-2.5"
+                      >
+                        {recentItems.length > 0 ? (
+                          <div className="mb-2 px-1 text-[11px] font-semibold text-ui-muted">
+                            最近已扫描 / 正在分析的文件
+                          </div>
+                        ) : null}
+                        {isThinking && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="mb-2"
+                          >
+                            {/* AI 思考时的流动骨架屏 */}
+                            <div className="group flex flex-col rounded-[8px] py-2 pr-1 transition-all min-w-0 bg-primary/5 pl-4 border-l-[2px] border-primary/20">
+                              <div className="flex items-center gap-2">
+                                <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary/60 animate-pulse" />
+                                <div className="flex-1 flex flex-col gap-1.5">
+                                  <div className="h-3.5 w-48 rounded bg-primary/10 animate-pulse" />
+                                  <div className="h-2.5 w-3/4 rounded bg-on-surface/[0.03] animate-pulse" />
+                                </div>
+                              </div>
+                            </div>
+                          </motion.div>
+                        )}
+
+                        {recentItems.map((item, idx) => (
+                          <motion.div
+                            key={item.item_id + idx}
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            className="group/item relative my-0.5 flex flex-col rounded-[8px] py-1.5 pr-1 transition-all min-w-0 hover:bg-on-surface/[0.02]"
+                            style={{ paddingLeft: "16px" }}
+                          >
+                            <div className="flex items-start gap-2.5 min-w-0">
+                              <FileText className="h-3.5 w-3.5 shrink-0 mt-0.5 text-on-surface-variant/40" />
+                              <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="flex-1 truncate tracking-tight min-w-0 text-[13px] text-on-surface-variant/75 group-hover/item:text-on-surface transition-colors">
+                                    {item.display_name}
                                   </span>
+                                  {item.suggested_purpose && (
+                                    <span className="rounded-[5px] bg-surface-container-highest/60 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-on-surface/60">
+                                      {item.suggested_purpose}
+                                    </span>
+                                  )}
+                                </div>
+                                {item.summary && (
+                                  <div className="line-clamp-1 text-[11px] font-medium leading-relaxed text-on-surface-variant/40">
+                                    {item.summary}
+                                  </div>
                                 )}
                               </div>
-                              {item.summary && (
-                                <div className="line-clamp-1 text-[11px] font-medium leading-relaxed text-on-surface-variant/40">
-                                  {item.summary}
-                                </div>
-                              )}
                             </div>
-                          </div>
-                        </motion.div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="flex h-36 flex-col items-center justify-center gap-2 text-[12px] font-medium text-on-surface-variant/35">
-                      <Archive className="h-6 w-6 opacity-20" />
-                      还没有可显示的内容
-                    </div>
-                  )}
-                </AnimatePresence>
+                          </motion.div>
+                        ))}
+                      </motion.div>
+                    ) : (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="flex items-center gap-2 rounded-[12px] border border-dashed border-on-surface/[0.07] bg-on-surface/[0.015] px-3.5 py-3 text-[12px] font-medium text-on-surface-variant/40"
+                      >
+                        <Archive className="h-4 w-4 shrink-0 opacity-40" />
+                        正在准备首批扫描结果，流水线状态会继续更新。
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               </div>
             </div>
           </div>

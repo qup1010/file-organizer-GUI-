@@ -449,7 +449,7 @@ export default function HistoryPage() {
                           {isSelectedSession ? "任务记录" : "执行记录"}
                         </span>
                       </div>
-                      <h2 className="line-clamp-1 font-headline text-[1.5rem] font-black tracking-tight text-on-surface lg:text-[1.8rem]">
+                      <h2 className="line-clamp-1 font-black tracking-tight text-on-surface text-[20px] 2xl:text-[22px]">
                         {getHistoryEntryName(selectedEntry)}
                       </h2>
                       <div className="flex items-center gap-2 rounded-[10px] border border-on-surface/5 bg-on-surface/[0.02] px-3 py-1.5 w-fit">
@@ -501,7 +501,7 @@ export default function HistoryPage() {
                           <div className="flex items-start justify-between gap-4">
                             <div>
                               <p className="text-ui-meta text-ui-muted">当前状态</p>
-                              <h3 className="mt-2.5 text-[1.55rem] font-bold font-headline tracking-tight text-on-surface">
+                              <h3 className="mt-2 text-[18px] font-black tracking-tight text-on-surface">
                                 {getFriendlyStage(sessionDetail?.stage)}
                               </h3>
                             </div>
@@ -517,13 +517,13 @@ export default function HistoryPage() {
                         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
                           <div className="rounded-[8px] border border-on-surface/6 bg-surface-container-lowest p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]">
                             <p className="text-ui-meta text-ui-muted">最近更新时间</p>
-                            <p className="mt-2.5 text-[1.25rem] font-bold tracking-tight text-on-surface">
+                            <p className="mt-1.5 text-[15px] font-bold tracking-tight text-on-surface">
                               {formatDisplayDate(sessionDetail?.updated_at || selectedEntry.created_at)}
                             </p>
                           </div>
                           <div className="rounded-[8px] border border-on-surface/6 bg-surface-container-lowest p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]">
                             <p className="text-ui-meta text-ui-muted">计划条目</p>
-                            <p className="mt-2.5 text-[1.25rem] font-bold tracking-tight text-on-surface">
+                            <p className="mt-1.5 text-[15px] font-bold tracking-tight text-on-surface">
                               {sessionDetail?.plan_snapshot?.stats?.move_count || 0}
                             </p>
                           </div>
@@ -582,20 +582,20 @@ export default function HistoryPage() {
 
                       <div className="grid gap-3 sm:grid-cols-3">
                         <div className="rounded-[8px] border border-on-surface/6 bg-surface-container-lowest p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]">
-                          <p className="text-ui-meta text-ui-muted">处理条目</p>
-                          <p className="mt-2.5 text-[1.35rem] font-bold tracking-tight text-on-surface tabular-nums">
+                          <p className="text-[11px] font-bold uppercase tracking-wider text-ui-muted opacity-60">处理条目</p>
+                          <p className="mt-1.5 text-[18px] font-black tracking-tight text-on-surface tabular-nums">
                             {journal?.item_count || 0}
                           </p>
                         </div>
                         <div className="rounded-[8px] border border-on-surface/6 bg-surface-container-lowest p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]">
-                          <p className="text-ui-meta text-ui-muted">成功项目</p>
-                          <p className="mt-2.5 text-[1.35rem] font-bold tracking-tight text-on-surface tabular-nums">
+                          <p className="text-[11px] font-bold uppercase tracking-wider text-ui-muted opacity-60">成功项目</p>
+                          <p className="mt-1.5 text-[18px] font-black tracking-tight text-on-surface tabular-nums">
                             {journal?.success_count || 0}
                           </p>
                         </div>
                         <div className="rounded-[8px] border border-on-surface/6 bg-surface-container-lowest p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]">
-                          <p className="text-ui-meta text-ui-muted">失败项目</p>
-                          <p className="mt-2.5 text-[1.35rem] font-bold tracking-tight text-on-surface tabular-nums">
+                          <p className="text-[11px] font-bold uppercase tracking-wider text-ui-muted opacity-60">失败项目</p>
+                          <p className="mt-1.5 text-[18px] font-black tracking-tight text-on-surface tabular-nums">
                             {journal?.failure_count || 0}
                           </p>
                         </div>
@@ -604,12 +604,12 @@ export default function HistoryPage() {
                       <div className="rounded-[12px] border border-on-surface/6 bg-surface-container-lowest p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]">
                         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
                           <div>
-                            <p className="text-ui-meta text-ui-muted">路径变化记录</p>
-                            <h3 className="mt-2 text-[1.2rem] font-bold font-headline tracking-tight text-on-surface">
+                            <p className="text-[11px] font-black uppercase tracking-widest text-primary/60">路径变化记录</p>
+                            <h3 className="mt-1 text-[16px] font-black tracking-tight text-on-surface">
                               本次变更明细
                             </h3>
-                            <p className="mt-1.5 text-ui-body text-ui-muted">
-                              左侧是当前路径，右侧是原始位置。回退后则显示恢复关系。
+                            <p className="mt-1 text-[12px] font-medium text-ui-muted">
+                              左侧是整理后路径，右侧是原始位置。回退后则显示恢复关系。
                             </p>
                           </div>
 

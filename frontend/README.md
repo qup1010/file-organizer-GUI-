@@ -39,6 +39,12 @@ npm run dev
 npm run typecheck
 ```
 
+测试：
+
+```powershell
+npm test
+```
+
 ## 运行时发现与 Tauri 接线约定
 
 桌面壳或其他宿主应向前端注入：
@@ -52,6 +58,13 @@ window.__FILE_ORGANIZER_RUNTIME__ = {
 
 前端不会猜测后端端口，也不会直接解析后端 stdout。
 
+## 开发约定
+
+- 这里默认服务桌面工作台，不要把页面当成营销页或普通 SaaS dashboard 来设计。
+- 改动 `session_snapshot`、事件流或 API schema 时，要同步检查 `src/types/*`、API client 和对应渲染组件。
+- 如果页面要兼容桌面壳，优先读取 `window.__FILE_ORGANIZER_RUNTIME__`，不要新增并行的端口发现机制。
+- 提交前最少执行 `npm run typecheck`；如果改动设置页、路由状态或复杂交互，顺手执行 `npm test`。
+
 ## 主要路由
 
 - `/`：新建任务入口
@@ -59,4 +72,9 @@ window.__FILE_ORGANIZER_RUNTIME__ = {
 - `/history`：整理历史与回退入口
 - `/settings`：模型、默认值和调试设置
 - `/icons`：图标工坊
+
+## 联调提醒
+
+- 后端默认地址是 `http://127.0.0.1:8765`，但桌面壳场景应始终以运行时注入值为准。
+- 如果工作区没有拿到数据，优先检查 `output/runtime/backend.json`、后端 `/api/health`，以及桌面壳是否成功注入运行时对象。
 

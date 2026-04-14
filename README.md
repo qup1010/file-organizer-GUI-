@@ -10,6 +10,21 @@
 
 它不是单一的“命令行脚本”，而是一套围绕本地目录整理、执行确认、历史回看、最近一次回退、模型配置和图标生成的桌面化工具链。
 
+## 快速开始
+
+如果你只是想先把项目跑起来，推荐按这个顺序：
+
+1. 安装根目录 Python 依赖：`pip install -r requirements.txt`
+2. 启动本地 API：`python -m file_organizer.api`
+3. 进入 `frontend/` 安装依赖并启动前端：`npm install`、`npm run dev`
+4. 如果需要桌面联调，再进入 `desktop/` 运行 `npm install`、`npm run tauri:dev`
+
+只验证主链路时，也可以直接运行 CLI：
+
+```powershell
+python -m file_organizer
+```
+
 ## 当前能力概览
 
 ### 文件整理主链路
@@ -69,7 +84,14 @@ desktop/            Tauri 桌面宿主
 tests/              Python 单元测试
 output/             运行时产物、历史记录、图标工坊输出
 logs/               后端运行日志与调试日志
+docs/               设计说明、评审记录、阶段性方案文档
 ```
+
+补充说明：
+
+- [`frontend/README.md`](frontend/README.md) 主要记录工作台前端运行方式和运行时注入约定。
+- [`desktop/README.md`](desktop/README.md) 主要记录 Tauri 桌面壳职责、打包和 smoke 验证。
+- [`DESIGN.md`](DESIGN.md) 约束前端和桌面界面的设计方向，默认按桌面工作台而不是普通网页处理。
 
 ## 环境要求
 
@@ -98,6 +120,10 @@ pip install -r requirements.txt
 - `pandas`
 - `openpyxl`
 - `rich`
+- `fastapi`
+- `uvicorn`
+- `python-multipart`
+- `python-dotenv`
 
 ### 前端
 
@@ -161,6 +187,7 @@ python -m file_organizer.api
 
 ```powershell
 Set-Location frontend
+npm install
 npm run dev
 ```
 
@@ -191,6 +218,7 @@ npm run tauri:dev
 
 ```powershell
 Set-Location desktop
+npm install
 npm run tauri:build
 ```
 
@@ -284,12 +312,40 @@ Set-Location frontend
 npm run typecheck
 ```
 
+### 前端测试
+
+```powershell
+Set-Location frontend
+npm test
+```
+
 ### Rust 快速检查
 
 ```powershell
 Set-Location desktop\\src-tauri
 cargo check
 ```
+
+## 常见开发场景
+
+### 只改 Python 后端
+
+1. 运行 `python -m file_organizer.api`
+2. 定向执行相关 `unittest`
+3. 如果改动涉及会话、事件流或 API schema，再补看前端类型和运行时契约
+
+### 只改前端工作台
+
+1. 先确认本地 API 已启动
+2. 在 `frontend/` 运行 `npm run dev`
+3. 提交前至少执行 `npm run typecheck`
+4. 如果涉及设置页逻辑，顺手执行 `npm test`
+
+### 联调桌面壳
+
+1. 在 `desktop/` 运行 `npm run tauri:dev`
+2. 优先检查 `output/runtime/backend.json` 是否生成
+3. 如连接异常，优先看 `logs/backend/runtime.log`
 
 ## 推荐开发工作流
 
@@ -330,3 +386,11 @@ cargo check
 - 优先稳定框架、信息密度和长时间使用的低疲劳体验
 - 优先工具栏 / 列表 / 主工作区 / 详情区这类结构化布局
 - 避免网页式 hero、大横幅、营销化文案和漂浮卡片堆叠
+
+## 提交前最小检查清单
+
+- Python 逻辑改动：运行相关 `unittest`
+- 前端改动：运行 `frontend` 下的 `npm run typecheck`
+- 前端交互或设置流程改动：补跑 `frontend` 下的 `npm test`
+- Tauri / Rust 改动：运行 `desktop/src-tauri` 下的 `cargo check`
+- 涉及主链路时，至少手动验证其一：`python -m file_organizer`、`python -m file_organizer.api`、`npm run tauri:dev`

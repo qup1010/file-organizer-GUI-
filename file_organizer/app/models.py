@@ -39,6 +39,7 @@ class OrganizerSession:
     plan_snapshot: dict = field(default_factory=dict)
     user_constraints: list[str] = field(default_factory=list)
     scanner_progress: dict = field(default_factory=dict)
+    planner_progress: dict = field(default_factory=dict)
     assistant_message: dict | None = None
     precheck_summary: dict | None = None
     execution_report: dict | None = None
@@ -77,6 +78,7 @@ class OrganizerSession:
             plan_snapshot=dict(data.get("plan_snapshot", {})),
             user_constraints=list(data.get("user_constraints", [])),
             scanner_progress=dict(data.get("scanner_progress", {})),
+            planner_progress=dict(data.get("planner_progress", {})),
             assistant_message=data.get("assistant_message"),
             precheck_summary=data.get("precheck_summary"),
             execution_report=data.get("execution_report"),

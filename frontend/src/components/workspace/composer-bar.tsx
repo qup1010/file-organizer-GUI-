@@ -1,4 +1,4 @@
-import { useRef, useEffect } from "react";
+import { useRef } from "react";
 import { AlertTriangle, Loader2, Send, Sparkles } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -8,6 +8,15 @@ export interface ComposerBarProps {
   composerMode: ComposerMode;
   error: string | null;
   composerStatus?: AssistantRuntimeStatus | null;
+  plannerStatus?: {
+    label: string;
+    detail: string | null;
+    elapsedLabel: string | null;
+    reassureText: string | null;
+    attempt: number;
+    phase: string | null;
+    isRunning: boolean;
+  } | null;
   unresolvedCount: number;
   stage: SessionStage;
   isBusy: boolean;
@@ -21,6 +30,7 @@ export function ComposerBar({
   composerMode,
   error,
   composerStatus,
+  plannerStatus,
   unresolvedCount,
   stage,
   isBusy,
@@ -36,6 +46,11 @@ export function ComposerBar({
     composerMode === "editable" &&
     !isBusy &&
     !composerStatus;
+  const shouldShowPlannerStatus = Boolean(plannerStatus?.isRunning && composerMode === "editable");
+  const plannerAttemptLabel =
+    plannerStatus && plannerStatus.attempt > 1 && (plannerStatus.phase === "retrying" || plannerStatus.phase === "repairing")
+      ? `第 ${plannerStatus.attempt} 次尝试`
+      : null;
 
   // Auto-resize textarea logic can be added if needed or just use simple rows
 
@@ -62,7 +77,44 @@ export function ComposerBar({
       </AnimatePresence>
 
       <AnimatePresence>
-        {composerStatus && composerMode === "editable" ? (
+        {shouldShowPlannerStatus ? (
+          <motion.div
+            key="planner-status-card"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 6 }}
+            className="mb-3 rounded-[8px] border border-primary/12 bg-primary/[0.045] px-4 py-3 text-on-surface"
+          >
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] border border-primary/14 bg-primary/8 text-primary">
+                <Loader2 className="h-4 w-4 animate-spin" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-[13px] font-bold text-on-surface">{plannerStatus?.label}</p>
+                  {plannerAttemptLabel ? (
+                    <span className="rounded-full border border-warning/20 bg-warning/10 px-2 py-0.5 text-[10px] font-bold text-warning">
+                      {plannerAttemptLabel}
+                    </span>
+                  ) : null}
+                  {plannerStatus?.elapsedLabel ? (
+                    <span className="rounded-full border border-on-surface/8 bg-surface px-2 py-0.5 text-[10px] font-bold text-primary">
+                      {plannerStatus.elapsedLabel}
+                    </span>
+                  ) : null}
+                </div>
+                {plannerStatus?.detail ? (
+                  <p className="mt-1 text-[12px] leading-5 text-on-surface-variant">{plannerStatus.detail}</p>
+                ) : null}
+                {plannerStatus?.reassureText ? (
+                  <p className="mt-2 text-[11px] font-bold text-primary/80">{plannerStatus.reassureText}</p>
+                ) : null}
+              </div>
+            </div>
+          </motion.div>
+        ) : null}
+
+        {composerStatus && composerMode === "editable" && !shouldShowPlannerStatus ? (
           <motion.div
             key="composer-status-badge"
             initial={{ opacity: 0, y: 5 }}
@@ -116,7 +168,7 @@ export function ComposerBar({
               "min-h-[44px] w-full resize-none border-none bg-transparent px-4 py-3 text-[14px] text-on-surface outline-none scrollbar-none transition-opacity placeholder:text-on-surface-variant/35",
               isComposerLocked && "opacity-40 select-none overflow-hidden"
             )}
-            placeholder={isComposerLocked ? (composerStatus?.label || "正在处理当前调整...") : "输入调整意见，或说明你希望修改的地方..."}
+            placeholder={isComposerLocked ? "系统正在更新方案，完成后会自动恢复输入" : "输入调整意见，或说明你希望修改的地方..."}
             value={messageInput}
             disabled={isComposerLocked}
             onChange={(event) => setMessageInput(event.target.value)}

@@ -71,6 +71,29 @@ export interface ScannerProgress {
   ai_thinking?: boolean;
 }
 
+export type PlannerProgressStatus = "idle" | "running" | "completed" | "failed" | string;
+export type PlannerProgressPhase =
+  | "waiting_model"
+  | "streaming_reply"
+  | "validating"
+  | "retrying"
+  | "repairing"
+  | "applying"
+  | null
+  | string;
+
+export interface PlannerProgress {
+  status?: PlannerProgressStatus;
+  phase?: PlannerProgressPhase;
+  message?: string;
+  detail?: string | null;
+  attempt?: number;
+  started_at?: string | null;
+  updated_at?: string | null;
+  last_completed_at?: string | null;
+  preserving_previous_plan?: boolean;
+}
+
 export interface PlanItem {
   item_id: string;
   display_name: string;
@@ -211,6 +234,7 @@ export interface SessionSnapshot {
   strategy: SessionStrategySummary;
   assistant_message: AssistantMessage | null;
   scanner_progress: ScannerProgress;
+  planner_progress: PlannerProgress;
   plan_snapshot: PlanSnapshot;
   precheck_summary: PrecheckSummary | null;
   execution_report: ExecutionReport | null;
@@ -453,6 +477,17 @@ export function createDemoSessionSnapshot(stage: SessionStage): SessionSnapshot 
           summary: "属于项目汇报文档，适合放在 Docs。",
         },
       ],
+    },
+    planner_progress: {
+      status: "idle",
+      phase: null,
+      message: "",
+      detail: null,
+      attempt: 1,
+      started_at: null,
+      updated_at: null,
+      last_completed_at: null,
+      preserving_previous_plan: false,
     },
     plan_snapshot: {
       summary: "2 个文件已归组，1 个条目仍待确认。",

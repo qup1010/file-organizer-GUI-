@@ -7,6 +7,7 @@ import { getApiBaseUrl, getApiToken } from "@/lib/runtime";
 import { createSessionEventStream, type SessionEventStream } from "@/lib/sse";
 import type {
   AssistantMessage,
+  PlannerProgress,
   AssistantRuntimeStatus,
   ComposerMode,
   JournalSummary,
@@ -141,6 +142,85 @@ function composerModeForStage(stage: SessionStage): ComposerMode {
   return "hidden";
 }
 
+const IDLE_PLANNER_PROGRESS: PlannerProgress = {
+  status: "idle",
+  phase: null,
+  message: "",
+  detail: null,
+  attempt: 1,
+  started_at: null,
+  updated_at: null,
+  last_completed_at: null,
+  preserving_previous_plan: false,
+};
+
+export interface PlannerStatusViewModel {
+  status: string;
+  phase: string | null;
+  label: string;
+  detail: string | null;
+  attempt: number;
+  elapsedLabel: string | null;
+  reassureText: string | null;
+  preservingPreviousPlan: boolean;
+  isRunning: boolean;
+}
+
+function normalizePlannerProgress(progress?: PlannerProgress | null): PlannerProgress {
+  return {
+    ...IDLE_PLANNER_PROGRESS,
+    ...(progress || {}),
+    attempt: Math.max(1, Number(progress?.attempt || 1)),
+    preserving_previous_plan: Boolean(progress?.preserving_previous_plan),
+  };
+}
+
+function formatElapsedLabel(startedAt: string | null | undefined, nowMs: number): string | null {
+  if (!startedAt) {
+    return null;
+  }
+  const startedMs = Date.parse(startedAt);
+  if (!Number.isFinite(startedMs)) {
+    return null;
+  }
+  const elapsedSeconds = Math.max(0, Math.floor((nowMs - startedMs) / 1000));
+  if (elapsedSeconds < 60) {
+    return `已耗时 ${elapsedSeconds} 秒`;
+  }
+  const minutes = Math.floor(elapsedSeconds / 60);
+  const seconds = elapsedSeconds % 60;
+  return `已耗时 ${minutes} 分 ${seconds} 秒`;
+}
+
+function buildPlannerStatus(progress: PlannerProgress, nowMs: number): PlannerStatusViewModel {
+  const normalized = normalizePlannerProgress(progress);
+  const isRunning = normalized.status === "running";
+  const elapsedLabel = isRunning ? formatElapsedLabel(normalized.started_at, nowMs) : null;
+  const reassureText = (() => {
+    if (!isRunning || !normalized.started_at) {
+      return null;
+    }
+    const startedMs = Date.parse(normalized.started_at);
+    if (!Number.isFinite(startedMs)) {
+      return null;
+    }
+    const elapsedSeconds = Math.max(0, Math.floor((nowMs - startedMs) / 1000));
+    return elapsedSeconds >= 30 ? "系统仍在处理中，请不要重复提交" : null;
+  })();
+
+  return {
+    status: String(normalized.status || "idle"),
+    phase: normalized.phase ? String(normalized.phase) : null,
+    label: String(normalized.message || ""),
+    detail: normalized.detail ? String(normalized.detail) : null,
+    attempt: Math.max(1, Number(normalized.attempt || 1)),
+    elapsedLabel,
+    reassureText,
+    preservingPreviousPlan: Boolean(normalized.preserving_previous_plan),
+    isRunning,
+  };
+}
+
 export function useSession(sessionId: string | null) {
   const [snapshot, setSnapshot] = useState<SessionSnapshot | null>(null);
   const [journal, setJournal] = useState<JournalSummary | null>(null);
@@ -150,6 +230,7 @@ export function useSession(sessionId: string | null) {
   const [assistantDraft, setAssistantDraft] = useState("");
   const [assistantRuntime, setAssistantRuntime] = useState<AssistantRuntimeStatus | null>(null);
   const [streamStatus, setStreamStatus] = useState<StreamStatus>("offline");
+  const [plannerClock, setPlannerClock] = useState(() => Date.now());
   const streamRef = useRef<SessionEventStream | null>(null);
   const snapshotRef = useRef<SessionSnapshot | null>(null);
   const offlineTimerRef = useRef<number | null>(null);
@@ -316,12 +397,28 @@ export function useSession(sessionId: string | null) {
   }, [api, clearOfflineTimer, closeStream, connectStream, sessionId]);
 
   const stage = snapshot?.stage || "idle";
+  const plannerProgress = useMemo(
+    () => normalizePlannerProgress(snapshot?.planner_progress),
+    [snapshot?.planner_progress],
+  );
+  const plannerStatus = useMemo(
+    () => buildPlannerStatus(plannerProgress, plannerClock),
+    [plannerClock, plannerProgress],
+  );
   const chatMessages = useMemo(
     () => (snapshot?.messages || []).filter(shouldDisplayMessage),
     [snapshot?.messages],
   );
   const composerMode = useMemo(() => composerModeForStage(stage), [stage]);
   const composerStatus = useMemo<AssistantRuntimeStatus | null>(() => {
+    if (plannerStatus.isRunning && composerMode === "editable") {
+      return {
+        phase: "plan",
+        mode: plannerStatus.phase === "streaming_reply" ? "streaming" : "waiting",
+        label: plannerStatus.label,
+        detail: [plannerStatus.detail, plannerStatus.elapsedLabel].filter(Boolean).join(" · ") || undefined,
+      };
+    }
     if (assistantRuntime?.phase === "plan") {
       return assistantRuntime;
     }
@@ -334,8 +431,18 @@ export function useSession(sessionId: string | null) {
       };
     }
     return null;
-  }, [assistantRuntime, loading, composerMode]);
+  }, [assistantRuntime, composerMode, loading, plannerStatus]);
   const isComposerLocked = composerMode === "editable" && Boolean(composerStatus);
+
+  useEffect(() => {
+    if (!plannerStatus.isRunning || !plannerProgress.started_at) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setPlannerClock(Date.now());
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [plannerProgress.started_at, plannerStatus.isRunning]);
 
   useEffect(() => {
     setAssistantRuntime((current) => {
@@ -617,6 +724,8 @@ export function useSession(sessionId: string | null) {
     chatMessages,
     assistantDraft,
     assistantRuntime,
+    plannerProgress,
+    plannerStatus,
     composerStatus,
     chatError,
     streamStatus,

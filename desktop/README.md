@@ -34,6 +34,13 @@ npm install
 npm run tauri:dev
 ```
 
+如果需要单独验证 Rust 侧能否通过编译检查：
+
+```powershell
+Set-Location desktop\src-tauri
+cargo check
+```
+
 ## GitHub Actions 打包
 
 - 仓库提供了一个仅支持手动触发的 Windows 打包工作流：
@@ -83,6 +90,16 @@ window.__FILE_ORGANIZER_RUNTIME__
 - `pid`
 - `started_at`
 - `instance_id`
+
+前端侧固定从以下入口读取运行时对象：
+
+- `window.__FILE_ORGANIZER_RUNTIME__`
+
+这部分契约如果要调整，需要同时检查：
+
+- `file_organizer/api/runtime.py`
+- `frontend/src/lib/*`
+- `desktop/src-tauri/src/runtime.rs`
 - `api_token`
 
 ## 运行时契约
@@ -104,3 +121,9 @@ window.__FILE_ORGANIZER_RUNTIME__
 
 - 这个 workflow 当前只构建 Windows 包。
 - 打包产物会携带桌面壳和内置 Python 后端，但仍需要在真实 Windows 环境进一步验证安装、首次启动和回退链路。
+
+## 排查建议
+
+- 启动后前端空白或连不上后端时，先检查 `output/runtime/backend.json` 是否生成。
+- 如果运行时文件存在，再看 `logs/backend/runtime.log` 和 `/api/health` 是否正常。
+- 如果是开发态拉起失败，优先确认当前机器的 Python、Node.js、Rust / Cargo 是否可用，以及根目录 Python 依赖是否已安装。

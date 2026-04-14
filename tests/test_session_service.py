@@ -593,6 +593,120 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         self.assertEqual(result.session_snapshot["messages"][-1]["content"], "已更新计划")
         self.assertTrue(all(message["role"] != "tool" for message in result.session_snapshot["messages"]))
 
+    def test_submit_user_intent_emits_planner_progress_snapshots(self):
+        created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
+        session = created.session
+        assert session is not None
+        session.stage = "planning"
+        session.scan_lines = "a.txt | 文档 | A"
+        session.plan_snapshot = {
+            "summary": "旧方案",
+            "items": [{"item_id": "a.txt", "source_relpath": "a.txt", "target_relpath": "Review/a.txt", "status": "review"}],
+            "groups": [],
+            "review_items": [],
+            "invalidated_items": [],
+        }
+        self.store.save(session)
+
+        pending = PendingPlan(
+            directories=["Docs"],
+            moves=[PlanMove(source="a.txt", target="Docs/a.txt")],
+            unresolved_items=[],
+            summary="moved",
+        )
+
+        def fake_cycle(**kwargs):
+            event_handler = kwargs.get("event_handler")
+            if event_handler is not None:
+                event_handler("model_wait_start", {"message": "正在等待模型回复..."})
+                event_handler("ai_chunk", {"content": "先把文件归到文档目录。"})
+                event_handler("ai_streaming_end", {"full_content": "先把文件归到文档目录。"})
+                event_handler("command_validation_pass", {"attempt": 1, "details": {"is_valid": True}})
+            return (
+                "已更新计划",
+                {
+                    "pending_plan": pending,
+                    "is_valid": True,
+                    "diff_summary": ["moved"],
+                    "display_plan": {"focus": "summary", "summary": "moved"},
+                },
+            )
+
+        with mock.patch(
+            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            side_effect=fake_cycle,
+        ):
+            result = self.service.submit_user_intent(session.session_id, "放到文档")
+
+        self.assertEqual(result.session_snapshot["planner_progress"]["status"], "completed")
+        self.assertIsNotNone(result.session_snapshot["planner_progress"]["last_completed_at"])
+        self.assertFalse(result.session_snapshot["planner_progress"]["preserving_previous_plan"])
+
+        progress_events = [
+            event for event in self.service.read_events(session.session_id) if event["event_type"] in {"plan.progress", "plan.ai_typing"}
+        ]
+        phases = [event["session_snapshot"]["planner_progress"]["phase"] for event in progress_events]
+        self.assertIn("waiting_model", phases)
+        self.assertIn("streaming_reply", phases)
+        self.assertIn("validating", phases)
+        self.assertIn("applying", phases)
+
+    def test_submit_user_intent_marks_retrying_and_repairing_planner_progress(self):
+        created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
+        session = created.session
+        assert session is not None
+        session.stage = "planning"
+        session.scan_lines = "a.txt | 文档 | A"
+        session.plan_snapshot = {
+            "summary": "旧方案",
+            "items": [{"item_id": "a.txt", "source_relpath": "a.txt", "target_relpath": "Review/a.txt", "status": "review"}],
+            "groups": [],
+            "review_items": [],
+            "invalidated_items": [],
+        }
+        self.store.save(session)
+
+        pending = PendingPlan(
+            directories=["Docs"],
+            moves=[PlanMove(source="a.txt", target="Docs/a.txt")],
+            unresolved_items=[],
+            summary="moved",
+        )
+
+        def fake_cycle(**kwargs):
+            event_handler = kwargs.get("event_handler")
+            if event_handler is not None:
+                event_handler("model_wait_start", {"message": "正在等待模型回复..."})
+                event_handler("ai_streaming_end", {"full_content": ""})
+                event_handler("command_validation_fail", {"attempt": 1, "details": {"is_valid": False}})
+                event_handler("repair_mode_start", {"attempt": 2, "details": {"is_valid": False}})
+                event_handler("command_validation_pass", {"attempt": 2, "details": {"is_valid": True}})
+            return (
+                "已更新计划",
+                {
+                    "pending_plan": pending,
+                    "is_valid": True,
+                    "diff_summary": ["moved"],
+                    "display_plan": {"focus": "summary", "summary": "moved"},
+                },
+            )
+
+        with mock.patch(
+            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            side_effect=fake_cycle,
+        ):
+            self.service.submit_user_intent(session.session_id, "放到文档")
+
+        progress_events = [event for event in self.service.read_events(session.session_id) if event["event_type"] == "plan.progress"]
+        retry_event = next(
+            event for event in progress_events if event["session_snapshot"]["planner_progress"]["phase"] == "retrying"
+        )
+        repairing_event = next(
+            event for event in progress_events if event["session_snapshot"]["planner_progress"]["phase"] == "repairing"
+        )
+        self.assertEqual(retry_event["session_snapshot"]["planner_progress"]["attempt"], 2)
+        self.assertEqual(repairing_event["session_snapshot"]["planner_progress"]["attempt"], 2)
+
     def test_submit_user_intent_preserves_assistant_tool_calls_in_session_messages(self):
         created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
         session = created.session
@@ -967,6 +1081,53 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         self.assertIn("scan.ai_typing", event_types)
         self.assertNotIn("plan.ai_typing", [event["event_type"] for event in service.read_events(session.session_id) if event.get("content") == "扫描阶段摘要"])
 
+    def test_start_scan_auto_plan_tracks_planner_progress(self):
+        service = OrganizerSessionService(self.store, scanner=ImmediateScanner())
+        created = service.create_session(str(self.target_dir), resume_if_exists=False)
+        session = created.session
+        assert session is not None
+
+        pending = PendingPlan(
+            directories=["Docs"],
+            moves=[PlanMove(source="a.txt", target="Docs/a.txt")],
+            unresolved_items=[],
+            summary="planned",
+        )
+
+        def fake_plan_cycle(**kwargs):
+            event_handler = kwargs.get("event_handler")
+            if event_handler is not None:
+                event_handler("model_wait_start", {"message": "正在等待模型回复..."})
+                event_handler("ai_chunk", {"content": "建议整理到 Docs。"})
+                event_handler("ai_streaming_end", {"full_content": "建议整理到 Docs。"})
+                event_handler("command_validation_pass", {"attempt": 1, "details": {"is_valid": True}})
+            return ("已规划", {"pending_plan": pending, "is_valid": True, "diff_summary": ["planned"]})
+
+        with mock.patch(
+            "file_organizer.app.session_service.analysis_service.run_analysis_cycle",
+            return_value="a.txt | 文档 | A",
+        ), mock.patch(
+            "file_organizer.app.session_service.organize_service.build_initial_messages",
+            return_value=[{"role": "system", "content": "scan"}],
+        ), mock.patch(
+            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            side_effect=fake_plan_cycle,
+        ):
+            service.start_scan(session.session_id)
+
+        snapshot = service.get_snapshot(session.session_id)
+        self.assertEqual(snapshot["planner_progress"]["status"], "completed")
+        self.assertFalse(snapshot["planner_progress"]["preserving_previous_plan"])
+        phases = [
+            event["session_snapshot"]["planner_progress"]["phase"]
+            for event in service.read_events(session.session_id)
+            if event["event_type"] in {"plan.progress", "plan.ai_typing"}
+        ]
+        self.assertIn("waiting_model", phases)
+        self.assertIn("streaming_reply", phases)
+        self.assertIn("validating", phases)
+        self.assertIn("applying", phases)
+
     def test_start_scan_builds_initial_messages_with_strategy_selection_dict(self):
         service = OrganizerSessionService(self.store, scanner=ImmediateScanner())
         created = service.create_session(
@@ -1059,6 +1220,8 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         assert reloaded is not None
         self.assertEqual(reloaded.stage, "interrupted")
         self.assertIn("自动规划失败", reloaded.last_error)
+        self.assertEqual(reloaded.planner_progress["status"], "failed")
+        self.assertEqual(reloaded.planner_progress["message"], "本轮方案更新失败")
         logger_exception.assert_called()
 
         content = (log_dir / "runtime.log").read_text(encoding="utf-8")

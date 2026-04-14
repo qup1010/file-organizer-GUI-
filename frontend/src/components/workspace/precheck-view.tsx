@@ -16,8 +16,8 @@ interface PrecheckViewProps {
 }
 
 function reviewMoveCount(summary: PrecheckSummary) {
-    return summary.move_preview.filter((move) =>
-        move.target.split(/[\\/]/).some((part) => part.toLowerCase() === "review"),
+    return (summary.move_preview || []).filter((move) =>
+        (move.target || "").split(/[\\/]/).some((part) => part.toLowerCase() === "review"),
     ).length;
 }
 
@@ -25,11 +25,18 @@ export function PrecheckView({ summary, isBusy, readOnly = false, onRequestExecu
     const [filter, setFilter] = useState<DirectoryTreeFilter>("all");
 
     if (!summary) {
-        return null;
+        return (
+            <div className="flex h-full w-full items-center justify-center p-10 text-center">
+                <div className="space-y-4">
+                    <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto" />
+                    <p className="text-[14px] text-ui-muted">正在准备预检报告...</p>
+                </div>
+            </div>
+        );
     }
 
-    const hasErrors = summary.blocking_errors.length > 0;
-    const hasWarnings = summary.warnings.length > 0;
+    const hasErrors = (summary.blocking_errors || []).length > 0;
+    const hasWarnings = (summary.warnings || []).length > 0;
     const reviewCount = reviewMoveCount(summary);
     const summaryTone = hasErrors ? "danger" : hasWarnings ? "warning" : "success";
 
@@ -47,194 +54,119 @@ export function PrecheckView({ summary, isBusy, readOnly = false, onRequestExecu
     const beforeTree = {
         title: "整理前目录树",
         subtitle: "这里是这次会参与整理的原始位置。",
-        leafEntries: summary.move_preview.map((move) => ({ path: move.source })),
+        leafEntries: (summary.move_preview || []).map((move) => ({ path: move.source })),
         emptyLabel: "当前没有可预检的原始路径。",
     };
 
     const afterTree = {
         title: "整理后目录树",
         subtitle: "这里是预检完成后即将形成的目标结构。",
-        leafEntries: summary.move_preview.map<DirectoryTreeLeafEntry>((move) => ({
+        leafEntries: (summary.move_preview || []).map<DirectoryTreeLeafEntry>((move) => ({
             path: move.target,
-            status: move.target.split(/[\\/]/).some((part) => part.toLowerCase() === "review") ? "review" : "pending",
+            status: (move.target || "").split(/[\\/]/).some((part) => part.toLowerCase() === "review") ? "review" : "pending",
         })),
-        directoryEntries: summary.mkdir_preview,
+        directoryEntries: summary.mkdir_preview || [],
         emptyLabel: filter === "review" ? "没有发现被归类到 Review 路径的文件。" : "当前没有可展示的目标目录结构。",
     };
 
     return (
-        <div className="mx-auto max-w-[1360px] space-y-4 py-5 @container">
+        <div className="mx-auto flex h-full w-full max-w-[1360px] flex-col overflow-hidden px-4 py-5 lg:px-6 @container">
+            <div className="shrink-0 space-y-4">
             <section className="overflow-hidden rounded-[8px] border border-on-surface/8 bg-surface-container-lowest shadow-[0_12px_44px_rgba(0,0,0,0.06)]">
-                {/* Header Section - Refined and Focused */}
-                <div className="relative overflow-hidden border-b border-on-surface/4 bg-on-surface/[0.01] px-6 py-6 lg:px-8">
-                    <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-primary/2 blur-[80px]" />
-                    
-                    <div className="relative flex flex-col gap-4">
-                        <div className="flex items-center justify-between">
-                            <div className="inline-flex items-center gap-2 rounded-full border border-primary/10 bg-primary/5 px-3 py-1 text-[9px] font-black uppercase tracking-[0.2em] text-primary/70">
-                                <ListChecks className="h-3 w-3" />
-                                执行前预检
-                            </div>
-                            <div className="flex gap-1.5">
-                                {!hasErrors && !hasWarnings ? (
-                                    <span className="flex items-center gap-1.5 rounded-full bg-success/8 px-2.5 py-0.5 text-[10px] font-black tracking-tight text-success-dim/80">
-                                        <CheckCircle2 className="h-3 w-3" /> 指标正常
-                                    </span>
-                                ) : (
-                                    <>
-                                        {hasErrors && (
-                                            <span className="flex items-center gap-1.5 rounded-full bg-error/8 px-2.5 py-0.5 text-[10px] font-black tracking-tight text-error/80">
-                                                <ShieldAlert className="h-3 w-3" /> 存在阻断
-                                            </span>
-                                        )}
-                                        {hasWarnings && (
-                                            <span className="flex items-center gap-1.5 rounded-full bg-warning/8 px-2.5 py-0.5 text-[10px] font-black tracking-tight text-warning/80">
-                                                <AlertCircle className="h-3 w-3" /> 风险提醒
-                                            </span>
-                                        )}
-                                    </>
-                                )}
-                            </div>
-                        </div>
-
-                        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-                            <div className="space-y-1">
-                                <h2 className="font-headline text-[1.4rem] font-black tracking-tight text-on-surface leading-tight">
+                {/* Header Section - Desktop Native */}
+                <div className="relative overflow-hidden border-b border-on-surface/6 bg-on-surface/[0.015] px-5 py-4 lg:px-6">
+                    <div className="flex items-start justify-between gap-4">
+                        <div className="space-y-0.5">
+                            <div className="flex items-center gap-2">
+                                <div className={cn("flex h-6 w-6 items-center justify-center rounded-[4px]", summaryTone === "danger" ? "bg-error/10 text-error" : summaryTone === "warning" ? "bg-warning/10 text-warning" : "bg-success/10 text-success-dim")}>
+                                    {summaryTone === "danger" ? <ShieldAlert className="h-3.5 w-3.5" /> : summaryTone === "warning" ? <AlertCircle className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                                </div>
+                                <h2 className="font-headline text-[14px] font-bold tracking-tight text-on-surface">
                                     {statusTitle}
                                 </h2>
-                                <p className="max-w-[600px] text-[12px] leading-snug text-on-surface/40">
-                                    {statusDescription} 已确保操作符合结构安全契约。
-                                </p>
                             </div>
-
-                            <div className={cn(
-                                "flex items-center gap-2 rounded-[8px] border px-3 py-1.5 transition-all duration-300",
-                                summaryTone === "danger"
-                                    ? "border-error/10 bg-error/5 text-error"
-                                    : summaryTone === "warning"
-                                        ? "border-warning/20 bg-warning/5 text-warning"
-                                        : "border-success/10 bg-success/5 text-success-dim",
-                            )}>
-                                {summaryTone === "danger" ? (
-                                    <ShieldAlert className="h-3.5 w-3.5" />
-                                ) : summaryTone === "warning" ? (
-                                    <AlertCircle className="h-3.5 w-3.5" />
-                                ) : (
-                                    <CheckCircle2 className="h-3.5 w-3.5" />
-                                )}
-                                <span className="text-[12px] font-black tracking-tight">{statusTitle}</span>
-                            </div>
+                            <p className="text-[11.5px] leading-relaxed text-ui-muted pl-8">
+                                {statusDescription} 已确保操作符合结构安全契约。
+                            </p>
                         </div>
                     </div>
                 </div>
 
-                {/* Metrics Stats - Refined and Exquisite */}
-                <div className="grid grid-cols-1 divide-y divide-on-surface/4 border-b border-on-surface/4 @3xl:grid-cols-3 @3xl:divide-x @3xl:divide-y-0">
+                {/* Metrics Stats - Compact Horizontal Line */}
+                <div className="flex flex-wrap items-center gap-6 border-b border-on-surface/4 bg-surface-container-lowest px-5 py-2.5 lg:px-6">
                     {/* Move Items Stat */}
-                    <div className="group relative bg-on-surface/[0.01] px-6 py-5 transition-colors hover:bg-on-surface/[0.02] lg:px-8">
-                        <div className="flex items-center gap-4">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[6px] bg-primary/6 text-primary group-hover:scale-105 transition-transform">
-                                <ArrowRight className="h-5 w-5 rotate-[-45deg]" />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                                <p className="truncate text-[10px] font-black uppercase tracking-widest text-on-surface/30">拟移动条目</p>
-                                <div className="mt-0.5 flex items-baseline gap-1.5">
-                                    <span className="font-headline text-[1.6rem] font-black tracking-tight text-on-surface leading-none">
-                                        {summary.move_preview.length}
-                                    </span>
-                                    <span className="text-[11px] font-bold text-on-surface/40">项</span>
-                                </div>
-                            </div>
+                    <div className="flex items-center gap-2.5">
+                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[4px] bg-primary/6 text-primary">
+                            <ArrowRight className="h-3.5 w-3.5 rotate-[-45deg]" />
+                        </div>
+                        <div className="flex items-baseline gap-1.5">
+                            <span className="font-headline text-[14px] font-bold tracking-tight text-on-surface leading-none">{summary.move_preview.length}</span>
+                            <span className="text-[10px] font-medium text-ui-muted opacity-80">项移送</span>
                         </div>
                     </div>
+
+                    <div className="h-3.5 w-px bg-on-surface/10" />
 
                     {/* New Folders Stat */}
-                    <div className="group relative bg-on-surface/[0.01] px-6 py-5 transition-colors hover:bg-on-surface/[0.02] lg:px-8">
-                        <div className="flex items-center gap-4">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[6px] bg-sky-500/8 text-sky-600 group-hover:scale-105 transition-transform">
-                                <FolderPlus className="h-5 w-5" />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                                <p className="truncate text-[10px] font-black uppercase tracking-widest text-on-surface/30">拟新建目录</p>
-                                <div className="mt-0.5 flex items-baseline gap-1.5">
-                                    <span className="font-headline text-[1.6rem] font-black tracking-tight text-on-surface leading-none">
-                                        {summary.mkdir_preview.length}
-                                    </span>
-                                    <span className="text-[11px] font-bold text-on-surface/40">个</span>
-                                </div>
-                            </div>
+                    <div className="flex items-center gap-2.5">
+                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[4px] bg-sky-500/8 text-sky-600">
+                            <FolderPlus className="h-3.5 w-3.5" />
+                        </div>
+                        <div className="flex items-baseline gap-1.5">
+                            <span className="font-headline text-[14px] font-bold tracking-tight text-on-surface leading-none">{summary.mkdir_preview.length}</span>
+                            <span className="text-[10px] font-medium text-ui-muted opacity-80">新建目录</span>
                         </div>
                     </div>
 
+                    <div className="h-3.5 w-px bg-on-surface/10" />
+
                     {/* Risks Stat */}
-                    <div className={cn(
-                        "group relative px-6 py-5 transition-colors lg:px-8",
-                        reviewCount > 0 ? "bg-warning/4 hover:bg-warning/8" : "bg-on-surface/[0.01] hover:bg-on-surface/[0.02]"
-                    )}>
-                        <div className="flex items-center gap-4">
-                            <div className={cn(
-                                "flex h-10 w-10 shrink-0 items-center justify-center rounded-[6px] group-hover:scale-105 transition-transform",
-                                reviewCount > 0 ? "bg-warning/15 text-warning" : "bg-success/8 text-success-dim"
-                            )}>
-                                {reviewCount > 0 ? <AlertCircle className="h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" />}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                                <p className={cn(
-                                    "truncate text-[10px] font-black uppercase tracking-widest",
-                                    reviewCount > 0 ? "text-warning/80" : "text-on-surface/30"
-                                )}>需核实风险</p>
-                                <div className="mt-0.5 flex items-baseline gap-1.5">
-                                    <span className={cn(
-                                        "font-headline text-[1.6rem] font-black tracking-tight leading-none",
-                                        reviewCount > 0 ? "text-warning" : "text-on-surface"
-                                    )}>
-                                        {reviewCount}
-                                    </span>
-                                    <span className="text-[11px] font-bold text-on-surface/40">项</span>
-                                </div>
-                            </div>
+                    <div className="flex items-center gap-2.5">
+                        <div className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-[4px]", reviewCount > 0 ? "bg-warning/15 text-warning" : "bg-success/8 text-success-dim")}>
+                            {reviewCount > 0 ? <AlertCircle className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                        </div>
+                        <div className="flex items-baseline gap-1.5">
+                            <span className={cn("font-headline text-[14px] font-bold tracking-tight leading-none", reviewCount > 0 ? "text-warning" : "text-on-surface")}>{reviewCount}</span>
+                            <span className="text-[10px] font-medium text-ui-muted opacity-80">需核实风险</span>
                         </div>
                     </div>
                 </div>
 
                 {/* Footer Info / Safety Guarantee */}
-                <div className="bg-on-surface/[0.02] px-6 py-3 flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex items-center gap-2.5">
-                        <ShieldAlert className="h-3.5 w-3.5 text-primary/60" />
-                        <span className="text-[11px] font-bold text-on-surface/45">
-                            已启用执行保护：支持回退记录和执行前预检
+                <div className="bg-on-surface/[0.02] px-5 py-2.5 flex flex-wrap items-center justify-between gap-3 lg:px-6">
+                    <div className="flex items-center gap-2">
+                        <ShieldAlert className="h-3 w-3 text-primary/60" />
+                        <span className="text-[10.5px] font-semibold text-ui-muted">
+                            已启用系统保护：修改会在写入前生成全量记录
                         </span>
                     </div>
                     {reviewCount > 0 && (
-                        <p className="text-[11px] text-warning/80 font-bold tracking-tight">
-                            * 建议执行前检查右侧 `Review（待核对）` 文件夹内容
+                        <p className="text-[10px] text-warning/80 font-bold tracking-tight">
+                            * 建议执行前核对右侧 Review 目录项
                         </p>
                     )}
                 </div>
             </section>
+            </div>
 
-
-
-            <section className="space-y-4 rounded-[6px] border border-on-surface/8 bg-surface-container-lowest p-5 shadow-[0_12px_44px_rgba(0,0,0,0.04)]">
-                <div className="flex flex-col gap-3 border-b border-on-surface/8 pb-4 lg:flex-row lg:items-end lg:justify-between">
-                    <div className="space-y-1">
-                        <p className="text-[11px] font-bold uppercase tracking-widest text-ui-muted opacity-45">结构对比</p>
-                        <h3 className="text-[16px] font-bold font-headline tracking-tight text-on-surface">执行前后目录变化</h3>
-                    </div>
+            <div className="mt-3 flex-1 min-h-0 flex flex-col gap-3 pr-1">
+                <section className="flex-1 flex flex-col min-h-0 overflow-hidden rounded-[8px] border border-on-surface/8 bg-surface-container-lowest shadow-[0_4px_16px_rgba(0,0,0,0.02)]">
+                <div className="shrink-0 flex items-center justify-between border-b border-on-surface/6 bg-on-surface/[0.01] px-4 py-2">
+                    <h3 className="text-[12.5px] font-bold font-headline text-on-surface">执行前后结构变化</h3>
                     {reviewCount > 0 && (
-                        <div className="flex items-center gap-1.5 rounded-[4px] border border-on-surface/8 bg-on-surface/[0.03] p-1">
+                        <div className="flex items-center gap-0.5 rounded-[4px] border border-on-surface/8 bg-surface p-0.5 shadow-sm">
                             {[
-                                { id: "all", label: "全部目录" },
-                                { id: "review", label: `待处理 (${reviewCount})` },
+                                { id: "all", label: "全部" },
+                                { id: "review", label: `风险 (${reviewCount})` },
                             ].map((btn) => (
                                 <button
                                     key={btn.id}
                                     onClick={() => setFilter(btn.id as DirectoryTreeFilter)}
                                     className={cn(
-                                        "rounded-[4px] px-5 py-2.2 text-[13px] font-black tracking-tight transition-all",
+                                        "rounded-[3px] px-3 py-1 text-[11px] font-semibold transition-colors",
                                         filter === btn.id
-                                            ? "bg-surface-container-lowest text-primary shadow-sm shadow-on-surface/5"
-                                            : "text-ui-muted hover:text-on-surface",
+                                            ? "bg-on-surface/[0.06] text-on-surface"
+                                            : "text-ui-muted hover:text-on-surface hover:bg-on-surface/[0.03]",
                                     )}
                                 >
                                     {btn.label}
@@ -243,11 +175,13 @@ export function PrecheckView({ summary, isBusy, readOnly = false, onRequestExecu
                         </div>
                     )}
                 </div>
-                <DirectoryTreeDiff before={beforeTree} after={afterTree} filter={filter} />
+                <div className="flex-1 overflow-y-auto min-h-0 bg-surface">
+                  <DirectoryTreeDiff before={beforeTree} after={afterTree} filter={filter} />
+                </div>
             </section>
 
             {(hasErrors || hasWarnings || reviewCount > 0) ? (
-                <section className="space-y-3 rounded-[6px] border border-on-surface/8 bg-surface px-5 py-5 shadow-[0_10px_28px_rgba(0,0,0,0.03)]">
+                <section className="shrink-0 max-h-[35%] overflow-y-auto space-y-3 rounded-[6px] border border-on-surface/8 bg-surface px-5 py-4 shadow-[0_4px_12px_rgba(0,0,0,0.02)] scrollbar-thin">
                     <div className="flex items-center gap-3">
                         <ShieldAlert className="h-5 w-5 text-on-surface/40" />
                         <h3 className="text-[16px] font-bold font-headline tracking-tight text-on-surface">预检详情与异常</h3>
@@ -283,45 +217,50 @@ export function PrecheckView({ summary, isBusy, readOnly = false, onRequestExecu
                     })}
                 </section>
             ) : null}
+            </div>
 
-            <section className="rounded-[8px] border border-primary/15 bg-primary/5 p-6 shadow-[0_20px_48px_rgba(var(--primary-rgb),0.08)]">
-                <div className="flex items-start gap-5">
-                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[6px] bg-primary text-white shadow-[0_10px_25px_rgba(var(--primary-rgb),0.3)]">
-                        <ListChecks className="h-7 w-7" />
+            <div className="mt-3 shrink-0">
+
+            <section className="rounded-[8px] border border-primary/10 bg-primary/[0.03] px-5 py-3.5 shadow-sm">
+                <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] bg-primary text-white shadow-sm">
+                            <ListChecks className="h-4 w-4" />
+                        </div>
+                        <div>
+                            <h4 className="text-[13.5px] font-bold text-on-surface leading-tight">{readOnly ? "系统预检快照" : "确认部署本次整理？"}</h4>
+                            <p className="mt-0.5 text-[11px] text-ui-muted">
+                                {readOnly
+                                    ? "当前运行处于追溯模式，仅供查看过去的状态。"
+                                    : "执行不可逆，若发现异常可去「历史记录」内手动回退"}
+                            </p>
+                        </div>
                     </div>
-                    <div>
-                        <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-primary/70">最后确认</p>
-                        <h4 className="mt-1 text-[1.25rem] font-black font-headline tracking-tight text-on-surface">{readOnly ? "这是预检快照" : "确认执行这次整理？"}</h4>
-                        <p className="mt-1.5 text-[14px] leading-relaxed text-on-surface/60 max-w-3xl">
-                            {readOnly
-                                ? "当前处于历史回放模式，预检快照仅用于追溯执行前的系统状态。"
-                                : "执行后，文件会按预览结构真实移动。若结果不符合预期，你之后仍可在“整理历史”中回退这次执行。"}
-                        </p>
-                    </div>
+
+                    {!readOnly ? (
+                        <div className="flex shrink-0 items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={onBack}
+                                disabled={isBusy}
+                                className="inline-flex h-8 items-center justify-center rounded-[4px] border border-on-surface/10 bg-surface px-4 text-[12px] font-bold text-on-surface-variant transition-colors hover:bg-on-surface/5 active:scale-95 disabled:opacity-50"
+                            >
+                                取消
+                            </button>
+                            <button
+                                type="button"
+                                onClick={onRequestExecute}
+                                disabled={isBusy || hasErrors}
+                                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[4px] bg-primary px-5 text-[12px] font-bold text-white transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
+                            >
+                                <ArrowRight className="h-3.5 w-3.5" />
+                                立即执行
+                            </button>
+                        </div>
+                    ) : null}
                 </div>
-
-                {!readOnly ? (
-                    <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-                        <button
-                            type="button"
-                            onClick={onBack}
-                            disabled={isBusy}
-                            className="inline-flex items-center justify-center rounded-[4px] border border-on-surface/10 bg-surface-container-lowest px-8 py-3.5 text-[14px] font-black text-on-surface/70 transition-all hover:bg-on-surface/[0.02] hover:text-on-surface hover:shadow-md active:scale-95 disabled:opacity-40"
-                        >
-                            返回修改方案
-                        </button>
-                        <button
-                            type="button"
-                            onClick={onRequestExecute}
-                            disabled={isBusy || hasErrors}
-                            className="inline-flex flex-1 items-center justify-center gap-3 rounded-[4px] bg-primary px-8 py-3.5 text-[15px] font-black text-white transition-all hover:bg-primary/90 hover:shadow-[0_12px_32px_rgba(var(--primary-rgb),0.25)] active:scale-[0.98] disabled:opacity-30"
-                        >
-                            <ArrowRight className="h-5 w-5" />
-                            确认并执行整理
-                        </button>
-                    </div>
-                ) : null}
             </section>
+            </div>
         </div>
     );
 }

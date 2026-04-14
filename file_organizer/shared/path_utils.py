@@ -71,3 +71,37 @@ def canonical_target_dir(value: str | Path) -> str:
     resolved = Path(value).expanduser().resolve(strict=False)
     normalized = os.path.normcase(str(resolved))
     return normalized.rstrip("\\/").replace("\\", "/")
+
+
+def get_windows_shell_folder(name: str) -> str | None:
+    """获取 Windows 系统的 Shell 文件夹（如下载、文档、桌面等），支持用户移动过路径的情况"""
+    if os.name != "nt":
+        return None
+
+    import winreg
+
+    # 映射表：逻辑名 -> 注册表键名 (User Shell Folders)
+    # 这里的键名是 Windows 约定的
+    mapping = {
+        "Downloads": "{374DE290-123F-4565-9164-39C4925E467B}",
+        "Documents": "Personal",
+        "Desktop": "Desktop",
+        "Pictures": "My Pictures",
+        "Videos": "My Video",
+        "Music": "My Music",
+    }
+
+    key_name = mapping.get(name)
+    if not key_name:
+        return None
+
+    try:
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders",
+        ) as key:
+            value, _ = winreg.QueryValueEx(key, key_name)
+            # 处理可能的环变量 (如 %USERPROFILE%\Downloads)
+            return os.path.expandvars(str(value))
+    except Exception:
+        return None

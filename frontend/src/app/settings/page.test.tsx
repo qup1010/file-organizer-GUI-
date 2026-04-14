@@ -58,6 +58,7 @@ function createSnapshot(): SettingsSnapshot {
           name: "默认文本模型",
           OPENAI_BASE_URL: "https://api.openai.com/v1",
           OPENAI_MODEL: "gpt-5.4",
+          OPENAI_API_KEY: "",
           secret_state: "empty",
         },
         presets: [
@@ -66,6 +67,7 @@ function createSnapshot(): SettingsSnapshot {
             name: "默认文本模型",
             OPENAI_BASE_URL: "https://api.openai.com/v1",
             OPENAI_MODEL: "gpt-5.4",
+            OPENAI_API_KEY: "",
             secret_state: "empty",
           },
         ],
@@ -81,6 +83,7 @@ function createSnapshot(): SettingsSnapshot {
           IMAGE_ANALYSIS_NAME: "默认图片理解",
           IMAGE_ANALYSIS_BASE_URL: "https://host.example/v1",
           IMAGE_ANALYSIS_MODEL: "gpt-4o-mini",
+          IMAGE_ANALYSIS_API_KEY: "",
           secret_state: "empty",
         },
         presets: [
@@ -90,6 +93,7 @@ function createSnapshot(): SettingsSnapshot {
             IMAGE_ANALYSIS_NAME: "默认图片理解",
             IMAGE_ANALYSIS_BASE_URL: "https://host.example/v1",
             IMAGE_ANALYSIS_MODEL: "gpt-4o-mini",
+            IMAGE_ANALYSIS_API_KEY: "",
             secret_state: "empty",
           },
         ],
@@ -142,6 +146,7 @@ function createSnapshot(): SettingsSnapshot {
           model_id: "space-id",
           api_type: "gradio_space",
           payload_template: "{}",
+          hf_api_token: "",
           secret_state: "empty",
         },
         builtin_presets: [
@@ -158,6 +163,7 @@ function createSnapshot(): SettingsSnapshot {
           model_id: "",
           api_type: "gradio_space",
           payload_template: "{}",
+          hf_api_token: "",
           secret_state: "empty",
         },
       },

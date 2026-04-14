@@ -63,6 +63,15 @@ interface ConversationPanelProps {
   notice?: ConversationNotice | null;
   scanner?: ScannerProgress;
   progressPercent?: number;
+  plannerStatus?: {
+    label: string;
+    detail: string | null;
+    elapsedLabel: string | null;
+    reassureText: string | null;
+    attempt: number;
+    phase: string | null;
+    isRunning: boolean;
+  } | null;
 }
 
 
@@ -84,6 +93,7 @@ export function ConversationPanel({
   notice,
   scanner,
   progressPercent = 0,
+  plannerStatus,
 }: ConversationPanelProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isPinnedToBottom, setIsPinnedToBottom] = useState(true);
@@ -333,39 +343,37 @@ export function ConversationPanel({
                 initial={{ opacity: 0, x: -5 }}
                 animate={{ opacity: 1, x: 0 }}
                 className={cn(
-                  "relative flex gap-3", 
+                  "relative flex gap-4", 
                   isAssistant ? "flex-row" : "flex-row-reverse justify-start",
-                  isGrouped ? "mt-1.5" : "mt-6",
-                  isGrouped ? "pb-0.5" : "pb-1"
+                  isGrouped ? "mt-2" : "mt-8",
+                  isGrouped ? "pb-0" : "pb-1"
                 )}
               >
                 {isAssistant && (
                   <div className={cn(
-                    "absolute left-[13px] w-[1px] bg-on-surface-variant/10 transition-all pointer-events-none",
-                    !isGrouped ? "top-8" : "top-0",
-                    messages[idx + 1]?.role === "assistant" ? "bottom-[-1.5rem]" : "bottom-0"
+                    "absolute left-[13px] w-[1px] bg-on-surface-variant/8 transition-all pointer-events-none",
+                    !isGrouped ? "top-9" : "top-0",
+                    messages[idx + 1]?.role === "assistant" ? "bottom-[-2rem]" : "bottom-0"
                   )} />
                 )}
                 <div className={cn(
-                  "flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-[6px] border border-on-surface/8 transition-opacity z-10",
-                  isAssistant ? "bg-surface-container-lowest text-primary" : "bg-primary text-white",
+                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] transition-opacity z-10 mt-0.5",
+                  isAssistant ? "bg-surface-container border border-on-surface/8 text-primary shadow-[0_2px_8px_rgba(0,0,0,0.04)]" : "bg-primary text-white shadow-md shadow-primary/20",
                   isGrouped ? "opacity-0" : "opacity-100"
                 )}>
-                  {isAssistant ? <Bot className="w-3 h-3" /> : <User className="w-3 h-3" />}
+                  {isAssistant ? <Bot className="w-3.5 h-3.5" /> : <User className="w-3.5 h-3.5" />}
                 </div>
                 <div className="flex-1 flex flex-col gap-2 min-w-0">
                   {message.content && (
                     <div
                       className={cn(
-                        "max-w-[90%] 2xl:max-w-[84%] rounded-[6px] px-3.5 py-2.5 text-ui-body leading-relaxed transition-all shadow-sm shadow-black/[0.01]",
+                        "transition-all",
                         isAssistant
-                          ? "border border-on-surface/8 bg-surface-container-lowest text-on-surface"
-                          : "bg-surface-container-low text-on-surface font-medium whitespace-pre-wrap ml-auto",
-                        isGrouped && isAssistant && "rounded-tl-[4px]",
-                        isGrouped && !isAssistant && "rounded-tr-[4px]"
+                          ? "text-on-surface pt-0.5"
+                          : "text-[14.5px] font-medium text-on-surface/80 whitespace-pre-wrap ml-auto max-w-[85%] pt-1 text-right leading-relaxed"
                       )}
                     >
-                      <MarkdownProse content={message.content} />
+                      {isAssistant ? <MarkdownProse content={message.content} /> : message.content}
                     </div>
                   )}
                   {isAssistant && (message.blocks || []).map((block) => {
@@ -413,19 +421,19 @@ export function ConversationPanel({
               key="assistant-streaming-bubble"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex gap-3 mt-5.5"
+              className="flex gap-4 mt-8"
             >
-              <div className="flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-[6px] border border-on-surface/8 bg-surface-container-lowest text-primary">
-                <Bot className="w-3 h-3" />
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] border border-on-surface/8 bg-surface-container text-primary shadow-[0_2px_8px_rgba(0,0,0,0.04)] mt-0.5">
+                <Bot className="w-3.5 h-3.5" />
               </div>
-              <div className="flex-1 rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-3.5 py-2.5 text-ui-body leading-relaxed text-on-surface shadow-sm shadow-black/[0.01]">
-                <div className="mb-3 flex items-center gap-2 text-primary/70">
+              <div className="flex-1 pt-0.5 text-on-surface">
+                <div className="mb-2 flex items-center gap-2 text-primary/70">
                   <div className="flex gap-0.5">
                     {[0, 0.2, 0.4].map((delay) => (
                       <motion.span key={delay} animate={{ scale: [1, 1.2, 1], opacity: [0.4, 1, 0.4] }} transition={{ repeat: Infinity, duration: 2, delay }} className="w-1.5 h-1.5 bg-current rounded-full" />
                     ))}
                   </div>
-                  <span className="ml-1 text-[12px] font-medium">正在整理回复...</span>
+                  <span className="ml-0 text-[11.5px] font-semibold uppercase tracking-wider">系统思考中</span>
                 </div>
                 <div className="relative">
                   <MarkdownProse content={assistantDraft} />
@@ -454,6 +462,7 @@ export function ConversationPanel({
         composerMode={composerMode}
         error={error}
         composerStatus={composerStatus}
+        plannerStatus={plannerStatus}
         unresolvedCount={unresolvedCount}
         stage={stage}
         isBusy={isBusy}

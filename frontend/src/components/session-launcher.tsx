@@ -13,12 +13,15 @@ import {
   FolderOpen,
   FolderTree,
   History,
+  ImageIcon,
   Layers3,
   Loader2,
   Monitor,
+  Music,
   Search,
   ShieldCheck,
   Sparkles,
+  Video,
   X,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -340,244 +343,218 @@ export function SessionLauncher() {
   return (
     <>
       <LaunchTransitionOverlay open={launchTransitionOpen} targetDir={targetDir} />
-      <div className="mx-auto flex min-h-screen w-full max-w-[1320px] flex-col px-4 py-6 sm:px-6 lg:px-8">
+      <div className="flex h-full w-full antialiased bg-surface">
+        {/* Left Pane - Configuration */}
+        <div className="flex flex-1 flex-col justify-start px-6 xl:px-10 overflow-y-auto">
+          <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="mx-auto max-w-[720px] w-full pt-10 pb-10">
+            
+            <div className="mb-6">
+               <div className="pt-0.5">
+                  <h1 className="mb-1.5 text-[22px] font-black text-on-surface tracking-tight">开启新整理</h1>
+                  <p className="text-[13px] font-medium text-ui-muted/80 leading-relaxed">
+                    选择目标目录与预设规则。AI 将在本地扫描结构，并为你生成安全、可视化的自动整理方案。
+                  </p>
+               </div>
+            </div>
 
-        <motion.div
-          initial={{ opacity: 0, scale: 0.98, y: 30 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-          className="w-full"
-        >
-          <section className="overflow-hidden rounded-[12px] border border-on-surface/8 bg-surface-container-lowest shadow-[0_20px_48px_rgba(0,0,0,0.05)]">
-            <div className="p-6 sm:p-8">
-               <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
-                  <div className="space-y-8">
-                    <div className="space-y-4">
-                      <div className="inline-flex items-center gap-2 rounded-full border border-primary/15 bg-primary/5 px-4 py-1.5 text-[11px] font-black uppercase tracking-widest text-primary">
-                        <Sparkles className="h-3.5 w-3.5" />
-                        任务启动台
-                      </div>
-                      <h1 className="font-headline text-[32px] font-black leading-tight tracking-tight text-on-surface sm:text-[40px]">
-                        开始整理工作
-                      </h1>
-                      <p className="max-w-[560px] text-[15px] leading-relaxed tracking-tight text-ui-muted/80">
-                        选择一个目录开始整理。在执行前，你可以预览并确认 AI 生成的整理计划。
-                      </p>
+            {/* List-style Settings Group */}
+            <div className="overflow-hidden rounded-[8px] border border-on-surface/8 bg-surface-container-lowest shadow-[0_12px_44px_rgba(0,0,0,0.06)]">
+               
+               {/* Item 1: Directory */}
+               <div className="border-b border-on-surface/6 bg-on-surface/[0.015] p-5 lg:p-6 relative">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="flex h-6 w-6 items-center justify-center rounded-[4px] bg-primary/10 text-primary">
+                      <FolderOpen className="h-3.5 w-3.5" />
                     </div>
-
-                    <div className="space-y-6">
-                      <div className="group relative overflow-hidden rounded-[12px] border border-on-surface/10 bg-surface shadow-[0_8px_40px_rgba(0,0,0,0.04)] transition-all hover:shadow-[0_12px_50px_rgba(0,0,0,0.06)]">
-                          <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.02] to-transparent pointer-events-none" />
-                          <div className="relative p-6 sm:p-7">
-                            <div className="grid gap-6 xl:grid-cols-[1fr_auto]">
-                              <div className="min-w-0 flex-1">
-                                <div className="mb-4 flex items-center gap-2.5">
-                                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary">
-                                    <FolderTree className="h-3.5 w-3.5" />
-                                  </div>
-                                  <span className="text-[11px] font-black uppercase tracking-[0.25em] text-primary/70">整理目标目录</span>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                  <button
-                                    onClick={handleSelectDir}
-                                    disabled={loading}
-                                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] border border-on-surface/8 bg-on-surface/[0.03] text-on-surface transition-all hover:bg-primary/5 hover:text-primary active:scale-95 sm:h-11 sm:w-11"
-                                  >
-                                    <FolderOpen className="h-5 w-5" />
-                                  </button>
-                                  <input
-                                    value={targetDir}
-                                    onChange={(event) => setTargetDir(event.target.value)}
-                                    disabled={loading}
-                                    title={targetDir}
-                                    className="h-10 w-full min-w-0 flex-1 bg-transparent text-[15px] font-bold tracking-tight text-on-surface outline-none placeholder:text-on-surface-variant/20 disabled:opacity-70 sm:text-[16px]"
-                                    placeholder="粘贴路径或点击左边图标选择"
-                                    onKeyDown={(e) => {
-                                      if (e.key === "Enter") void handlePrimaryLaunch();
-                                    }}
-                                  />
-                                </div>
-                              </div>
-                              <div className="flex flex-col sm:flex-row items-center justify-end gap-3 xl:pt-0">
-                                <Button
-                                  variant="ghost"
-                                  onClick={() => openStrategyDialog()}
-                                  disabled={loading || !targetDir.trim()}
-                                  className="h-11 w-full rounded-[8px] px-4 text-[13px] font-bold text-ui-muted hover:text-on-surface bg-on-surface/[0.03] transition-colors sm:h-12 sm:w-auto sm:px-5"
-                                >
-                                  <Layers3 className="mr-2 h-4 w-4" />
-                                  自定义配置
-                                </Button>
-                                <Button
-                                  variant="primary"
-                                  onClick={() => void handlePrimaryLaunch()}
-                                  disabled={loading || !targetDir.trim()}
-                                  loading={loading}
-                                  className="h-11 w-full min-w-[140px] rounded-[8px] px-6 text-[14px] font-black tracking-tight sm:h-12 sm:w-auto sm:min-w-[160px] sm:px-8"
-                                >
-                                  {loading ? "载入中" : "开始整理"}
-                                  {!loading && <ArrowRight className="ml-2 h-4 w-4" />}
-                                </Button>
-                              </div>
-                            </div>
-
-                            {/* 快捷按钮整合进主卡片底部 */}
-                            {commonDirs.length > 0 && (
-                              <div className="mt-6 flex items-center gap-3 border-t border-on-surface/5 pt-5 sm:mt-8 sm:pt-6">
-                                <span className="text-[10px] font-black uppercase tracking-widest text-ui-muted opacity-50 sm:text-[11px]">快捷选择</span>
-                                <div className="flex flex-wrap gap-2">
-                                  {commonDirs.map((dir) => {
-                                    const IconComponent = dir.label === "下载" ? Download : dir.label === "桌面" ? Monitor : FileText;
-                                    return (
-                                      <button
-                                        key={dir.path}
-                                        type="button"
-                                        onClick={() => setTargetDir(dir.path)}
-                                        disabled={loading}
-                                        className="inline-flex items-center gap-1.5 rounded-[8px] border border-on-surface/8 bg-on-surface/[0.01] px-3 py-1.5 text-[11px] font-bold text-on-surface-variant/70 transition-all hover:border-primary/30 hover:bg-primary/5 hover:text-primary active:scale-95 disabled:opacity-40 sm:gap-2 sm:px-3.5"
-                                      >
-                                        <IconComponent className="h-3 w-3" />
-                                        {dir.label}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                      </div>
-
-                      {/* 三步流程引导 - 更加精致的横向步骤，增加大小和占位 */}
-                      <div className="mx-auto flex w-full max-w-[85%] items-center justify-between py-4 sm:py-6">
-                        {[
-                          { step: "1", label: "选择目录", icon: FolderOpen },
-                          { step: "2", label: "扫描分析", icon: Search },
-                          { step: "3", label: "核对并执行", icon: ShieldCheck },
-                        ].map((item, idx) => (
-                          <div key={item.step} className="flex flex-1 items-center last:flex-none">
-                            <div className="flex flex-col items-center gap-3">
-                              <div className={cn(
-                                "flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-full transition-all duration-300 shadow-sm",
-                                idx === 0 ? "bg-primary text-white shadow-primary/20 scale-105" : "bg-on-surface/[0.03] text-on-surface-variant/40"
-                              )}>
-                                <item.icon className="h-4 w-4 sm:h-5 sm:w-5" />
-                              </div>
-                              <span className={cn("text-[11px] sm:text-[12px] font-black uppercase tracking-widest whitespace-nowrap", idx === 0 ? "text-primary" : "text-ui-muted/50")}>
-                                {item.label}
-                              </span>
-                            </div>
-                            {idx < 2 && (
-                              <div className="mx-4 sm:mx-8 h-px flex-1 bg-gradient-to-r from-on-surface/5 via-on-surface/10 to-on-surface/5" />
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                    <h2 className="font-headline text-[14px] font-bold tracking-tight text-on-surface">目标目录</h2>
                   </div>
+                  <div className="flex items-center gap-3">
+                    <div className="relative flex-1">
+                        <input
+                          value={targetDir}
+                          onChange={(event) => setTargetDir(event.target.value)}
+                          disabled={loading}
+                          className="h-10 w-full min-w-0 rounded-[8px] bg-on-surface/[0.03] border border-transparent px-3 text-[14px] font-bold text-on-surface outline-none placeholder:text-on-surface-variant/30 focus:bg-surface focus:border-primary/40 focus:ring-4 focus:ring-primary/10 transition-all"
+                          placeholder="拖拽文件夹到此处，或在此粘贴绝对路径..."
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") void handlePrimaryLaunch();
+                          }}
+                        />
+                    </div>
+                    <button
+                      onClick={() => void handleSelectDir()}
+                      disabled={loading}
+                      className="shrink-0 h-10 px-5 rounded-[8px] text-[13px] font-black bg-on-surface/[0.04] text-on-surface hover:bg-primary/10 hover:text-primary transition-all active:scale-95"
+                    >
+                      浏览...
+                    </button>
+                  </div>
+                  
+                  {/* Quick links */}
+                  {commonDirs.length > 0 && (
+                    <div className="flex gap-2.5 mt-3.5">
+                      {commonDirs.map((dir) => {
+                        const IconComponent = 
+                          dir.label === "下载" ? Download : 
+                          dir.label === "桌面" ? Monitor : 
+                          dir.label === "图片" ? ImageIcon :
+                          dir.label === "视频" ? Video :
+                          dir.label === "音乐" ? Music :
+                          FileText;
+                        return (
+                          <button
+                            key={dir.path}
+                            onClick={() => setTargetDir(dir.path)}
+                            disabled={loading}
+                            className="inline-flex items-center gap-1.5 rounded-[6px] bg-surface-container-low px-2.5 py-1 text-[11px] font-bold text-ui-muted hover:bg-surface border border-on-surface/5 hover:border-on-surface/10 hover:text-on-surface transition-all disabled:opacity-50"
+                          >
+                            <IconComponent className="h-3 w-3" />
+                            {dir.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+               </div>
 
-                  <div className="flex flex-col gap-5">
-                     <div className="rounded-[12px] border border-on-surface/8 bg-surface p-5 lg:p-6">
-                        <div className="mb-5 flex items-center justify-between">
-                           <div className="flex items-center gap-2 text-on-surface">
-                             <History className="h-4.5 w-4.5 text-primary" />
-                             <span className="text-[11px] font-black uppercase tracking-[0.22em] text-primary/70">最近任务</span>
-                           </div>
+               {/* Item 2: Strategy */}
+               <div className="p-5 lg:p-6 bg-surface-container-lowest flex flex-col sm:flex-row sm:items-start justify-between gap-6 relative">
+                  <div className="space-y-4 flex-1 min-w-0">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="flex h-6 w-6 items-center justify-center rounded-[4px] bg-primary/10 text-primary">
+                          <Layers3 className="h-3.5 w-3.5" />
                         </div>
-
-                        {historyLoading ? (
-                          <div className="flex items-center gap-3 py-3 text-ui-muted opacity-60">
-                            <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                            <span className="text-[12px] font-bold">同步历史记录...</span>
-                          </div>
-                        ) : latestHistory ? (
-                          <div className="space-y-6">
-                            <div className="space-y-1.5">
-                              <p className="line-clamp-1 text-[16px] font-black tracking-tight text-on-surface">{latestHistoryName}</p>
-                              <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-black uppercase tracking-widest text-primary/60">{latestHistory.is_session ? "会话" : "记录"}</span>
-                                <div className="h-1 w-1 rounded-full bg-on-surface/10" />
-                                <span className="line-clamp-1 flex-1 font-mono text-[10px] text-ui-muted/60 lowercase tracking-tight">{latestHistory.target_dir}</span>
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4 rounded-[12px] bg-on-surface/[0.02] p-4">
-                              <div className="flex flex-col">
-                                <span className="text-[10px] font-black uppercase tracking-widest text-ui-muted/50">当前阶段</span>
-                                <span className="text-[12px] font-black text-on-surface/70 truncate">{latestHistoryStage}</span>
-                              </div>
-                              <div className="flex flex-col border-l border-on-surface/6 pl-4">
-                                <span className="text-[10px] font-black uppercase tracking-widest text-ui-muted/50">规模</span>
-                                <span className="text-[12px] font-black text-on-surface/70">{latestHistory.item_count || 0} 项</span>
-                              </div>
-                            </div>
-                            <div className="grid gap-2 pt-2 sm:grid-cols-2">
-                              <Button variant="secondary" onClick={handleOpenLatestContinue} className="h-11 rounded-[8px] text-[13px] font-bold">
-                                {latestHistory.is_session ? "继续" : "预览"}
-                              </Button>
-                              <Button variant="secondary" onClick={handleOpenLatestReadonly} className="h-11 rounded-[8px] text-[13px] font-bold">
-                                详情
-                              </Button>
-                            </div>
-                            <Button variant="primary" onClick={() => void handleRestartLatest()} className="h-12 w-full rounded-[8px] text-[14px] font-black tracking-tight" disabled={!latestHistory.target_dir}>
-                              以此开启新任务
-                            </Button>
-                          </div>
+                        <h2 className="font-headline text-[14px] font-bold tracking-tight text-on-surface">预设策略与规则推演</h2>
+                      </div>
+                      <div className="flex flex-col xl:flex-row xl:items-center gap-2 xl:gap-3">
+                        {launchPreferencesLoaded ? (
+                          <>
+                            <p className="text-[15px] font-bold text-on-surface shrink-0">{currentTemplate.label}</p>
+                            <div className="h-1 w-1 rounded-full bg-on-surface/20 hidden xl:block"></div>
+                            <p className="text-[13px] font-medium text-ui-muted min-w-0 pr-4 leading-relaxed">{currentTemplate.applicableScenarios}</p>
+                          </>
                         ) : (
-                          <p className="text-[12px] leading-6 text-ui-muted opacity-50">还没有记录，开始整理后会显示在这里。</p>
+                          <div className="flex items-center gap-2 py-0.5 text-ui-muted text-[13px] font-bold">
+                            <Loader2 className="h-4 w-4 animate-spin" /> 同步配置中...
+                          </div>
                         )}
-                     </div>
+                      </div>
+                    </div>
 
-                     <div className="rounded-[12px] border border-primary/10 bg-primary/[0.02] p-5 lg:p-6 transition-all hover:bg-primary/[0.03]">
-                         <div className="mb-5 flex items-center justify-between">
-                            <div className="flex items-center gap-2 text-primary">
-                              <ShieldCheck className="h-4.5 w-4.5" />
-                              <span className="text-[11px] font-black uppercase tracking-[0.25em]">当前任务策略预设</span>
-                            </div>
-                         </div>
-
-                        <div className="space-y-4">
-                           {launchPreferencesLoaded ? (
-                               <div className="group relative">
-                                 <div className="space-y-1.5">
-                                   <p className="text-[15px] font-black tracking-tight text-on-surface">{currentTemplate.label}</p>
-                                   <p className="text-[12px] leading-relaxed text-ui-muted/80">{currentTemplate.applicableScenarios}</p>
-                                 </div>
-                                 <div className="mt-4 flex flex-wrap gap-2">
-                                   <span className="rounded-full border border-primary/10 bg-primary/5 px-3 py-1 text-[11px] font-black text-primary/80">{namingLabel}</span>
-                                   <span className="rounded-full border border-primary/10 bg-primary/5 px-3 py-1 text-[11px] font-black text-primary/80">{cautionLabel}</span>
-                                 </div>
-                               </div>
-                           ) : (
-                             <div className="flex items-center gap-3 py-4 text-ui-muted">
-                               <Loader2 className="h-4 w-4 animate-spin" />
-                               <span className="text-[12px] font-bold">同步配置中...</span>
-                             </div>
-                           )}
+                    {launchPreferencesLoaded && (
+                      <div className="space-y-2.5">
+                        <p className="text-[11px] font-bold text-ui-muted/60 uppercase tracking-widest">主要生成分类目录示例</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {currentSummary.preview_directories?.slice(0, 6).map(dir => (
+                             <span key={dir} className="inline-flex items-center rounded bg-on-surface/[0.04] px-1.5 py-0.5 text-[11px] font-semibold text-on-surface-variant">
+                               <FolderOpen className="w-3 h-3 mr-1.5 opacity-50" /> {dir}
+                             </span>
+                          ))}
+                          {(currentSummary.preview_directories?.length || 0) > 6 && (
+                             <span className="inline-flex items-center text-[11px] font-bold text-ui-muted/50 px-1">
+                               等...
+                             </span>
+                          )}
                         </div>
-
-                        <div className="mt-8 space-y-3 border-t border-on-surface/5 pt-6">
-                           <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-widest text-ui-muted/50">
-                              <span>扫描核心</span>
-                              <span className="text-on-surface/40">启发式深度遍历</span>
-                           </div>
-                           <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-widest text-ui-muted/60">
-                              <span>回退保护</span>
-                              <span className="font-bold text-success-dim/80">Active (Journal)</span>
-                           </div>
-                        </div>
-                     </div>
-
-                     <div className="rounded-[12px] border border-on-surface/8 bg-on-surface/[0.02] p-5 transition-all hover:bg-on-surface/[0.03]">
-                        <p className="text-[12px] font-bold leading-relaxed tracking-tight text-ui-muted/70">
-                          {launchSkipPrompt 
-                            ? "已开启快速直达模式。点击开始整理后，系统将按当前默认预设立即执行初始化扫描。"
-                            : "当前处于配置确认模式。开始前仍会打开策略对话框，确认无误后开启 AI 分析。"}
-                        </p>
-                     </div>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between gap-2.5 shrink-0 pt-0.5">
+                    <button 
+                      onClick={() => openStrategyDialog()}
+                      disabled={loading || !targetDir.trim()}
+                      className="flex shrink-0 items-center justify-center gap-1.5 h-9 px-4 rounded-[4px] border border-on-surface/8 bg-surface hover:bg-on-surface/5 text-[12px] font-bold text-on-surface-variant transition-colors hover:text-on-surface disabled:opacity-50 shadow-sm"
+                    >
+                      修改规则 <ChevronRight className="h-3.5 w-3.5 opacity-70" />
+                    </button>
+                    <div className="flex flex-row sm:flex-col items-center sm:items-end gap-1.5 opacity-80 pt-1 pointer-events-none">
+                      <span className="inline-flex rounded-[4px] bg-primary/[0.06] px-1.5 py-0.5 text-[10px] font-black tracking-widest text-primary uppercase border border-primary/5">{namingLabel}</span>
+                      <span className="inline-flex rounded-[4px] bg-primary/[0.06] px-1.5 py-0.5 text-[10px] font-black tracking-widest text-primary uppercase border border-primary/5">{cautionLabel}</span>
+                    </div>
                   </div>
                </div>
             </div>
-          </section>
-        </motion.div>
+
+            {/* Actions */}
+            <div className="mt-6 flex flex-col sm:flex-row items-center justify-end gap-6 sm:pl-4">
+              <div className="flex-1 text-center sm:text-left">
+                {launchSkipPrompt && (
+                  <p className="text-[12px] font-bold text-primary/80 flex items-center justify-center sm:justify-start gap-1.5">
+                    <Sparkles className="w-4 h-4" /> 快速直达已开启
+                  </p>
+                )}
+              </div>
+              <Button
+                variant="primary"
+                onClick={() => void handlePrimaryLaunch()}
+                disabled={loading || !targetDir.trim()}
+                loading={loading}
+                className="h-10 w-full sm:w-auto min-w-[160px] rounded-[4px] text-[13px] font-bold shadow-sm"
+              >
+                {loading ? "正在启动..." : "开始整理分析"}
+                {!loading && <ArrowRight className="ml-1.5 h-4 w-4" />}
+              </Button>
+            </div>
+
+          </motion.div>
+        </div>
+
+        {/* Right Pane - History Sidebar */}
+        <div className="w-[280px] 2xl:w-[320px] shrink-0 border-l border-on-surface/8 bg-surface-container-lowest flex flex-col">
+          <div className="px-5 py-4 border-b border-on-surface/6 bg-on-surface/[0.015]">
+            <div className="flex items-center gap-2">
+              <div className="flex h-6 w-6 items-center justify-center rounded-[4px] bg-primary/10 text-primary">
+                <History className="h-3.5 w-3.5" />
+              </div>
+              <h2 className="font-headline text-[14px] font-bold tracking-tight text-on-surface">历史会话流</h2>
+            </div>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto px-3.5 py-4 space-y-2 scrollbar-thin">
+            {historyLoading ? (
+              <div className="flex items-center justify-center p-8 opacity-50">
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              </div>
+            ) : latestHistory ? (
+              <div 
+                className="group relative flex flex-col gap-1.5 rounded-[8px] bg-surface p-3 border border-on-surface/8 hover:border-primary/30 hover:bg-primary/[0.02] cursor-pointer transition-colors shadow-sm"
+                onClick={handleOpenLatestContinue}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="truncate text-[13px] font-bold text-on-surface pr-2">{latestHistoryName}</span>
+                  <span className="shrink-0 text-[10px] font-black uppercase text-primary/70">{latestHistoryStage}</span>
+                </div>
+                <div className="text-[11px] font-medium text-ui-muted font-mono truncate opacity-60">
+                  {latestHistory.target_dir}
+                </div>
+                <div className="mt-1 flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-on-surface-variant/50">{latestHistory.item_count || 0} 项</span>
+                  <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1.5 pt-0.5">
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); handleOpenLatestReadonly(); }}
+                      className="rounded bg-surface-container-low px-2 py-1 text-[10px] font-bold text-on-surface hover:text-primary transition-colors"
+                    >
+                      详情
+                    </button>
+                    {latestHistory.is_session && (
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); handleOpenLatestContinue(); }}
+                        className="rounded bg-primary px-2 py-1 text-[10px] font-bold text-white shadow-sm transition-colors hover:bg-primary-dim"
+                      >
+                        恢复
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 text-center text-[12px] font-medium text-ui-muted opacity-60">暂无任务流水记录</div>
+            )}
+            
+          </div>
+        </div>
       </div>
 
       <AnimatePresence>

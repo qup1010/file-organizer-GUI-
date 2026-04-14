@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, FileText, Folder, FolderOpen, Layers, Search, ShieldAlert, Sparkles } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileText, Folder, FolderOpen, Layers, Search, ShieldAlert, Sparkles, Edit2, Info, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { MarkdownProse } from "./markdown-prose";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose } from "@/components/ui/dialog";
 
 import { cn } from "@/lib/utils";
 import type { PlanItem, PlanSnapshot, SessionStage } from "@/types/session";
@@ -21,6 +22,10 @@ interface PreviewPanelProps {
   stage: SessionStage;
   isBusy: boolean;
   isPlanSyncing?: boolean;
+  plannerStatus?: {
+    preservingPreviousPlan: boolean;
+    isRunning: boolean;
+  } | null;
   readOnly?: boolean;
   onRunPrecheck: () => void;
   onUpdateItem: (itemId: string, payload: { target_dir?: string; move_to_review?: boolean }) => Promise<void> | void;
@@ -112,6 +117,7 @@ function TreeBranch({
   selectedItemId,
   onToggle,
   onSelectItem,
+  onEditItem,
 }: {
   node: TreeNode;
   depth: number;
@@ -119,6 +125,7 @@ function TreeBranch({
   selectedItemId: string | null;
   onToggle: (path: string) => void;
   onSelectItem: (itemId: string) => void;
+  onEditItem: (itemId: string) => void;
 }) {
   if (node.kind === "file" && node.item) {
     const status = statusMeta(node.item.status);
@@ -127,17 +134,30 @@ function TreeBranch({
         type="button"
         onClick={() => onSelectItem(node.item!.item_id)}
         className={cn(
-          "flex w-full items-center gap-3 rounded-[8px] border px-3 py-2 text-left transition-colors",
+          "group flex w-full items-center gap-3 rounded-[8px] border py-2 pr-3 text-left transition-colors",
           selectedItemId === node.item.item_id ? "border-primary/22 bg-primary/6" : "border-transparent hover:border-on-surface/8 hover:bg-on-surface/[0.02]",
         )}
-        style={{ marginLeft: depth * 16 }}
+        style={{ paddingLeft: 12 + depth * 16 }}
       >
         <FileText className="h-4 w-4 shrink-0 text-on-surface-variant/60" />
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13px] font-semibold text-on-surface">{node.item.display_name}</p>
           <p className="truncate text-[11px] text-ui-muted">{node.item.suggested_purpose || "未提供归类理由"}</p>
         </div>
-        <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-bold", status.tone)}>{status.label}</span>
+        <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-bold shrink-0", status.tone)}>{status.label}</span>
+        <div
+          role="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onEditItem(node.item!.item_id);
+          }}
+          className={cn(
+            "flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] border border-on-surface/10 bg-surface shadow-sm transition-opacity hover:bg-on-surface/[0.02] active:scale-95",
+            selectedItemId === node.item.item_id ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus:opacity-100"
+          )}
+        >
+          <Edit2 className="h-3.5 w-3.5 text-on-surface-variant" />
+        </div>
       </button>
     );
   }
@@ -148,8 +168,8 @@ function TreeBranch({
       <button
         type="button"
         onClick={() => onToggle(node.path)}
-        className="flex w-full items-center gap-2 rounded-[8px] px-2 py-2 text-left transition-colors hover:bg-on-surface/[0.02]"
-        style={{ marginLeft: depth * 16 }}
+        className="flex w-full items-center gap-2 rounded-[8px] py-2 pr-2 text-left transition-colors hover:bg-on-surface/[0.02]"
+        style={{ paddingLeft: 8 + depth * 16 }}
       >
         {isExpanded ? <FolderOpen className="h-4 w-4 shrink-0 text-primary" /> : <Folder className="h-4 w-4 shrink-0 text-primary" />}
         <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-on-surface">{node.name}</span>
@@ -159,7 +179,7 @@ function TreeBranch({
         {isExpanded ? (
           <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="space-y-1 overflow-hidden">
             {node.children.map((child) => (
-              <TreeBranch key={child.path} node={child} depth={depth + 1} expanded={expanded} selectedItemId={selectedItemId} onToggle={onToggle} onSelectItem={onSelectItem} />
+              <TreeBranch key={child.path} node={child} depth={depth + 1} expanded={expanded} selectedItemId={selectedItemId} onToggle={onToggle} onSelectItem={onSelectItem} onEditItem={onEditItem} />
             ))}
           </motion.div>
         ) : null}
@@ -222,7 +242,7 @@ function QueueCard({
 }
 
 export function PreviewPanel(props: PreviewPanelProps) {
-  const { plan, stage, isBusy, isPlanSyncing = false, readOnly = false, onRunPrecheck, onUpdateItem, precheckSummary, focusRequest } = props;
+  const { plan, stage, isBusy, isPlanSyncing = false, plannerStatus = null, readOnly = false, onRunPrecheck, onUpdateItem, precheckSummary, focusRequest } = props;
   const allItems = useMemo(() => {
     const merged = new Map<string, PlanItem>();
     [...(plan.items || []), ...(plan.invalidated_items || [])].forEach((item) => {
@@ -237,6 +257,8 @@ export function PreviewPanel(props: PreviewPanelProps) {
   const [search, setSearch] = useState("");
   const [extensionFilter, setExtensionFilter] = useState("all");
   const [selectedItemId, setSelectedItemId] = useState<string | null>(allItems[0]?.item_id || null);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const editingItem = useMemo(() => allItems.find((item) => item.item_id === editingItemId) || null, [allItems, editingItemId]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [manualTarget, setManualTarget] = useState("");
   const [showManualInput, setShowManualInput] = useState(false);
@@ -283,8 +305,8 @@ export function PreviewPanel(props: PreviewPanelProps) {
   }, [focusRequest]);
 
   useEffect(() => {
-    setManualTarget(targetDir(selectedItem || { target_relpath: "" }));
-  }, [selectedItem]);
+    setManualTarget(targetDir(editingItem || { target_relpath: "" }));
+  }, [editingItem]);
 
   const applyItemTarget = async (itemId: string, payload: { target_dir?: string; move_to_review?: boolean }) => {
     await Promise.resolve(onUpdateItem(itemId, payload));
@@ -296,9 +318,9 @@ export function PreviewPanel(props: PreviewPanelProps) {
     }
   };
 
-  const currentExt = selectedItem ? fileExtension(selectedItem) : null;
+  const currentExt = editingItem ? fileExtension(editingItem) : null;
   const extMatchedItems = currentExt ? allItems.filter((item) => fileExtension(item) === currentExt) : [];
-  const sameSuggestedDirItems = selectedItem ? unresolvedItems.filter((item) => targetDir(item) === targetDir(selectedItem) && targetDir(item)) : [];
+  const sameSuggestedDirItems = editingItem ? unresolvedItems.filter((item) => targetDir(item) === targetDir(editingItem) && targetDir(item)) : [];
   const blockingQueueCount = invalidatedItems.length + unresolvedItems.length;
   const precheckNotice = canRunPrecheck
     ? "待处理队列已经清空，可以开始预检。"
@@ -310,62 +332,140 @@ export function PreviewPanel(props: PreviewPanelProps) {
 
   return (
     <div className="flex h-full w-full min-w-0 flex-col bg-transparent @container overflow-hidden">
-      <div className="flex-1 overflow-x-hidden overflow-y-auto px-4 py-4 lg:px-6">
-        <div className="mx-auto w-full max-w-[1380px] space-y-4 min-w-0">
-          <section className="min-w-0 rounded-[12px] border border-on-surface/8 bg-surface-container-lowest shadow-[0_20px_40px_rgba(0,0,0,0.04)]">
-            <div className="border-b border-on-surface/6 px-4 py-4 @lg:px-5">
-              <div className="grid gap-4 @5xl:grid-cols-[minmax(0,1fr)_auto] @5xl:items-start">
-                <div className="min-w-0 space-y-1">
-                  <div className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-primary/70">
-                    <Layers className="h-3.5 w-3.5" />
-                    当前整理方案
+        <div className="mx-auto flex h-full w-full max-w-[1440px] flex-col min-w-0 px-4 py-4 lg:px-6 overflow-hidden">
+          <section className="min-w-0 flex flex-col h-full rounded-[12px] border border-on-surface/8 bg-surface-container-lowest shadow-[0_20px_40px_rgba(0,0,0,0.04)] overflow-hidden">
+            <div className="shrink-0">
+            {plannerStatus?.isRunning && plannerStatus.preservingPreviousPlan ? (
+              <div className="border-b border-primary/10 bg-primary/[0.045] px-4 py-3 @lg:px-5">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] border border-primary/14 bg-primary/8 text-primary">
+                    <Sparkles className="h-3.5 w-3.5" />
                   </div>
-                  <h2 className="max-w-[14ch] text-[18px] font-bold tracking-tight text-on-surface @4xl:max-w-none">先看待处理，再核对目标结构</h2>
-                  <div className="mt-2 max-w-[44rem] text-[13px] text-ui-muted opacity-80 overflow-hidden [&>div>p]:mb-1 [&>div>p:last-child]:mb-0">
-                    {plan.summary ? <MarkdownProse content={plan.summary} /> : "目录树、待处理队列和条目检查器会在这里同步更新。"}
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-bold text-on-surface">正在基于你的最新要求重算方案</p>
+                    <p className="mt-1 text-[12px] leading-5 text-on-surface-variant">当前显示的是上一版方案，新方案完成后会自动替换</p>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2 @3xl:max-w-[320px] @5xl:w-[292px]">
-                  <span className="rounded-full border border-on-surface/8 bg-surface px-3 py-1.5 text-center text-[12px] font-semibold text-on-surface">移动 {plan.stats.move_count}</span>
-                  <span className="rounded-full border border-on-surface/8 bg-surface px-3 py-1.5 text-center text-[12px] font-semibold text-on-surface">新目录 {plan.stats.directory_count}</span>
-                  <span className={cn("col-span-2 rounded-full border px-3 py-1.5 text-center text-[12px] font-semibold", blockingQueueCount > 0 || !canRunPrecheck ? "border-warning/18 bg-warning/10 text-warning" : "border-success/18 bg-success/10 text-success-dim")}>
-                    {blockingQueueCount > 0 ? `待处理 ${blockingQueueCount}` : canRunPrecheck ? "可开始预检" : "方案同步中"}
-                  </span>
+              </div>
+            ) : null}
+            <div className="border-b border-on-surface/6 px-4 py-3 @lg:px-5">
+              <div className="flex flex-col gap-2 @3xl:flex-row @3xl:items-center @3xl:justify-between">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-3">
+                    <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-primary/70">
+                      <Layers className="h-3.5 w-3.5" />
+                      方案预览
+                    </div>
+                    <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold", blockingQueueCount > 0 || !canRunPrecheck ? "bg-warning/10 text-warning" : "bg-success/10 text-success-dim ml-auto")}>
+                      {blockingQueueCount > 0 ? `待处理 ${blockingQueueCount}` : canRunPrecheck ? "可预检" : "同步中"}
+                    </span>
+                  </div>
+                  <h2 className="mt-1 text-[15px] font-bold tracking-tight text-on-surface truncate">先看待处理，再核对目标结构</h2>
+                </div>
+                
+                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
+                  <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-on-surface/8 bg-surface px-2.5 py-1 text-[11px] font-semibold text-on-surface">
+                    <Sparkles className="h-3 w-3 text-primary/60" />
+                    <span>移动 {plan.stats.move_count}</span>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-on-surface/8 bg-surface px-2.5 py-1 text-[11px] font-semibold text-on-surface">
+                    <Folder className="h-3 w-3 text-primary/60" />
+                    <span>新目录 {plan.stats.directory_count}</span>
+                  </div>
+                </div>
+              </div>
+              
+              {plan.summary && (
+                <div className="mt-2 line-clamp-2 text-[12px] leading-relaxed text-ui-muted opacity-70 hover:opacity-100 hover:line-clamp-none transition-all cursor-default overflow-hidden">
+                  <MarkdownProse content={plan.summary} />
+                </div>
+              )}
+            </div>
+
+            <div className="border-b border-on-surface/6 bg-on-surface/[0.01] px-4 py-2 @lg:px-5">
+              <div className="flex flex-wrap items-center gap-2 min-w-0">
+                <div className="flex shrink-0 items-center rounded-lg border border-on-surface/8 bg-surface p-0.5 shadow-sm">
+                  <button type="button" onClick={() => setViewMode("before")} className={cn("rounded-md px-2.5 py-1 text-[11px] font-bold transition-all", viewMode === "before" ? "bg-on-surface text-surface shadow-sm" : "text-on-surface-variant hover:bg-on-surface/5")}>前</button>
+                  <button type="button" onClick={() => setViewMode("after")} className={cn("rounded-md px-2.5 py-1 text-[11px] font-bold transition-all", viewMode === "after" ? "bg-primary text-white shadow-sm" : "text-on-surface-variant hover:bg-on-surface/5")}>后</button>
+                </div>
+                
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <select value={filter} onChange={(event) => setFilter(event.target.value as PreviewFilter)} className="h-8 min-w-0 rounded-lg border border-on-surface/8 bg-surface px-2 text-[11px] font-bold text-on-surface outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20">
+                    <option value="all">全部条目</option>
+                    <option value="changed">只看变更</option>
+                    <option value="unresolved">只看待决策</option>
+                    <option value="review">只看待核对</option>
+                    <option value="invalidated">只看重新确认</option>
+                  </select>
+                  
+                  <div className="relative flex min-w-0 flex-1 items-center">
+                    <Search className="absolute left-2.5 h-3.5 w-3.5 text-ui-muted pointer-events-none" />
+                    <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索文件名..." className="h-8 w-full rounded-lg border border-on-surface/8 bg-surface pl-8 pr-2 text-[11px] text-on-surface outline-none placeholder:text-ui-muted focus:border-primary/40 focus:ring-1 focus:ring-primary/20" />
+                  </div>
+
+                  <select value={extensionFilter} onChange={(event) => setExtensionFilter(event.target.value)} className="hidden h-8 rounded-lg border border-on-surface/8 bg-surface px-2 text-[11px] font-bold text-on-surface outline-none @3xl:block">
+                    {extensionOptions.map((option) => <option key={option} value={option}>{option === "all" ? "全部类型" : option}</option>)}
+                  </select>
+                </div>
+
+                <div className="hidden shrink-0 items-center px-1 text-[10px] font-bold text-ui-muted/60 @5xl:flex">
+                  {filteredItems.length} / {allItems.length}
                 </div>
               </div>
             </div>
+          </div>
 
-            <div className="border-b border-on-surface/6 px-4 py-4 @lg:px-5">
-              <div className="grid gap-3 @4xl:grid-cols-[auto_minmax(0,1fr)] @6xl:grid-cols-[auto_auto_minmax(0,1fr)_auto_auto] @6xl:items-center">
-                <div className="inline-flex rounded-[8px] border border-on-surface/8 bg-surface p-1">
-                  <button type="button" onClick={() => setViewMode("before")} className={cn("rounded-[6px] px-3 py-1.5 text-[12px] font-semibold", viewMode === "before" ? "bg-on-surface text-surface" : "text-on-surface-variant")}>整理前</button>
-                  <button type="button" onClick={() => setViewMode("after")} className={cn("rounded-[6px] px-3 py-1.5 text-[12px] font-semibold", viewMode === "after" ? "bg-primary text-white" : "text-on-surface-variant")}>整理后</button>
+          <div className="flex-1 flex flex-col gap-4 p-4 min-w-0 min-h-0 @4xl:flex-row overflow-hidden">
+              <section className="flex-1 min-w-0 flex flex-col rounded-[10px] border border-on-surface/8 bg-surface p-3 overflow-hidden">
+                <div className="mb-3 shrink-0 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-[13px] font-bold text-on-surface">结构预览</h3>
+                    <p className="text-[12px] text-ui-muted">点击编辑图标或队列条目即可确认方案。</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      title="全部收起"
+                      onClick={() => {
+                        const next: Record<string, boolean> = {};
+                        const traverse = (nodes: any[]) => {
+                          nodes.forEach((n) => {
+                            if (n.kind === "directory") {
+                              next[n.path] = false;
+                              traverse(n.children);
+                            }
+                          });
+                        };
+                        traverse(currentTree);
+                        setExpanded(next);
+                      }}
+                      className="flex h-7 w-7 items-center justify-center rounded-[6px] border border-on-surface/8 bg-surface text-ui-muted hover:bg-on-surface/5 active:scale-95 transition-all"
+                    >
+                      <ChevronsDownUp className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      title="全部展开"
+                      onClick={() => {
+                        const next: Record<string, boolean> = {};
+                        const traverse = (nodes: any[]) => {
+                          nodes.forEach((n) => {
+                            if (n.kind === "directory") {
+                              next[n.path] = true;
+                              traverse(n.children);
+                            }
+                          });
+                        };
+                        traverse(currentTree);
+                        setExpanded(next);
+                      }}
+                      className="flex h-7 w-7 items-center justify-center rounded-[6px] border border-on-surface/8 bg-surface text-ui-muted hover:bg-on-surface/5 active:scale-95 transition-all"
+                    >
+                      <ChevronsUpDown className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
-                <select value={filter} onChange={(event) => setFilter(event.target.value as PreviewFilter)} className="h-10 min-w-0 rounded-[8px] border border-on-surface/8 bg-surface px-3 text-[12px] text-on-surface outline-none @4xl:max-w-[220px]">
-                  <option value="all">全部条目</option>
-                  <option value="changed">只看变更</option>
-                  <option value="unresolved">只看待决策</option>
-                  <option value="review">只看待核对</option>
-                  <option value="invalidated">只看需重新确认</option>
-                </select>
-                <label className="flex h-10 min-w-0 items-center gap-2 rounded-[8px] border border-on-surface/8 bg-surface px-3 @4xl:col-span-2 @6xl:col-span-1">
-                  <Search className="h-4 w-4 text-ui-muted" />
-                  <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索文件名、路径、摘要" className="w-full bg-transparent text-[12px] text-on-surface outline-none placeholder:text-ui-muted" />
-                </label>
-                <select value={extensionFilter} onChange={(event) => setExtensionFilter(event.target.value)} className="h-10 min-w-0 rounded-[8px] border border-on-surface/8 bg-surface px-3 text-[12px] text-on-surface outline-none @6xl:min-w-[140px]">
-                  {extensionOptions.map((option) => <option key={option} value={option}>{option === "all" ? "全部类型" : option}</option>)}
-                </select>
-                <div className="flex h-10 items-center justify-center rounded-[8px] border border-on-surface/8 bg-surface px-3 text-[12px] text-ui-muted @4xl:justify-start @6xl:justify-center">当前显示 {filteredItems.length} / {allItems.length}</div>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-4 p-4 min-w-0 @4xl:flex-row">
-              <section className="flex-1 min-w-0 rounded-[10px] border border-on-surface/8 bg-surface p-3">
-                <div className="mb-3">
-                  <h3 className="text-[13px] font-bold text-on-surface">结构预览</h3>
-                  <p className="text-[12px] text-ui-muted">点击左侧条目后，右侧会显示更完整的检查信息和调整动作。</p>
-                </div>
-                <div className="min-h-[420px] space-y-1">
+                <div className="flex-1 overflow-y-auto space-y-1 scrollbar-thin pr-3">
                   {currentTree.length > 0 ? currentTree.map((node) => (
                     <TreeBranch
                       key={node.path}
@@ -375,6 +475,7 @@ export function PreviewPanel(props: PreviewPanelProps) {
                       selectedItemId={selectedItemId}
                       onToggle={(path) => setExpanded((prev) => ({ ...prev, [path]: !(prev[path] ?? true) }))}
                       onSelectItem={setSelectedItemId}
+                      onEditItem={setEditingItemId}
                     />
                   )) : (
                     <div className="flex h-[360px] flex-col items-center justify-center gap-3 rounded-[10px] border border-dashed border-on-surface/10 bg-on-surface/[0.02] text-center">
@@ -388,126 +489,122 @@ export function PreviewPanel(props: PreviewPanelProps) {
                 </div>
               </section>
 
-              <aside className="w-full shrink-0 flex-1 space-y-3 min-w-0 @4xl:w-[360px] @4xl:flex-none">
-                <QueueCard title="需重新确认" items={invalidatedItems} selectedItemId={selectedItemId} onSelectItem={setSelectedItemId} onShowAll={() => setFilter("invalidated")} tone="border-error/12 bg-error-container/20" />
-                <QueueCard title="待决策" items={unresolvedItems} selectedItemId={selectedItemId} onSelectItem={setSelectedItemId} onShowAll={() => setFilter("unresolved")} tone="border-warning/12 bg-warning-container/25" />
-                <QueueCard title="待核对" items={reviewItems} selectedItemId={selectedItemId} onSelectItem={setSelectedItemId} onShowAll={() => setFilter("review")} tone="border-primary/12 bg-primary/5" />
-
-                <section className="rounded-[10px] border border-on-surface/8 bg-surface p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-ui-muted">条目检查器</p>
-                      <h3 className="mt-1 text-[16px] font-bold tracking-tight text-on-surface">{selectedItem?.display_name || "选择一个条目"}</h3>
-                    </div>
-                    {selectedItem ? (
-                      <span className={cn("rounded-full border px-2.5 py-1 text-[11px] font-bold", statusMeta(selectedItem.status).tone)}>
-                        {statusMeta(selectedItem.status).label}
-                      </span>
-                    ) : null}
-                  </div>
-
-                  {selectedItem ? (
-                    <div className="mt-4 space-y-4">
-                      <div className="grid gap-2">
-                        <div className="min-w-0 flex-1 rounded-[8px] border border-on-surface/8 bg-surface-container-lowest px-3 py-2">
-                          <div className="text-[11px] font-semibold text-ui-muted">原路径</div>
-                          <div className="mt-1 break-all text-[12px] text-on-surface">{selectedItem.source_relpath}</div>
-                        </div>
-                        <div className="min-w-0 flex-1 rounded-[8px] border border-on-surface/8 bg-surface-container-lowest px-3 py-2">
-                          <div className="text-[11px] font-semibold text-ui-muted">目标路径</div>
-                          <div className="mt-1 break-all text-[12px] text-on-surface">{selectedItem.target_relpath || "当前目录"}</div>
-                        </div>
-                      </div>
-
-                      <div className="grid gap-2 @sm:grid-cols-2">
-                        <div className="min-w-0 flex-1 rounded-[8px] border border-on-surface/8 bg-surface-container-lowest px-3 py-2">
-                          <div className="text-[11px] font-semibold text-ui-muted">归类理由</div>
-                          <div className="mt-1 text-[12px] leading-5 text-on-surface [&>div>p]:mb-1 [&>div>p:last-child]:mb-0">
-                            {selectedItem.reason || selectedItem.suggested_purpose ? (
-                              <MarkdownProse content={selectedItem.reason || selectedItem.suggested_purpose!} />
-                            ) : "当前没有额外理由说明。"}
-                          </div>
-                        </div>
-                        <div className="min-w-0 flex-1 rounded-[8px] border border-on-surface/8 bg-surface-container-lowest px-3 py-2">
-                          <div className="text-[11px] font-semibold text-ui-muted">摘要 / 置信度</div>
-                          <div className="mt-1 text-[12px] leading-5 text-on-surface [&>div>p]:mb-1 [&>div>p:last-child]:mb-0">
-                            {selectedItem.content_summary ? (
-                              <MarkdownProse content={selectedItem.content_summary} />
-                            ) : "当前没有摘要。"}
-                            {typeof selectedItem.confidence === "number" ? `（${Math.round(selectedItem.confidence * 100)}%）` : ""}
-                          </div>
-                        </div>
-                      </div>
-
-                      {!readOnly ? (
-                        <>
-                          <div className="space-y-2">
-                            <div className="text-[12px] font-semibold text-on-surface">快速调整目标目录</div>
-                            <div className="flex flex-wrap gap-2">
-                              {availableDirectories.slice(0, 8).map((directory) => (
-                                <button
-                                  key={`${selectedItem.item_id}-${directory}`}
-                                  type="button"
-                                  onClick={() => void applyItemTarget(selectedItem.item_id, directory === "Review" ? { move_to_review: true } : { target_dir: directory })}
-                                  className={cn(
-                                    "rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-colors",
-                                    targetDir(selectedItem) === directory ? "border-primary/22 bg-primary/8 text-primary" : "border-on-surface/8 bg-surface-container-lowest text-on-surface hover:bg-on-surface/[0.03]",
-                                  )}
-                                >
-                                  {directory}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="space-y-2">
-                            <button type="button" onClick={() => setShowManualInput((current) => !current)} className="text-[12px] font-semibold text-primary">
-                              {showManualInput ? "收起高级路径输入" : "高级路径输入"}
-                            </button>
-                            {showManualInput ? (
-                              <div className="flex gap-2 min-w-0 items-center">
-                                <input value={manualTarget} onChange={(event) => setManualTarget(event.target.value)} placeholder="项目资料/归档" className="h-10 min-w-0 flex-1 rounded-[8px] border border-on-surface/8 bg-surface-container-lowest px-3 text-[12px] text-on-surface outline-none" />
-                                <button type="button" onClick={() => void applyItemTarget(selectedItem.item_id, { target_dir: manualTarget.trim() })} className="shrink-0 h-10 rounded-[8px] bg-on-surface px-4 text-[12px] font-semibold text-surface transition-transform active:scale-95">
-                                  应用
-                                </button>
-                              </div>
-                            ) : null}
-                          </div>
-
-                          <div className="space-y-2 rounded-[10px] border border-on-surface/8 bg-surface-container-low px-3 py-3">
-                            <div>
-                              <p className="text-[12px] font-semibold text-on-surface">批量动作</p>
-                              <p className="text-[11px] leading-5 text-ui-muted">先按当前选中条目推断一组更稳妥的批量处理。</p>
-                            </div>
-                            <div className="flex flex-col gap-2">
-                              <button type="button" disabled={sameSuggestedDirItems.length <= 1 || !targetDir(selectedItem)} onClick={() => void applyBatch(sameSuggestedDirItems, { target_dir: targetDir(selectedItem) })} className="rounded-[8px] border border-on-surface/8 bg-surface px-3 py-2 text-left text-[12px] font-semibold text-on-surface disabled:opacity-40">
-                                按当前建议批量确认
-                                <span className="ml-2 text-ui-muted">同目标目录 {sameSuggestedDirItems.length} 项</span>
-                              </button>
-                              <button type="button" disabled={extMatchedItems.length <= 1 || !targetDir(selectedItem)} onClick={() => void applyBatch(extMatchedItems, { target_dir: targetDir(selectedItem) })} className="rounded-[8px] border border-on-surface/8 bg-surface px-3 py-2 text-left text-[12px] font-semibold text-on-surface disabled:opacity-40">
-                                按扩展名批量套用到同目录
-                                <span className="ml-2 text-ui-muted">{currentExt || "无"} · {extMatchedItems.length} 项</span>
-                              </button>
-                              <button type="button" disabled={extMatchedItems.length <= 1} onClick={() => void applyBatch(extMatchedItems, { move_to_review: true })} className="rounded-[8px] border border-warning/18 bg-warning/8 px-3 py-2 text-left text-[12px] font-semibold text-warning disabled:opacity-40">
-                                按扩展名批量移入 Review
-                                <span className="ml-2 text-warning/80">{currentExt || "无"} · {extMatchedItems.length} 项</span>
-                              </button>
-                            </div>
-                          </div>
-                        </>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <div className="mt-4 rounded-[8px] border border-dashed border-on-surface/10 bg-on-surface/[0.02] px-4 py-6 text-[12px] text-ui-muted">
-                      选择目录树或待处理队列中的条目后，这里会显示更完整的解释和可见操作。
-                    </div>
-                  )}
-                </section>
+              <aside className="w-full shrink-0 flex flex-col space-y-3 min-w-0 @4xl:w-[320px] @4xl:flex-none overflow-y-auto scrollbar-thin pr-3">
+                <QueueCard title="需重新确认" items={invalidatedItems} selectedItemId={editingItemId || selectedItemId} onSelectItem={(id) => { setSelectedItemId(id); setEditingItemId(id); }} onShowAll={() => setFilter("invalidated")} tone="border-error/12 bg-error-container/20" />
+                <QueueCard title="待决策" items={unresolvedItems} selectedItemId={editingItemId || selectedItemId} onSelectItem={(id) => { setSelectedItemId(id); setEditingItemId(id); }} onShowAll={() => setFilter("unresolved")} tone="border-warning/12 bg-warning-container/25" />
+                <QueueCard title="待核对" items={reviewItems} selectedItemId={editingItemId || selectedItemId} onSelectItem={(id) => { setSelectedItemId(id); setEditingItemId(id); }} onShowAll={() => setFilter("review")} tone="border-primary/12 bg-primary/5" />
               </aside>
             </div>
           </section>
         </div>
-      </div>
+
+      <Dialog open={!!editingItemId} onOpenChange={(open) => !open && setEditingItemId(null)}>
+        <DialogContent className="max-w-2xl sm:rounded-[16px] p-0 overflow-hidden border-on-surface/10 shadow-[0_32px_80px_rgba(0,0,0,0.12)]">
+          <DialogHeader className="border-b border-on-surface/6 bg-surface-container-lowest px-6 py-5">
+            <div className="flex items-start justify-between pr-6">
+              <div>
+                <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-ui-muted flex items-center gap-2">
+                  <Edit2 className="w-3.5 h-3.5" />
+                  独立确认
+                </p>
+                <DialogTitle className="mt-1 text-[18px] font-bold tracking-tight text-on-surface">
+                  {editingItem?.display_name || "未知条目"}
+                </DialogTitle>
+              </div>
+              {editingItem ? (
+                <span className={cn("rounded-full border px-3 py-1.2 text-[12px] font-bold mt-1 shrink-0", statusMeta(editingItem.status).tone)}>
+                  {statusMeta(editingItem.status).label}
+                </span>
+              ) : null}
+            </div>
+          </DialogHeader>
+
+          {editingItem ? (
+            <div className="max-h-[65vh] overflow-y-auto w-full p-6 space-y-6 bg-surface scrollbar-thin">
+              <div className="grid gap-3">
+                <div className="min-w-0 flex-1 rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-4 py-3 shadow-sm">
+                  <div className="text-[11px] font-bold tracking-wider text-ui-muted flex items-center gap-1.5"><FolderOpen className="w-3.5 h-3.5" /> 原路径</div>
+                  <div className="mt-1 break-all text-[13px] font-medium text-on-surface">{editingItem.source_relpath}</div>
+                </div>
+                <div className="min-w-0 flex-1 rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-4 py-3 shadow-sm relative overflow-hidden">
+                  <div className="absolute -top-4 -right-2 p-4 opacity-[0.03] pointer-events-none"><Folder className="w-24 h-24" /></div>
+                  <div className="text-[11px] font-bold tracking-wider text-ui-muted flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-success-dim" /> 目标路径</div>
+                  <div className="mt-1 break-all text-[14px] font-bold text-primary">{editingItem.target_relpath || "当前目录"}</div>
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="min-w-0 flex-1 rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-4 py-3 shadow-sm">
+                  <div className="text-[11px] font-bold tracking-wider text-ui-muted flex items-center gap-1.5"><Info className="w-3.5 h-3.5" /> 归类理由</div>
+                  <div className="mt-2 text-[13px] leading-relaxed text-on-surface [&>div>p]:mb-1 [&>div>p:last-child]:mb-0">
+                    {editingItem.reason || editingItem.suggested_purpose ? (
+                      <MarkdownProse content={editingItem.reason || editingItem.suggested_purpose!} />
+                    ) : (
+                      "当前没有额外理由说明。"
+                    )}
+                  </div>
+                </div>
+                <div className="min-w-0 flex-1 rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-4 py-3 shadow-sm">
+                  <div className="text-[11px] font-bold tracking-wider text-ui-muted flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" /> 摘要 / 置信度</div>
+                  <div className="mt-2 text-[13px] leading-relaxed text-on-surface [&>div>p]:mb-1 [&>div>p:last-child]:mb-0">
+                    {editingItem.content_summary ? (
+                      <MarkdownProse content={editingItem.content_summary} />
+                    ) : (
+                      "当前没有摘要。"
+                    )}
+                    <span className="block mt-2 text-[11px] font-semibold text-primary/70 bg-primary/5 inline-block px-2.5 py-0.5 rounded-full inline-flex border border-primary/10">
+                      置信度: {typeof editingItem.confidence === "number" ? `${Math.round(editingItem.confidence * 100)}%` : "未知"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {!readOnly ? (
+                <div className="space-y-4 pt-1">
+                  <div className="space-y-2.5">
+                    <div className="text-[13px] font-bold text-on-surface flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-primary" /> 快速调整目标
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {availableDirectories.slice(0, 12).map((directory) => (
+                        <button
+                          key={`${editingItem.item_id}-${directory}`}
+                          type="button"
+                          onClick={() => {
+                            void applyItemTarget(editingItem.item_id, directory === "Review" ? { move_to_review: true } : { target_dir: directory });
+                            setEditingItemId(null);
+                          }}
+                          className={cn(
+                            "rounded-[8px] border px-4 py-2 text-[12px] font-semibold transition-all active:scale-95",
+                            targetDir(editingItem) === directory ? "border-primary/30 bg-primary/10 text-primary shadow-sm" : "border-on-surface/10 bg-surface text-on-surface hover:border-primary/20 hover:bg-surface-container",
+                          )}
+                        >
+                          {directory}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-2">
+                    <button type="button" onClick={() => setShowManualInput((current) => !current)} className="text-[12px] font-bold text-primary flex items-center gap-1 opacity-80 hover:opacity-100 transition-opacity">
+                      {showManualInput ? "- 收起手动路径输入" : "+ 手动输入特殊路径"}
+                    </button>
+                    {showManualInput ? (
+                      <div className="flex gap-2 min-w-0 items-center">
+                        <input value={manualTarget} onChange={(event) => setManualTarget(event.target.value)} placeholder="如: 项目/归档" className="h-10 min-w-0 flex-1 rounded-[8px] border border-on-surface/15 bg-surface px-3 text-[13px] font-medium text-on-surface outline-none focus:border-primary/50" />
+                        <button type="button" onClick={() => { void applyItemTarget(editingItem.item_id, { target_dir: manualTarget.trim() }); setEditingItemId(null); }} className="shrink-0 h-10 rounded-[8px] bg-on-surface px-5 text-[13px] font-bold text-surface transition-transform active:scale-95 hover:bg-on-surface/90">
+                          应用
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
       {!readOnly ? (
         <div className="shrink-0 border-t border-on-surface/8 bg-surface-container-low px-4 py-3 lg:px-6">
           <div className="mb-2 flex items-center gap-2 text-[13px] text-on-surface">
