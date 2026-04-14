@@ -75,7 +75,7 @@ function IconWorkbenchGuideBar({
           size="md"
           onClick={onPrimaryAction}
           disabled={primaryCtaDisabled}
-          className="shrink-0 px-6 h-9 rounded-full shadow-[0_8px_20px_-4px_rgba(var(--primary-rgb),0.25)]"
+          className="shrink-0 px-6 h-9 rounded-[10px] shadow-[0_8px_20px_-4px_rgba(var(--primary-rgb),0.25)]"
         >
           <ActionIcon className="h-4 w-4" />
           {primaryCtaLabel}
@@ -565,12 +565,12 @@ export default function IconWorkbenchV2() {
     <div className="space-y-3 border-b border-on-surface/6 bg-surface-container-low/40 px-6 py-3 backdrop-blur-sm">
       {error ? <ErrorAlert message={error} onClose={() => setError(null)} /> : null}
       {shouldShowNotice ? (
-        <div className="flex items-center gap-3 rounded-2xl border border-primary/15 bg-primary/5 px-4 py-3 text-[13px] text-primary">
+        <div className="flex items-center gap-3 rounded-[12px] border border-primary/15 bg-primary/5 px-4 py-3 text-[13px] text-primary">
           <p className="flex-1 font-bold">{notice}</p>
           {lastAppliedFolderPath && notice?.includes("图标已应用") && (
             <button 
               onClick={() => openDirectoryWithTauri(lastAppliedFolderPath)}
-              className="flex items-center gap-2 rounded-lg bg-primary/10 px-3 py-1.5 text-[12px] font-black text-primary hover:bg-primary/20 transition-colors"
+              className="flex items-center gap-2 rounded-[8px] bg-primary/10 px-3 py-1.5 text-[12px] font-black text-primary hover:bg-primary/20 transition-colors"
             >
               <FolderOpen className="h-3.5 w-3.5" />
               打开目录查看
@@ -753,7 +753,7 @@ export default function IconWorkbenchV2() {
             </div>
           </div>
           <Link href="/settings">
-            <Button variant="secondary" size="sm" className="font-bold">
+            <Button variant="secondary" size="sm" className="font-bold rounded-[8px]">
               去配置
             </Button>
           </Link>

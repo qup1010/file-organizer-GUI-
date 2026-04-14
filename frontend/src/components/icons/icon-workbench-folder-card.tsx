@@ -90,14 +90,14 @@ export function IconWorkbenchFolderCard({
   return (
     <div
       className={cn(
-        "group flex flex-col overflow-hidden rounded-[10px] border transition-all duration-200",
+        "group flex flex-col overflow-hidden rounded-[12px] border transition-all duration-200",
         isExpanded
           ? "border-primary/20 bg-surface-container-lowest shadow-[0_12px_32px_rgba(0,0,0,0.08)]"
           : "border-on-surface/8 bg-surface-container-low/40 hover:border-primary/14 hover:bg-surface-container-lowest",
       )}
     >
       <div className="flex cursor-pointer items-center gap-3 px-4 py-3" onClick={onToggleExpand}>
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-on-surface/6 bg-surface-container-lowest">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-[10px] border border-on-surface/6 bg-surface-container-lowest">
           {currentPreview ? (
             <img src={buildImageSrc(currentPreview, baseUrl, apiToken)} alt="preview" className="h-full w-full object-cover" />
           ) : (
@@ -171,7 +171,7 @@ export function IconWorkbenchFolderCard({
             ) : null}
 
             {isActiveProcessing ? (
-              <div className="flex items-center gap-2 rounded-[4px] border border-primary/12 bg-primary/6 px-3 py-2 text-[12px] font-black text-primary">
+              <div className="flex items-center gap-2 rounded-[10px] border border-primary/12 bg-primary/6 px-3 py-2 text-[12px] font-black text-primary">
                 <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
                 <span>正在生成预览，完成后将刷新列表...</span>
               </div>

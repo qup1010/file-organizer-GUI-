@@ -12,6 +12,15 @@ import {
   Layers,
   Sparkles,
   RefreshCw,
+  FileIcon,
+  FileType,
+  Image as ImageIcon,
+  Film,
+  Music,
+  FileJson,
+  FileCode,
+  Box,
+  Binary,
 } from "lucide-react";
 import Link from "next/link";
 import { clsx, type ClassValue } from "clsx";
@@ -49,6 +58,42 @@ function isSpecificScanItem(value: string | null | undefined): boolean {
   return !text.startsWith("已启动 ") && !text.startsWith("第 ");
 }
 
+function getFileIcon(filename: string) {
+  const ext = filename.split(".").pop()?.toLowerCase() || "";
+  if (["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp"].includes(ext)) {
+    return { icon: ImageIcon, color: "text-purple-500", bg: "bg-purple-500/10" };
+  }
+  if (["mp4", "mkv", "avi", "mov", "wmv"].includes(ext)) {
+    return { icon: Film, color: "text-blue-500", bg: "bg-blue-500/10" };
+  }
+  if (["mp3", "wav", "flac", "aac"].includes(ext)) {
+    return { icon: Music, color: "text-pink-500", bg: "bg-pink-500/10" };
+  }
+  if (["zip", "rar", "7z", "tar", "gz"].includes(ext)) {
+    return { icon: Archive, color: "text-amber-600", bg: "bg-amber-600/10" };
+  }
+  if (["pdf"].includes(ext)) {
+    return { icon: FileText, color: "text-red-500", bg: "bg-red-500/10" };
+  }
+  if (["doc", "docx", "txt", "md", "rtf"].includes(ext)) {
+    return { icon: FileLinesIcon, color: "text-blue-600", bg: "bg-blue-600/10" };
+  }
+  if (["js", "ts", "tsx", "jsx", "py", "go", "rs", "cpp", "c", "h", "java", "html", "css"].includes(ext)) {
+    return { icon: FileCode, color: "text-emerald-500", bg: "bg-emerald-500/10" };
+  }
+  if (["json", "yaml", "yml", "xml"].includes(ext)) {
+    return { icon: FileJson, color: "text-orange-500", bg: "bg-orange-500/10" };
+  }
+  if (["exe", "msi", "bin", "dll"].includes(ext)) {
+    return { icon: Binary, color: "text-slate-500", bg: "bg-slate-500/10" };
+  }
+  return { icon: FileIcon, color: "text-on-surface-variant/40", bg: "bg-on-surface/5" };
+}
+
+const FileLinesIcon = ({ className }: { className?: string }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+);
+
 function derivePipelineSteps(scanner: ScannerProgress): PipelineStep[] {
   const message = String(scanner.message || "").trim();
   const currentItem = String(scanner.current_item || "").trim();
@@ -59,49 +104,70 @@ function derivePipelineSteps(scanner: ScannerProgress): PipelineStep[] {
   const completedBatches = Math.max(0, Number(scanner.completed_batches || 0));
   const isRetrying = Boolean(scanner.is_retrying);
   const isThinking = Boolean(scanner.ai_thinking);
+  const status = String(scanner.status || "running");
+  
   const hasSpecificItem = isSpecificScanItem(currentItem);
-  const hasStartedReading = processedCount > 0 || recentCount > 0 || hasSpecificItem || batchCount > 0;
-  const isSummarizing = isThinking || /汇总|输出|结论|完成|校验|修正/.test(message);
-  const analysisTitle = batchCount > 1 ? "并行批次分析" : "逐项读取与分析";
-  const analysisDetail = batchCount > 1
-    ? `已完成 ${completedBatches}/${batchCount} 个批次`
-    : hasSpecificItem
-      ? `当前处理：${currentItem}`
-      : processedCount > 0
-        ? `已处理 ${processedCount}/${totalCount || "?"} 项`
-        : "等待进入逐项分析";
+  const isCompleted = status === "completed";
+
+  // Step 1: Prepare
+  const isPrepareDone = totalCount > 0 || isCompleted;
+  
+  // Step 2: Read structure
+  const isReadStructureDone = totalCount > 0 || isCompleted;
+  
+  // Step 3: Analyze
+  const isAnalyzeActive = !isCompleted && isReadStructureDone;
+  const isAnalyzeDone = isCompleted;
+
+  const analysisTitle = batchCount > 0 ? "并行内容分析" : "读取与分析";
+  let analysisDetail = "等待开始";
+  if (isCompleted) {
+    analysisDetail = `已完成分析 ${processedCount} 项`;
+  } else if (batchCount > 0) {
+    analysisDetail = `处理中 (批次进度: ${completedBatches}/${batchCount})`;
+  } else if (hasSpecificItem) {
+    analysisDetail = `当前正在处理：${currentItem}`;
+  } else if (processedCount > 0) {
+    analysisDetail = `已处理 ${processedCount}/${totalCount} 项`;
+  } else if (isThinking) {
+    analysisDetail = `正在分析目录内容...`;
+  }
+
+  // Step 4: Summarize
+  const isSummarizeDone = isCompleted && !isRetrying;
+  const isSummarizeActive = isRetrying || (!isCompleted && message.includes("结果需要修正"));
 
   return [
     {
       id: "prepare",
       title: "建立扫描任务",
-      detail: totalCount > 0 ? `已发现 ${totalCount} 个待分析条目，正在建立扫描上下文` : "正在确认目录范围与可见条目",
-      state: hasStartedReading || isSummarizing ? "done" : "active",
+      detail: totalCount > 0 ? `发现 ${totalCount} 个待分析项` : "正在确认目录范围",
+      state: isPrepareDone ? "done" : "active",
       icon: Search,
     },
     {
       id: "read-structure",
-      title: "读取目录结构",
-      detail: message.includes("目录结构") ? message : "确认当前目录中的文件与子目录边界",
-      state: hasStartedReading || isSummarizing ? "done" : "active",
+      title: "读取目录索引",
+      detail: isReadStructureDone ? "已提取文件列表" : "正在梳理文件关联",
+      state: isReadStructureDone ? "done" : isPrepareDone ? "active" : "pending",
       icon: Layers,
     },
     {
       id: "analyze",
       title: analysisTitle,
       detail: analysisDetail,
-      state: isSummarizing ? "done" : hasStartedReading ? "active" : "pending",
+      state: isAnalyzeDone ? "done" : isAnalyzeActive ? "active" : "pending",
       icon: FileText,
     },
     {
       id: "summarize",
-      title: isRetrying ? "交叉校验纠错" : "汇总扫描结论",
+      title: isRetrying ? "重新校验格式" : "整理分析结论",
       detail: isRetrying
-        ? (message || "正在重新校验扫描结果")
-        : isSummarizing
-          ? (message || "正在整理扫描结果")
-          : "等待进入结果汇总与结论输出",
-      state: isSummarizing || isRetrying ? "active" : "pending",
+        ? (message || "正在尝试纠正模型输出")
+        : isSummarizeDone
+          ? "已生成最终报告"
+          : "等待汇总整体结果",
+      state: isSummarizeDone ? "done" : isSummarizeActive ? "active" : "pending",
       icon: isRetrying ? RefreshCw : Sparkles,
     },
   ];
@@ -126,6 +192,9 @@ export function MinimalScanningView({
   const recentItems = scanner.recent_analysis_items || [];
   const isRetrying = scanner.is_retrying;
   const isThinking = scanner.ai_thinking;
+  const totalCount = Math.max(0, Number(scanner.total_count || 0));
+  const processedCount = Math.max(0, Number(scanner.processed_count || 0));
+  
   const pipelineSteps = React.useMemo(() => derivePipelineSteps(scanner), [scanner]);
   const hasLiveItems = recentItems.length > 0 || isThinking;
 
@@ -231,11 +300,18 @@ export function MinimalScanningView({
                   ) : null}
                 </div>
 
-                <div className="ml-auto flex items-center gap-2.5 rounded-[10px] bg-on-surface/[0.03] pl-3 py-1 pr-2 border border-on-surface/[0.04] max-w-[46%]">
-                  <Loader2 className="h-3 w-3 shrink-0 animate-spin text-on-surface-variant/40" />
+                <div className="ml-auto flex items-center gap-3 rounded-full bg-primary/[0.04] border border-primary/10 pl-1 py-1 pr-3 max-w-[46%] shadow-[0_2px_12px_-2px_rgba(var(--primary-rgb),0.08)]">
+                  <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                    <motion.div 
+                      className="absolute inset-0 rounded-full bg-primary/20"
+                      animate={{ scale: [1, 1.4, 1], opacity: [0.5, 0, 0.5] }}
+                      transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                    />
+                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  </div>
                   <div className="min-w-0">
-                    <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-ui-muted">当前处理</div>
-                    <p className="text-[12px] font-bold text-on-surface/60 leading-none truncate" title={currentItem}>
+                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-primary/50 leading-none mb-1">正在处理</div>
+                    <p className="text-[12px] font-black text-on-surface leading-none truncate" title={currentItem}>
                       {currentItem}
                     </p>
                   </div>
@@ -327,51 +403,69 @@ export function MinimalScanningView({
                             initial={{ opacity: 0, height: 0 }}
                             animate={{ opacity: 1, height: "auto" }}
                             exit={{ opacity: 0, height: 0 }}
-                            className="mb-2"
+                            className="mb-3 space-y-1"
                           >
-                            {/* AI 思考时的流动骨架屏 */}
-                            <div className="group flex flex-col rounded-[8px] py-2 pr-1 transition-all min-w-0 bg-primary/5 pl-4 border-l-[2px] border-primary/20">
-                              <div className="flex items-center gap-2">
-                                <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary/60 animate-pulse" />
-                                <div className="flex-1 flex flex-col gap-1.5">
-                                  <div className="h-3.5 w-48 rounded bg-primary/10 animate-pulse" />
-                                  <div className="h-2.5 w-3/4 rounded bg-on-surface/[0.03] animate-pulse" />
+                            <div className="px-1 py-1 text-[11px] font-semibold text-primary/80 flex items-center gap-1.5 mb-1.5">
+                              <Sparkles className="h-3 w-3 animate-pulse" />
+                              正在分析剩余文件...
+                            </div>
+                            {Array.from({ length: Math.min(4, Math.max(1, totalCount - processedCount)) }).map((_, i) => (
+                              <div key={`skeleton-${i}`} className="group flex flex-col rounded-[8px] py-1.5 pr-1 transition-all min-w-0 pl-[16px]">
+                                <div className="flex items-start gap-2.5 min-w-0">
+                                  <FileText className="h-3.5 w-3.5 shrink-0 mt-0.5 text-primary/20 animate-pulse" />
+                                  <div className="flex-1 min-w-0 flex flex-col gap-1.5 mt-0.5">
+                                    <div className="flex items-center gap-2">
+                                      <div className={cn("h-3 rounded bg-primary/10 animate-pulse", ["w-32", "w-24", "w-40", "w-28"][i % 4])} />
+                                      <div className="h-4 w-10 rounded-[5px] bg-primary/[0.05] animate-pulse" />
+                                    </div>
+                                    <div className={cn("h-2 rounded bg-on-surface/[0.03] animate-pulse", ["w-3/4", "w-2/3", "w-4/5", "w-1/2"][i % 4])} />
+                                  </div>
                                 </div>
                               </div>
-                            </div>
+                            ))}
                           </motion.div>
                         )}
 
-                        {recentItems.map((item, idx) => (
-                          <motion.div
-                            key={item.item_id + idx}
-                            initial={{ opacity: 0, x: -10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            className="group/item relative my-0.5 flex flex-col rounded-[8px] py-1.5 pr-1 transition-all min-w-0 hover:bg-on-surface/[0.02]"
-                            style={{ paddingLeft: "16px" }}
-                          >
-                            <div className="flex items-start gap-2.5 min-w-0">
-                              <FileText className="h-3.5 w-3.5 shrink-0 mt-0.5 text-on-surface-variant/40" />
-                              <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <span className="flex-1 truncate tracking-tight min-w-0 text-[13px] text-on-surface-variant/75 group-hover/item:text-on-surface transition-colors">
-                                    {item.display_name}
-                                  </span>
-                                  {item.suggested_purpose && (
-                                    <span className="rounded-[5px] bg-surface-container-highest/60 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-on-surface/60">
-                                      {item.suggested_purpose}
+                        {recentItems.map((item, idx) => {
+                          const fileMeta = getFileIcon(item.source_relpath || item.display_name);
+                          const CustomIcon = fileMeta.icon;
+                          
+                          return (
+                            <motion.div
+                              key={item.item_id + idx}
+                              initial={{ opacity: 0, x: -10, y: 5 }}
+                              animate={{ opacity: 1, x: 0, y: 0 }}
+                              className="group/item relative my-0.5 flex flex-col rounded-[8px] py-1.5 pr-1 transition-all min-w-0 hover:bg-on-surface/[0.02]"
+                              style={{ paddingLeft: "16px" }}
+                            >
+                              <div className="flex items-start gap-2.5 min-w-0">
+                                <div className={cn("mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-on-surface/5 shadow-sm", fileMeta.bg)}>
+                                  <CustomIcon className={cn("h-3.5 w-3.5", fileMeta.color)} />
+                                </div>
+                                <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="flex-1 truncate tracking-tight min-w-0 text-[13px] font-bold text-on-surface transition-colors">
+                                      {item.display_name}
                                     </span>
+                                    {item.suggested_purpose && (
+                                      <span className={cn(
+                                        "rounded-[5px] px-1.5 py-0.5 text-[11px] font-black leading-none",
+                                        item.suggested_purpose === "准备分析" ? "bg-on-surface/[0.03] text-ui-muted/60" : "bg-primary/10 text-primary"
+                                      )}>
+                                        {item.suggested_purpose}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {item.summary && (
+                                    <div className="line-clamp-1 text-[11px] font-medium leading-relaxed text-on-surface-variant/40">
+                                      {item.summary}
+                                    </div>
                                   )}
                                 </div>
-                                {item.summary && (
-                                  <div className="line-clamp-1 text-[11px] font-medium leading-relaxed text-on-surface-variant/40">
-                                    {item.summary}
-                                  </div>
-                                )}
                               </div>
-                            </div>
-                          </motion.div>
-                        ))}
+                            </motion.div>
+                          );
+                        })}
                       </motion.div>
                     ) : (
                       <motion.div

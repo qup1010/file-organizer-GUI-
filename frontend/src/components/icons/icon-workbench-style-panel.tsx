@@ -2,6 +2,7 @@
 
 import React, { useEffect } from "react";
 import { X, Check, Palette } from "lucide-react";
+import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import type { IconTemplate } from "@/types/icon-workbench";
 
@@ -38,29 +39,46 @@ export function IconWorkbenchStylePanel({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col bg-surface animate-fadeIn">
-      {/* 顶部精简导航栏 */}
-      <div className="glass-surface flex items-center justify-between border-b border-on-surface/8 px-6 py-4">
-        <div className="flex items-center gap-3.5">
-          <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-primary/10 text-primary">
-            <Palette className="h-5.5 w-5.5" />
-          </div>
-          <div>
-            <h2 className="text-[18px] font-black tracking-tight text-on-surface leading-tight">选择风格模板</h2>
-            <p className="text-[12px] font-medium text-ui-muted">选中后会作为当前生成模板</p>
-          </div>
-        </div>
-        <button
-          onClick={onClose}
-          className="flex h-10 w-10 items-center justify-center rounded-[8px] hover:bg-on-surface/5 text-ui-muted transition-colors"
-        >
-          <X className="h-5.5 w-5.5" />
-        </button>
-      </div>
+    <div className="fixed inset-0 z-[62] flex items-center justify-center p-6 lg:p-12">
+      {/* 遮罩背景 */}
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+        className="absolute inset-0 bg-on-surface/40 backdrop-blur-md"
+      />
 
-      {/* 全量风格展示列表区 */}
-      <div className="flex-1 overflow-y-auto px-6 py-8 scrollbar-thin">
-        <div className="mx-auto grid max-w-[1240px] grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {/* 核心面板容器 */}
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        transition={{ type: "spring", damping: 25, stiffness: 300 }}
+        className="relative flex h-full w-full max-w-[1160px] flex-col overflow-hidden rounded-[12px] border border-on-surface/10 bg-surface shadow-[0_32px_80px_-16px_rgba(0,0,0,0.15)]"
+      >
+        {/* 顶部标题栏 */}
+        <div className="flex items-center justify-between border-b border-on-surface/6 px-8 py-5 bg-surface-container-lowest/50 backdrop-blur-sm z-10">
+          <div className="flex items-center gap-4">
+            <div className="flex h-11 w-11 items-center justify-center rounded-[10px] bg-primary/10 text-primary shadow-inner">
+              <Palette className="h-6 w-6" />
+            </div>
+            <div>
+              <h2 className="text-[19px] font-black tracking-tight text-on-surface leading-tight">选择风格模板</h2>
+              <p className="text-[12px] font-bold text-ui-muted opacity-80 mt-0.5">选中后将作为当前图标生成的视觉基准</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="group flex h-10 w-10 items-center justify-center rounded-full hover:bg-error/10 text-ui-muted hover:text-error transition-all"
+          >
+            <X className="h-5.5 w-5.5 transition-transform group-hover:rotate-90" />
+          </button>
+        </div>
+
+      {/* 风格展示区 */}
+      <div className="flex-1 overflow-y-auto px-8 py-8 scrollbar-thin bg-surface-container-lowest/20">
+        <div className="mx-auto grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {templates.map((template: IconTemplate) => {
             const isSelected = template.template_id === selectedTemplateId;
             return (
@@ -126,6 +144,7 @@ export function IconWorkbenchStylePanel({
           })}
         </div>
       </div>
+      </motion.div>
     </div>
   );
 }

@@ -1499,13 +1499,30 @@ class OrganizerSessionService:
         elif event_type == "ai_chunk":
             self._record_event(f"{phase}.ai_typing", session_id=session_id, content=data.get("content"))
 
+    def _list_visible_entries(self, path: Path) -> list[str]:
+        try:
+            return sorted([p.name for p in path.iterdir() if not p.name.startswith(".")])
+        except Exception:
+            return []
+
     def _initial_scan_progress(self, target_dir: Path) -> dict:
+        entries = self._list_visible_entries(target_dir)[:10]
+        recent_items = [
+            {
+                "item_id": entry,
+                "display_name": entry,
+                "source_relpath": entry,
+                "suggested_purpose": "准备分析",
+                "summary": "等待分配并进行文件内容分析...",
+            }
+            for entry in entries
+        ]
         return {
             "status": "running",
             "processed_count": 0,
             "total_count": self._count_visible_entries(target_dir),
             "current_item": "正在准备扫描任务",
-            "recent_analysis_items": [],
+            "recent_analysis_items": recent_items,
             "completed_batches": 0,
             "had_failed_batches": False,
             "placeholder_count": 0,
