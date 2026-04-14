@@ -913,7 +913,7 @@ export default function SettingsPage() {
                     onClick={() => void handleTest("text")}
                     loading={testingFamily === "text"}
                   >
-                    测试文本连接
+                    测试连接
                   </Button>
                 }
               >
@@ -926,14 +926,7 @@ export default function SettingsPage() {
                   onDelete={(preset) => void handleDeletePreset("text", preset.id, preset.name)}
                 />
                 {renderResult("text")}
-                <div className="rounded-[12px] border border-on-surface/8 bg-surface px-4 py-3">
-                  <p className="text-[12px] font-semibold text-on-surface">支持的接口类型</p>
-                  <p className="mt-1 text-[12px] leading-6 text-on-surface-variant/70">
-                    适用于 OpenAI 兼容的文本聊天接口。接口地址建议填写到 <span className="font-mono text-on-surface">/v1</span>，例如
-                    <span className="font-mono text-on-surface"> https://api.openai.com/v1</span> 或
-                    <span className="font-mono text-on-surface"> https://dashscope.aliyuncs.com/compatible-mode/v1</span>。
-                  </p>
-                </div>
+
                 {textPresetEditable ? (
                   <div className="grid gap-4 xl:grid-cols-2">
                     <FieldGroup label="模型 ID">
@@ -967,7 +960,7 @@ export default function SettingsPage() {
                       onClick={() => void handleTest("vision")}
                       loading={testingFamily === "vision"}
                     >
-                      测试多模态连接
+                      测试连接
                     </Button>
                     <div className="flex items-center gap-2 rounded-[10px] border border-on-surface/8 bg-surface-container-low px-3 py-2">
                       <span className="text-[12px] font-medium text-on-surface-variant/70">参与整理分析</span>
@@ -988,12 +981,7 @@ export default function SettingsPage() {
                   onDelete={(preset) => void handleDeletePreset("vision", preset.id, preset.name)}
                 />
                 {renderResult("vision")}
-                <div className="rounded-[12px] border border-on-surface/8 bg-surface px-4 py-3">
-                  <p className="text-[12px] font-semibold text-on-surface">支持的接口类型</p>
-                  <p className="mt-1 text-[12px] leading-6 text-on-surface-variant/70">
-                    适用于支持图片输入的 OpenAI 兼容聊天接口。测试时会发送一个极小图片探针，所以纯文本模型即使地址可达，也不会通过这里的图片理解测试。
-                  </p>
-                </div>
+
                 {visionPresetEditable ? (
                   <div className="grid gap-4 xl:grid-cols-2">
                     <FieldGroup label="模型 ID">
@@ -1026,7 +1014,7 @@ export default function SettingsPage() {
                     onClick={() => void handleTest("icon_image")}
                     loading={testingFamily === "icon_image"}
                   >
-                    测试生图连接
+                    测试连接
                   </Button>
                 }
               >
@@ -1039,13 +1027,7 @@ export default function SettingsPage() {
                   onDelete={(preset) => void handleDeletePreset("icon_image", preset.id, preset.name)}
                 />
                 {renderResult("icon_image")}
-                <div className="rounded-[12px] border border-on-surface/8 bg-surface px-4 py-3">
-                  <p className="text-[12px] font-semibold text-on-surface">支持的接口类型</p>
-                  <p className="mt-1 text-[12px] leading-6 text-on-surface-variant/70">
-                    适用于 OpenAI / DALL-E 风格的图片生成端点。接口地址可以填写到 <span className="font-mono text-on-surface">/v1</span>，也可以直接填写完整的
-                    <span className="font-mono text-on-surface"> /images/generations</span> 端点。测试时只做最小化连通性探针，不会真的生成图片。
-                  </p>
-                </div>
+
                 {iconImagePresetEditable ? (
                   <div className="grid gap-4 xl:grid-cols-2">
                     <FieldGroup label="生图模型 ID">
@@ -1143,7 +1125,7 @@ export default function SettingsPage() {
                     loading={testingFamily === "bg_removal"}
                     disabled={!desktopReady}
                   >
-                    {desktopReady ? "测试抠图连接" : "仅桌面端可测试"}
+                    {desktopReady ? "测试连接" : "仅桌面端可测试"}
                   </Button>
                 }
               >

@@ -3,7 +3,6 @@ pypdf
 python-docx
 pandas
 openpyxl
-rich
 fastapi
 uvicorn
 python-multipart

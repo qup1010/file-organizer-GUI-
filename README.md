@@ -1,8 +1,7 @@
 # FilePilot / File Organizer
 
-本项目是一个本地文件整理工作台，当前同时包含：
+本项目是一个本地文件整理工作台，当前包含：
 
-- CLI 主流程
 - FastAPI 本地 API
 - Next.js 工作台前端
 - Tauri 桌面壳
@@ -18,12 +17,6 @@
 2. 启动本地 API：`python -m file_organizer.api`
 3. 进入 `frontend/` 安装依赖并启动前端：`npm install`、`npm run dev`
 4. 如果需要桌面联调，再进入 `desktop/` 运行 `npm install`、`npm run tauri:dev`
-
-只验证主链路时，也可以直接运行 CLI：
-
-```powershell
-python -m file_organizer
-```
 
 ## 当前能力概览
 
@@ -75,10 +68,8 @@ file_organizer/
   rollback/         最近一次执行回退
   app/              工作台会话服务与会话存储
   api/              FastAPI API 与运行时发现
-  cli/              终端交互、事件打印、会话入口
   icon_workbench/   图标工坊服务、模板、存储、客户端
   shared/           配置、日志、路径工具、公共模型
-  workflows/        主整理流程与回退流程编排
 frontend/           Next.js 工作台前端
 desktop/            Tauri 桌面宿主
 tests/              Python 单元测试
@@ -119,7 +110,6 @@ pip install -r requirements.txt
 - `python-docx`
 - `pandas`
 - `openpyxl`
-- `rich`
 - `fastapi`
 - `uvicorn`
 - `python-multipart`
@@ -141,28 +131,7 @@ npm install
 
 ## 运行方式
 
-### 1. 纯 CLI 主流程
-
-```powershell
-python -m file_organizer
-```
-
-适合直接在终端里完成：
-
-- 扫描目录
-- 生成整理计划
-- 查看摘要 / 改动 / 待确认项
-- 执行前输入大写 `YES`
-
-### 2. 回退最近一次执行
-
-```powershell
-python -m file_organizer.rollback D:/Downloads
-```
-
-该命令会读取最近一次执行 journal，先做回退预检，再根据确认结果执行回退。
-
-### 3. 启动本地 API
+### 1. 启动本地 API
 
 ```powershell
 python -m file_organizer.api
@@ -183,7 +152,7 @@ python -m file_organizer.api
 - `FILE_ORGANIZER_API_TOKEN`
 - `FILE_ORGANIZER_INSTANCE_ID`
 
-### 4. 启动前端开发环境
+### 2. 启动前端开发环境
 
 ```powershell
 Set-Location frontend
@@ -199,7 +168,7 @@ npm run dev
 
 如果桌面壳已注入 `api_token`，前端也会优先使用 `window.__FILE_ORGANIZER_RUNTIME__.api_token` 调用受保护接口。
 
-### 5. 启动 Tauri 桌面壳
+### 3. 启动 Tauri 桌面壳
 
 ```powershell
 Set-Location desktop
@@ -214,7 +183,7 @@ npm run tauri:dev
 - 向前端注入 `window.__FILE_ORGANIZER_RUNTIME__`
 - 提供目录选择、批量目录选择、应用 / 恢复文件夹图标、抠图测试等桌面命令
 
-### 6. 构建桌面应用
+### 4. 构建桌面应用
 
 ```powershell
 Set-Location desktop
@@ -356,7 +325,7 @@ cargo check
 3. 若修改会话状态机、事件流、`session_snapshot` 或 API schema，至少同步检查：
    - `tests/test_api_*.py`
    - `tests/test_session_*.py`
-   - `tests/test_main_flow.py`
+   - `tests/test_api_sessions.py`
    - 前端 `src/types/*`
 
 ### 图标工坊开发
@@ -393,4 +362,4 @@ cargo check
 - 前端改动：运行 `frontend` 下的 `npm run typecheck`
 - 前端交互或设置流程改动：补跑 `frontend` 下的 `npm test`
 - Tauri / Rust 改动：运行 `desktop/src-tauri` 下的 `cargo check`
-- 涉及主链路时，至少手动验证其一：`python -m file_organizer`、`python -m file_organizer.api`、`npm run tauri:dev`
+- 涉及主链路时，至少手动验证其一：`python -m file_organizer.api`、`npm run tauri:dev`

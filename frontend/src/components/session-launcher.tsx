@@ -71,7 +71,7 @@ export function SessionLauncher() {
   const [loading, setLoading] = useState(false);
   const [launchTransitionOpen, setLaunchTransitionOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [latestHistory, setLatestHistory] = useState<HistoryItem | null>(null);
+  const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [resumePrompt, setResumePrompt] = useState<{ sessionId: string; snapshot: SessionSnapshot } | null>(null);
   const [commonDirs, setCommonDirs] = useState<{ label: string; path: string }[]>([]);
@@ -83,16 +83,19 @@ export function SessionLauncher() {
   const currentTemplate = getTemplateMeta(savedLaunchStrategy.template_id);
   const namingLabel = currentSummary.naming_style_label;
   const cautionLabel = currentSummary.caution_level_label;
-  const latestHistoryName = latestHistory?.target_dir?.replace(/[\\/]$/, "").split(/[\\/]/).pop() || "最近任务";
-  const latestHistoryStage = latestHistory?.is_session
-    ? (latestHistory.status === "ready_to_execute" ? "等待执行" : latestHistory.status === "ready_for_precheck" ? "可开始预检" : latestHistory.status === "planning" ? "正在调整方案" : latestHistory.status === "scanning" ? "正在扫描" : latestHistory.status === "completed" ? "已完成" : latestHistory?.status || "最近任务")
-    : latestHistory?.status === "rolled_back"
-      ? "已回退"
-      : latestHistory?.status === "partial_failure"
-        ? "部分完成"
-        : latestHistory?.status === "success"
-          ? "已完成"
-          : latestHistory?.status || "最近任务";
+  function getHistoryItemMeta(item: HistoryItem) {
+    const name = item.target_dir?.replace(/[\\/]$/, "").split(/[\\/]/).pop() || "任务";
+    const stage = item.is_session
+      ? (item.status === "ready_to_execute" ? "等待执行" : item.status === "ready_for_precheck" ? "可开始预检" : item.status === "planning" ? "正在调整方案" : item.status === "scanning" ? "正在扫描" : item.status === "completed" ? "已完成" : item.status || "任务")
+      : item.status === "rolled_back"
+        ? "已回退"
+        : item.status === "partial_failure"
+          ? "部分完成"
+          : item.status === "success"
+            ? "已完成"
+            : item.status || "任务";
+    return { name, stage };
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -138,11 +141,11 @@ export function SessionLauncher() {
         const api = createApiClient(apiBaseUrl, getApiToken());
         const history = await api.getHistory();
         if (!cancelled) {
-          setLatestHistory(history[0] || null);
+          setHistoryItems(history.slice(0, 12));
         }
       } catch {
         if (!cancelled) {
-          setLatestHistory(null);
+          setHistoryItems([]);
         }
       } finally {
         if (!cancelled) {
@@ -264,24 +267,43 @@ export function SessionLauncher() {
     openStrategyDialog();
   }
 
-  function handleOpenLatestContinue() {
-    if (!latestHistory?.is_session) {
+  function handleHistoryItemClick(item: HistoryItem) {
+    if (!item.is_session) {
       router.push("/history");
       return;
     }
-    router.push(`/workspace?session_id=${latestHistory.execution_id}`);
+    router.push(`/workspace?session_id=${item.execution_id}`);
+  }
+
+  function handleHistoryItemReadonly(item: HistoryItem) {
+    if (!item.is_session) {
+      router.push("/history");
+      return;
+    }
+    router.push(`/workspace?session_id=${item.execution_id}&readonly=1`);
+  }
+
+  function handleOpenLatestContinue() {
+    const latest = historyItems[0];
+    if (!latest) {
+      router.push("/history");
+      return;
+    }
+    handleHistoryItemClick(latest);
   }
 
   function handleOpenLatestReadonly() {
-    if (!latestHistory?.is_session) {
+    const latest = historyItems[0];
+    if (!latest) {
       router.push("/history");
       return;
     }
-    router.push(`/workspace?session_id=${latestHistory.execution_id}&readonly=1`);
+    handleHistoryItemReadonly(latest);
   }
 
   async function handleRestartLatest() {
-    const nextTargetDir = latestHistory?.target_dir?.trim();
+    const latest = historyItems[0];
+    const nextTargetDir = latest?.target_dir?.trim();
     if (!nextTargetDir) {
       return;
     }
@@ -347,134 +369,134 @@ export function SessionLauncher() {
         {/* Left Pane - Configuration */}
         <div className="flex flex-1 flex-col justify-start px-6 xl:px-10 overflow-y-auto">
           <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="mx-auto max-w-[720px] w-full pt-10 pb-10">
-            
+
             <div className="mb-6">
-               <div className="pt-0.5">
-                  <h1 className="mb-1.5 text-[22px] font-black text-on-surface tracking-tight">开启新整理</h1>
-                  <p className="text-[13px] font-medium text-ui-muted/80 leading-relaxed">
-                    选择目标目录与预设规则。AI 将在本地扫描结构，并为你生成安全、可视化的自动整理方案。
-                  </p>
-               </div>
+              <div className="pt-0.5">
+                <h1 className="mb-1.5 text-[22px] font-black text-on-surface tracking-tight">开启新整理</h1>
+                <p className="text-[13px] font-medium text-ui-muted/80 leading-relaxed">
+                  选择目标目录与预设规则。AI 将在本地扫描结构，并为你生成安全、可视化的自动整理方案。
+                </p>
+              </div>
             </div>
 
             {/* List-style Settings Group */}
             <div className="overflow-hidden rounded-[8px] border border-on-surface/8 bg-surface-container-lowest shadow-[0_12px_44px_rgba(0,0,0,0.06)]">
-               
-               {/* Item 1: Directory */}
-               <div className="border-b border-on-surface/6 bg-on-surface/[0.015] p-5 lg:p-6 relative">
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="flex h-6 w-6 items-center justify-center rounded-[4px] bg-primary/10 text-primary">
-                      <FolderOpen className="h-3.5 w-3.5" />
-                    </div>
-                    <h2 className="font-headline text-[14px] font-bold tracking-tight text-on-surface">目标目录</h2>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="relative flex-1">
-                        <input
-                          value={targetDir}
-                          onChange={(event) => setTargetDir(event.target.value)}
-                          disabled={loading}
-                          className="h-10 w-full min-w-0 rounded-[8px] bg-on-surface/[0.03] border border-transparent px-3 text-[14px] font-bold text-on-surface outline-none placeholder:text-on-surface-variant/30 focus:bg-surface focus:border-primary/40 focus:ring-4 focus:ring-primary/10 transition-all"
-                          placeholder="拖拽文件夹到此处，或在此粘贴绝对路径..."
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") void handlePrimaryLaunch();
-                          }}
-                        />
-                    </div>
-                    <button
-                      onClick={() => void handleSelectDir()}
-                      disabled={loading}
-                      className="shrink-0 h-10 px-5 rounded-[8px] text-[13px] font-black bg-on-surface/[0.04] text-on-surface hover:bg-primary/10 hover:text-primary transition-all active:scale-95"
-                    >
-                      浏览...
-                    </button>
-                  </div>
-                  
-                  {/* Quick links */}
-                  {commonDirs.length > 0 && (
-                    <div className="flex gap-2.5 mt-3.5">
-                      {commonDirs.map((dir) => {
-                        const IconComponent = 
-                          dir.label === "下载" ? Download : 
-                          dir.label === "桌面" ? Monitor : 
-                          dir.label === "图片" ? ImageIcon :
-                          dir.label === "视频" ? Video :
-                          dir.label === "音乐" ? Music :
-                          FileText;
-                        return (
-                          <button
-                            key={dir.path}
-                            onClick={() => setTargetDir(dir.path)}
-                            disabled={loading}
-                            className="inline-flex items-center gap-1.5 rounded-[6px] bg-surface-container-low px-2.5 py-1 text-[11px] font-bold text-ui-muted hover:bg-surface border border-on-surface/5 hover:border-on-surface/10 hover:text-on-surface transition-all disabled:opacity-50"
-                          >
-                            <IconComponent className="h-3 w-3" />
-                            {dir.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-               </div>
 
-               {/* Item 2: Strategy */}
-               <div className="p-5 lg:p-6 bg-surface-container-lowest flex flex-col sm:flex-row sm:items-start justify-between gap-6 relative">
-                  <div className="space-y-4 flex-1 min-w-0">
-                    <div className="space-y-1.5">
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className="flex h-6 w-6 items-center justify-center rounded-[4px] bg-primary/10 text-primary">
-                          <Layers3 className="h-3.5 w-3.5" />
-                        </div>
-                        <h2 className="font-headline text-[14px] font-bold tracking-tight text-on-surface">预设策略与规则推演</h2>
+              {/* Item 1: Directory */}
+              <div className="border-b border-on-surface/6 bg-on-surface/[0.015] p-5 lg:p-6 relative">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-[4px] bg-primary/10 text-primary">
+                    <FolderOpen className="h-3.5 w-3.5" />
+                  </div>
+                  <h2 className="font-headline text-[14px] font-bold tracking-tight text-on-surface">目标目录</h2>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="relative flex-1">
+                    <input
+                      value={targetDir}
+                      onChange={(event) => setTargetDir(event.target.value)}
+                      disabled={loading}
+                      className="h-10 w-full min-w-0 rounded-[8px] bg-on-surface/[0.03] border border-transparent px-3 text-[14px] font-bold text-on-surface outline-none placeholder:text-on-surface-variant/30 focus:bg-surface focus:border-primary/40 focus:ring-4 focus:ring-primary/10 transition-all"
+                      placeholder="请选择文件夹,或在此手动输入路径"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") void handlePrimaryLaunch();
+                      }}
+                    />
+                  </div>
+                  <button
+                    onClick={() => void handleSelectDir()}
+                    disabled={loading}
+                    className="shrink-0 h-10 px-5 rounded-[8px] text-[13px] font-black bg-on-surface/[0.04] text-on-surface hover:bg-primary/10 hover:text-primary transition-all active:scale-95"
+                  >
+                    选择目录
+                  </button>
+                </div>
+
+                {/* Quick links */}
+                {commonDirs.length > 0 && (
+                  <div className="flex gap-2.5 mt-3.5">
+                    {commonDirs.map((dir) => {
+                      const IconComponent =
+                        dir.label === "下载" ? Download :
+                          dir.label === "桌面" ? Monitor :
+                            dir.label === "图片" ? ImageIcon :
+                              dir.label === "视频" ? Video :
+                                dir.label === "音乐" ? Music :
+                                  FileText;
+                      return (
+                        <button
+                          key={dir.path}
+                          onClick={() => setTargetDir(dir.path)}
+                          disabled={loading}
+                          className="inline-flex items-center gap-1.5 rounded-[6px] bg-surface-container-low px-2.5 py-1 text-[11px] font-bold text-ui-muted hover:bg-surface border border-on-surface/5 hover:border-on-surface/10 hover:text-on-surface transition-all disabled:opacity-50"
+                        >
+                          <IconComponent className="h-3 w-3" />
+                          {dir.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Item 2: Strategy */}
+              <div className="p-5 lg:p-6 bg-surface-container-lowest flex flex-col sm:flex-row sm:items-start justify-between gap-6 relative">
+                <div className="space-y-4 flex-1 min-w-0">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="flex h-6 w-6 items-center justify-center rounded-[4px] bg-primary/10 text-primary">
+                        <Layers3 className="h-3.5 w-3.5" />
                       </div>
-                      <div className="flex flex-col xl:flex-row xl:items-center gap-2 xl:gap-3">
-                        {launchPreferencesLoaded ? (
-                          <>
-                            <p className="text-[15px] font-bold text-on-surface shrink-0">{currentTemplate.label}</p>
-                            <div className="h-1 w-1 rounded-full bg-on-surface/20 hidden xl:block"></div>
-                            <p className="text-[13px] font-medium text-ui-muted min-w-0 pr-4 leading-relaxed">{currentTemplate.applicableScenarios}</p>
-                          </>
-                        ) : (
-                          <div className="flex items-center gap-2 py-0.5 text-ui-muted text-[13px] font-bold">
-                            <Loader2 className="h-4 w-4 animate-spin" /> 同步配置中...
-                          </div>
+                      <h2 className="font-headline text-[14px] font-bold tracking-tight text-on-surface">预设策略与规则推演</h2>
+                    </div>
+                    <div className="flex flex-col xl:flex-row xl:items-center gap-2 xl:gap-3">
+                      {launchPreferencesLoaded ? (
+                        <>
+                          <p className="text-[15px] font-bold text-on-surface shrink-0">{currentTemplate.label}</p>
+                          <div className="h-1 w-1 rounded-full bg-on-surface/20 hidden xl:block"></div>
+                          <p className="text-[13px] font-medium text-ui-muted min-w-0 pr-4 leading-relaxed">{currentTemplate.applicableScenarios}</p>
+                        </>
+                      ) : (
+                        <div className="flex items-center gap-2 py-0.5 text-ui-muted text-[13px] font-bold">
+                          <Loader2 className="h-4 w-4 animate-spin" /> 同步配置中...
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {launchPreferencesLoaded && (
+                    <div className="space-y-2.5">
+                      <p className="text-[11px] font-bold text-ui-muted/60 uppercase tracking-widest">主要生成分类目录示例</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {currentSummary.preview_directories?.slice(0, 6).map(dir => (
+                          <span key={dir} className="inline-flex items-center rounded bg-on-surface/[0.04] px-1.5 py-0.5 text-[11px] font-semibold text-on-surface-variant">
+                            <FolderOpen className="w-3 h-3 mr-1.5 opacity-50" /> {dir}
+                          </span>
+                        ))}
+                        {(currentSummary.preview_directories?.length || 0) > 6 && (
+                          <span className="inline-flex items-center text-[11px] font-bold text-ui-muted/50 px-1">
+                            等...
+                          </span>
                         )}
                       </div>
                     </div>
+                  )}
+                </div>
 
-                    {launchPreferencesLoaded && (
-                      <div className="space-y-2.5">
-                        <p className="text-[11px] font-bold text-ui-muted/60 uppercase tracking-widest">主要生成分类目录示例</p>
-                        <div className="flex flex-wrap items-center gap-2">
-                          {currentSummary.preview_directories?.slice(0, 6).map(dir => (
-                             <span key={dir} className="inline-flex items-center rounded bg-on-surface/[0.04] px-1.5 py-0.5 text-[11px] font-semibold text-on-surface-variant">
-                               <FolderOpen className="w-3 h-3 mr-1.5 opacity-50" /> {dir}
-                             </span>
-                          ))}
-                          {(currentSummary.preview_directories?.length || 0) > 6 && (
-                             <span className="inline-flex items-center text-[11px] font-bold text-ui-muted/50 px-1">
-                               等...
-                             </span>
-                          )}
-                        </div>
-                      </div>
-                    )}
+                <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between gap-2.5 shrink-0 pt-0.5">
+                  <button
+                    onClick={() => openStrategyDialog()}
+                    disabled={loading || !targetDir.trim()}
+                    className="flex shrink-0 items-center justify-center gap-1.5 h-9 px-4 rounded-[4px] border border-on-surface/8 bg-surface hover:bg-on-surface/5 text-[12px] font-bold text-on-surface-variant transition-colors hover:text-on-surface disabled:opacity-50 shadow-sm"
+                  >
+                    修改规则 <ChevronRight className="h-3.5 w-3.5 opacity-70" />
+                  </button>
+                  <div className="flex flex-row sm:flex-col items-center sm:items-end gap-1.5 opacity-80 pt-1 pointer-events-none">
+                    <span className="inline-flex rounded-[4px] bg-primary/[0.06] px-1.5 py-0.5 text-[10px] font-black tracking-widest text-primary uppercase border border-primary/5">{namingLabel}</span>
+                    <span className="inline-flex rounded-[4px] bg-primary/[0.06] px-1.5 py-0.5 text-[10px] font-black tracking-widest text-primary uppercase border border-primary/5">{cautionLabel}</span>
                   </div>
-                  
-                  <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between gap-2.5 shrink-0 pt-0.5">
-                    <button 
-                      onClick={() => openStrategyDialog()}
-                      disabled={loading || !targetDir.trim()}
-                      className="flex shrink-0 items-center justify-center gap-1.5 h-9 px-4 rounded-[4px] border border-on-surface/8 bg-surface hover:bg-on-surface/5 text-[12px] font-bold text-on-surface-variant transition-colors hover:text-on-surface disabled:opacity-50 shadow-sm"
-                    >
-                      修改规则 <ChevronRight className="h-3.5 w-3.5 opacity-70" />
-                    </button>
-                    <div className="flex flex-row sm:flex-col items-center sm:items-end gap-1.5 opacity-80 pt-1 pointer-events-none">
-                      <span className="inline-flex rounded-[4px] bg-primary/[0.06] px-1.5 py-0.5 text-[10px] font-black tracking-widest text-primary uppercase border border-primary/5">{namingLabel}</span>
-                      <span className="inline-flex rounded-[4px] bg-primary/[0.06] px-1.5 py-0.5 text-[10px] font-black tracking-widest text-primary uppercase border border-primary/5">{cautionLabel}</span>
-                    </div>
-                  </div>
-               </div>
+                </div>
+              </div>
             </div>
 
             {/* Actions */}
@@ -511,67 +533,79 @@ export function SessionLauncher() {
               <h2 className="font-headline text-[14px] font-bold tracking-tight text-on-surface">历史会话流</h2>
             </div>
           </div>
-          
+
           <div className="flex-1 overflow-y-auto px-3.5 py-4 space-y-2 scrollbar-thin">
             {historyLoading ? (
               <div className="flex items-center justify-center p-8 opacity-50">
                 <Loader2 className="h-5 w-5 animate-spin text-primary" />
               </div>
-            ) : latestHistory ? (
-              <div 
-                className="group relative flex flex-col gap-1.5 rounded-[8px] bg-surface p-3 border border-on-surface/8 hover:border-primary/30 hover:bg-primary/[0.02] cursor-pointer transition-colors shadow-sm"
-                onClick={handleOpenLatestContinue}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="truncate text-[13px] font-bold text-on-surface pr-2">{latestHistoryName}</span>
-                  <span className="shrink-0 text-[10px] font-black uppercase text-primary/70">{latestHistoryStage}</span>
-                </div>
-                <div className="text-[11px] font-medium text-ui-muted font-mono truncate opacity-60">
-                  {latestHistory.target_dir}
-                </div>
-                <div className="mt-1 flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-on-surface-variant/50">{latestHistory.item_count || 0} 项</span>
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1.5 pt-0.5">
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); handleOpenLatestReadonly(); }}
-                      className="rounded bg-surface-container-low px-2 py-1 text-[10px] font-bold text-on-surface hover:text-primary transition-colors"
-                    >
-                      详情
-                    </button>
-                    {latestHistory.is_session && (
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); handleOpenLatestContinue(); }}
-                        className="rounded bg-primary px-2 py-1 text-[10px] font-bold text-white shadow-sm transition-colors hover:bg-primary-dim"
-                      >
-                        恢复
-                      </button>
-                    )}
+            ) : historyItems.length > 0 ? (
+              historyItems.map((item) => {
+                const { name, stage } = getHistoryItemMeta(item);
+                return (
+                  <div
+                    key={item.execution_id}
+                    className="group relative flex flex-col gap-1.5 rounded-[8px] bg-surface p-3 border border-on-surface/8 hover:border-primary/30 hover:bg-primary/[0.02] cursor-pointer transition-colors shadow-sm"
+                    onClick={() => handleHistoryItemClick(item)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="truncate text-[13px] font-bold text-on-surface pr-2">{name}</span>
+                      <span className="shrink-0 text-[10px] font-black uppercase text-primary/70">{stage}</span>
+                    </div>
+                    <div className="text-[11px] font-medium text-ui-muted font-mono truncate opacity-60">
+                      {item.target_dir}
+                    </div>
+                    <div className="mt-1 flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-on-surface-variant/50">{item.item_count || 0} 项</span>
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1.5 pt-0.5">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleHistoryItemReadonly(item); }}
+                          className="rounded bg-surface-container-low px-2 py-1 text-[10px] font-bold text-on-surface hover:text-primary transition-colors"
+                        >
+                          详情
+                        </button>
+                        {item.is_session && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleHistoryItemClick(item); }}
+                            className="rounded bg-primary px-2 py-1 text-[10px] font-bold text-white shadow-sm transition-colors hover:bg-primary-dim"
+                          >
+                            恢复
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
+                );
+              })
             ) : (
-              <div className="p-4 text-center text-[12px] font-medium text-ui-muted opacity-60">暂无任务流水记录</div>
+              <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-on-surface/[0.03] text-on-surface/20">
+                  <History className="h-5 w-5" />
+                </div>
+                <p className="text-[12px] font-bold text-on-surface/30">暂无任务流水记录</p>
+                <p className="mt-1 text-[11px] font-medium text-on-surface/20">开启整理后将在此显示</p>
+              </div>
             )}
-            
+
           </div>
         </div>
       </div>
 
       <AnimatePresence>
-          {error && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.98 }}
-              className="mt-4"
-            >
-              <div className="rounded-[10px] border border-error/14 bg-error-container/14 px-5 py-4 text-[14px] font-semibold text-error">
-                <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0" />
-                <p className="leading-relaxed">{error}</p>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.98 }}
+            className="mt-4"
+          >
+            <div className="rounded-[10px] border border-error/14 bg-error-container/14 px-5 py-4 text-[14px] font-semibold text-error">
+              <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0" />
+              <p className="leading-relaxed">{error}</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <StrategyDialog
         open={strategyDialogOpen}

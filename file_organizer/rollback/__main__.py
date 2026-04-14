@@ -1,8 +1,6 @@
-﻿from file_organizer.workflows.rollback_flow import run_rollback_last_execution
-
-
 def main(argv: list[str] | None = None) -> int:
-    return run_rollback_last_execution(argv)
+    _ = argv
+    raise SystemExit("CLI rollback entrypoint has been removed. Use the desktop workspace or API instead.")
 
 
 if __name__ == "__main__":

@@ -2579,9 +2579,6 @@ class OrganizerSessionService:
         journal = rollback_service.load_latest_execution_for_directory(target_dir)
         return journal.execution_id if journal else None
 
-    def _strategy_summary(self, session: OrganizerSession) -> str:
-        return f"{session.strategy_template_label} ({session.naming_style}, {session.caution_level})"
-
     def _strategy_selection(self, session: OrganizerSession) -> dict:
         return {
             "template_id": session.strategy_template_id,
