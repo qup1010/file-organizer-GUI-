@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 
 import { createApiClient } from "@/lib/api";
-import { getApiBaseUrl, getApiToken, invokeTauriCommand } from "@/lib/runtime";
+import { getApiBaseUrl, getApiToken, invokeTauriCommand, waitForRuntimeConfig } from "@/lib/runtime";
 import type { IconPreviewVersion, IconWorkbenchSession } from "@/types/icon-workbench";
 
 interface UseBackgroundRemovalOptions {
@@ -44,6 +44,7 @@ export function useBackgroundRemoval({
     setProcessingBgVersionIds((prev) => new Set(prev).add(processingKey));
 
     try {
+      const runtime = await waitForRuntimeConfig();
       const runtimeConfig = await loadBgRemovalRuntime();
       const processedB64 = await invokeTauriCommand<string>("remove_background_for_image", {
         imagePath: version.image_path,
@@ -68,13 +69,13 @@ export function useBackgroundRemoval({
       }
 
       const response = await fetch(
-        `${getApiBaseUrl()}/api/icon-workbench/sessions/${session.session_id}/folders/${folderId}/versions/${version.version_id}/add-processed?suffix=nobg`,
+        `${runtime.base_url?.trim() || getApiBaseUrl()}/api/icon-workbench/sessions/${session.session_id}/folders/${folderId}/versions/${version.version_id}/add-processed?suffix=nobg`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/octet-stream",
-            "Authorization": `Bearer ${getApiToken()}`,
-            "x-file-organizer-token": getApiToken(),
+            "Authorization": `Bearer ${runtime.api_token?.trim() || getApiToken()}`,
+            "x-file-organizer-token": runtime.api_token?.trim() || getApiToken(),
           },
           body: bytes,
         }

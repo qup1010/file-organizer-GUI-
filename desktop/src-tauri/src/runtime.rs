@@ -50,7 +50,7 @@ pub fn build_runtime_injection_script(config: &DesktopRuntimeConfig, api_token: 
     let payload =
         serde_json::to_string(&payload).expect("serializing desktop runtime config should not fail");
     format!(
-        "window.__FILE_ORGANIZER_RUNTIME__ = Object.freeze({payload});"
+        "(() => {{ const runtime = Object.freeze({payload}); window.__FILE_ORGANIZER_RUNTIME__ = runtime; window.dispatchEvent(new CustomEvent('file-organizer-runtime-ready', {{ detail: runtime }})); }})()"
     )
 }
 

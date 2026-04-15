@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { createApiClient } from "@/lib/api";
-import { getApiBaseUrl, getApiToken } from "@/lib/runtime";
+import { getApiBaseUrl, getApiToken, isTauriDesktop, waitForRuntimeConfig } from "@/lib/runtime";
 import { createSessionEventStream, type SessionEventStream } from "@/lib/sse";
 import type {
   AssistantMessage,
@@ -370,24 +370,30 @@ export function useSession(sessionId: string | null) {
     setJournal(null);
     setJournalLoading(false);
     resetConversationTransientState();
-    connectStream(sessionId);
+    void (async () => {
+      try {
+        if (isTauriDesktop()) {
+          await waitForRuntimeConfig();
+          if (cancelled) {
+            return;
+          }
+        }
 
-    api.getSession(sessionId)
-      .then((response) => {
+        connectStream(sessionId);
+        const response = await api.getSession(sessionId);
         if (!cancelled && response.session_snapshot) {
           setSnapshot(response.session_snapshot);
         }
-      })
-      .catch((err: Error) => {
+      } catch (err) {
         if (!cancelled) {
-          setChatError(err.message);
+          setChatError(err instanceof Error ? err.message : "读取会话失败");
         }
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) {
           setLoading(false);
         }
-      });
+      }
+    })();
 
     return () => {
       cancelled = true;
@@ -470,6 +476,9 @@ export function useSession(sessionId: string | null) {
   async function retryStream() {
     if (!sessionId) {
       return;
+    }
+    if (isTauriDesktop()) {
+      await waitForRuntimeConfig();
     }
     connectStream(sessionId, "connecting");
     try {

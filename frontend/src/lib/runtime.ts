@@ -10,6 +10,14 @@ declare global {
 }
 
 const DEFAULT_BASE_URL = "http://127.0.0.1:8765";
+const RUNTIME_READY_EVENT = "file-organizer-runtime-ready";
+
+function hasInjectedDesktopRuntime(): boolean {
+  return Boolean(
+    typeof window !== "undefined" &&
+      window.__FILE_ORGANIZER_RUNTIME__?.base_url?.trim(),
+  );
+}
 
 export function readRuntimeConfig(): RuntimeConfig {
   if (typeof window !== "undefined" && window.__FILE_ORGANIZER_RUNTIME__) {
@@ -33,6 +41,42 @@ export function getApiToken(): string {
 
 export function isTauriDesktop(): boolean {
   return typeof window !== "undefined" && !!window.__TAURI_INTERNALS__?.invoke;
+}
+
+export async function waitForRuntimeConfig(
+  timeoutMs = 5000,
+  intervalMs = 100,
+): Promise<RuntimeConfig> {
+  if (!isTauriDesktop() || hasInjectedDesktopRuntime()) {
+    return readRuntimeConfig();
+  }
+
+  await new Promise<void>((resolve) => {
+    const deadline = Date.now() + timeoutMs;
+    let timer: number | null = null;
+
+    const cleanup = () => {
+      window.removeEventListener(RUNTIME_READY_EVENT, onReady);
+      if (timer !== null) {
+        window.clearInterval(timer);
+      }
+    };
+
+    const onReady = () => {
+      cleanup();
+      resolve();
+    };
+
+    window.addEventListener(RUNTIME_READY_EVENT, onReady, { once: true });
+    timer = window.setInterval(() => {
+      if (hasInjectedDesktopRuntime() || Date.now() >= deadline) {
+        cleanup();
+        resolve();
+      }
+    }, intervalMs);
+  });
+
+  return readRuntimeConfig();
 }
 
 export async function invokeTauriCommand<T>(

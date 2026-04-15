@@ -1,20 +1,21 @@
+import { waitForRuntimeConfig } from "@/lib/runtime";
 import type {
   CleanupResponse,
   CreateSessionResponse,
   ExecuteResponse,
+  GetSessionResponse,
+  HistoryItem,
   JournalSummary,
   MessageResponse,
   PrecheckResponse,
-  RollbackResponse,
-  ScanAcceptedResponse,
-  GetSessionResponse,
-  ResumeSessionResponse,
   ResolveUnresolvedChoicesRequest,
   ResolveUnresolvedChoicesResponse,
+  ResumeSessionResponse,
+  RollbackResponse,
+  ScanAcceptedResponse,
   SessionSnapshot,
-  HistoryItem,
-  UpdateItemRequest,
   SessionStrategySelection,
+  UpdateItemRequest,
 } from "@/types/session";
 import type {
   SettingsPresetCreatePayload,
@@ -35,12 +36,29 @@ function buildAuthHeaders(apiToken?: string, headers?: HeadersInit): Headers {
   return nextHeaders;
 }
 
-async function parseResponse<T>(response: Response): Promise<T> {
+async function resolveRequestRuntime(baseUrl: string, apiToken?: string) {
+  const runtime = await waitForRuntimeConfig();
+  return {
+    baseUrl: runtime.base_url?.trim() || baseUrl,
+    apiToken: runtime.api_token?.trim() || apiToken || "",
+  };
+}
+
+async function requestJson<T>(
+  baseUrl: string,
+  path: string,
+  init: RequestInit = {},
+  apiToken?: string,
+): Promise<T> {
+  const runtime = await resolveRequestRuntime(baseUrl, apiToken);
+  const response = await fetch(joinUrl(runtime.baseUrl, path), {
+    ...init,
+    headers: buildAuthHeaders(runtime.apiToken, init.headers),
+  });
+
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(
-      `Request failed (${response.status} ${response.statusText}): ${errorText}`,
-    );
+    throw new Error(`Request failed (${response.status} ${response.statusText}): ${errorText}`);
   }
 
   return (await response.json()) as T;
@@ -62,8 +80,6 @@ export interface ApiClient {
   cleanupEmptyDirs(session_id: string): Promise<CleanupResponse>;
   rollback(session_id: string, confirm?: boolean): Promise<RollbackResponse>;
   getJournal(session_id: string): Promise<JournalSummary>;
-
-  // utils
   openDir(path: string): Promise<{ status: string }>;
   selectDir(): Promise<{ path: string | null }>;
   getCommonDirs(): Promise<{ label: string; path: string }[]>;
@@ -81,194 +97,224 @@ export interface ApiClient {
 export function createApiClient(baseUrl: string, apiToken?: string): ApiClient {
   return {
     async createSession(target_dir, resume_if_exists = true, strategy) {
-      const response = await fetch(joinUrl(baseUrl, "/api/sessions"), {
-        method: "POST",
-        headers: buildAuthHeaders(apiToken, { "Content-Type": "application/json" }),
-        body: JSON.stringify({ target_dir, resume_if_exists, strategy }),
-      });
-      return parseResponse<CreateSessionResponse>(response);
+      return requestJson<CreateSessionResponse>(
+        baseUrl,
+        "/api/sessions",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ target_dir, resume_if_exists, strategy }),
+        },
+        apiToken,
+      );
     },
     async getSession(session_id) {
-      const response = await fetch(joinUrl(baseUrl, `/api/sessions/${session_id}`), {
-        headers: buildAuthHeaders(apiToken),
-      });
-      return parseResponse<GetSessionResponse>(response);
+      return requestJson<GetSessionResponse>(baseUrl, `/api/sessions/${session_id}`, {}, apiToken);
     },
     async resumeSession(session_id) {
-      const response = await fetch(joinUrl(baseUrl, `/api/sessions/${session_id}/resume`), {
-        method: "POST",
-        headers: buildAuthHeaders(apiToken),
-      });
-      return parseResponse<ResumeSessionResponse>(response);
+      return requestJson<ResumeSessionResponse>(
+        baseUrl,
+        `/api/sessions/${session_id}/resume`,
+        { method: "POST" },
+        apiToken,
+      );
     },
     async abandonSession(session_id) {
-      const response = await fetch(joinUrl(baseUrl, `/api/sessions/${session_id}/abandon`), {
-        method: "POST",
-        headers: buildAuthHeaders(apiToken),
-      });
-      return parseResponse<{ session_id: string; session_snapshot: SessionSnapshot }>(response);
+      return requestJson<{ session_id: string; session_snapshot: SessionSnapshot }>(
+        baseUrl,
+        `/api/sessions/${session_id}/abandon`,
+        { method: "POST" },
+        apiToken,
+      );
     },
     async scanSession(session_id) {
-      const response = await fetch(joinUrl(baseUrl, `/api/sessions/${session_id}/scan`), {
-        method: "POST",
-        headers: buildAuthHeaders(apiToken),
-      });
-      return parseResponse<ScanAcceptedResponse>(response);
+      return requestJson<ScanAcceptedResponse>(
+        baseUrl,
+        `/api/sessions/${session_id}/scan`,
+        { method: "POST" },
+        apiToken,
+      );
     },
     async refreshSession(session_id) {
-      const response = await fetch(joinUrl(baseUrl, `/api/sessions/${session_id}/refresh`), {
-        method: "POST",
-        headers: buildAuthHeaders(apiToken),
-      });
-      return parseResponse<ScanAcceptedResponse>(response);
+      return requestJson<ScanAcceptedResponse>(
+        baseUrl,
+        `/api/sessions/${session_id}/refresh`,
+        { method: "POST" },
+        apiToken,
+      );
     },
     async sendMessage(session_id, content) {
-      const response = await fetch(joinUrl(baseUrl, `/api/sessions/${session_id}/messages`), {
-        method: "POST",
-        headers: buildAuthHeaders(apiToken, { "Content-Type": "application/json" }),
-        body: JSON.stringify({ content }),
-      });
-      return parseResponse<MessageResponse>(response);
+      return requestJson<MessageResponse>(
+        baseUrl,
+        `/api/sessions/${session_id}/messages`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content }),
+        },
+        apiToken,
+      );
     },
     async resolveUnresolvedChoices(session_id, payload) {
-      const response = await fetch(joinUrl(baseUrl, `/api/sessions/${session_id}/unresolved-resolutions`), {
-        method: "POST",
-        headers: buildAuthHeaders(apiToken, { "Content-Type": "application/json" }),
-        body: JSON.stringify(payload),
-      });
-      return parseResponse<ResolveUnresolvedChoicesResponse>(response);
+      return requestJson<ResolveUnresolvedChoicesResponse>(
+        baseUrl,
+        `/api/sessions/${session_id}/unresolved-resolutions`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+        apiToken,
+      );
     },
     async updateItem(session_id, payload) {
-      const response = await fetch(joinUrl(baseUrl, `/api/sessions/${session_id}/update-item`), {
-        method: "POST",
-        headers: buildAuthHeaders(apiToken, { "Content-Type": "application/json" }),
-        body: JSON.stringify(payload),
-      });
-      return parseResponse<{ session_id: string; session_snapshot: SessionSnapshot }>(response);
+      return requestJson<{ session_id: string; session_snapshot: SessionSnapshot }>(
+        baseUrl,
+        `/api/sessions/${session_id}/update-item`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+        apiToken,
+      );
     },
     async runPrecheck(session_id) {
-      const response = await fetch(joinUrl(baseUrl, `/api/sessions/${session_id}/precheck`), {
-        method: "POST",
-        headers: buildAuthHeaders(apiToken),
-      });
-      return parseResponse<PrecheckResponse>(response);
+      return requestJson<PrecheckResponse>(
+        baseUrl,
+        `/api/sessions/${session_id}/precheck`,
+        { method: "POST" },
+        apiToken,
+      );
     },
     async returnToPlanning(session_id) {
-      const response = await fetch(joinUrl(baseUrl, `/api/sessions/${session_id}/return-to-planning`), {
-        method: "POST",
-        headers: buildAuthHeaders(apiToken),
-      });
-      return parseResponse<{ session_id: string; session_snapshot: SessionSnapshot }>(response);
+      return requestJson<{ session_id: string; session_snapshot: SessionSnapshot }>(
+        baseUrl,
+        `/api/sessions/${session_id}/return-to-planning`,
+        { method: "POST" },
+        apiToken,
+      );
     },
     async execute(session_id, confirm = true) {
-      const response = await fetch(joinUrl(baseUrl, `/api/sessions/${session_id}/execute`), {
-        method: "POST",
-        headers: buildAuthHeaders(apiToken, { "Content-Type": "application/json" }),
-        body: JSON.stringify({ confirm }),
-      });
-      return parseResponse<ExecuteResponse>(response);
+      return requestJson<ExecuteResponse>(
+        baseUrl,
+        `/api/sessions/${session_id}/execute`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ confirm }),
+        },
+        apiToken,
+      );
     },
     async cleanupEmptyDirs(session_id) {
-      const response = await fetch(joinUrl(baseUrl, `/api/sessions/${session_id}/cleanup-empty-dirs`), {
-        method: "POST",
-        headers: buildAuthHeaders(apiToken),
-      });
-      return parseResponse<CleanupResponse>(response);
+      return requestJson<CleanupResponse>(
+        baseUrl,
+        `/api/sessions/${session_id}/cleanup-empty-dirs`,
+        { method: "POST" },
+        apiToken,
+      );
     },
     async rollback(session_id, confirm = true) {
-      const response = await fetch(joinUrl(baseUrl, `/api/sessions/${session_id}/rollback`), {
-        method: "POST",
-        headers: buildAuthHeaders(apiToken, { "Content-Type": "application/json" }),
-        body: JSON.stringify({ confirm }),
-      });
-      return parseResponse<RollbackResponse>(response);
+      return requestJson<RollbackResponse>(
+        baseUrl,
+        `/api/sessions/${session_id}/rollback`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ confirm }),
+        },
+        apiToken,
+      );
     },
     async getJournal(session_id) {
-      const response = await fetch(joinUrl(baseUrl, `/api/sessions/${session_id}/journal`), {
-        headers: buildAuthHeaders(apiToken),
-      });
-      return parseResponse<JournalSummary>(response);
+      return requestJson<JournalSummary>(baseUrl, `/api/sessions/${session_id}/journal`, {}, apiToken);
     },
     async openDir(path) {
-      const response = await fetch(joinUrl(baseUrl, "/api/utils/open-dir"), {
-        method: "POST",
-        headers: buildAuthHeaders(apiToken, { "Content-Type": "application/json" }),
-        body: JSON.stringify({ path }),
-      });
-      return parseResponse<{ status: string }>(response);
+      return requestJson<{ status: string }>(
+        baseUrl,
+        "/api/utils/open-dir",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path }),
+        },
+        apiToken,
+      );
     },
     async selectDir() {
-      const response = await fetch(joinUrl(baseUrl, "/api/utils/select-dir"), {
-        method: "POST",
-        headers: buildAuthHeaders(apiToken),
-      });
-      return parseResponse<{ path: string | null }>(response);
+      return requestJson<{ path: string | null }>(
+        baseUrl,
+        "/api/utils/select-dir",
+        { method: "POST" },
+        apiToken,
+      );
     },
     async getCommonDirs() {
-      const response = await fetch(joinUrl(baseUrl, "/api/utils/common-dirs"), {
-        headers: buildAuthHeaders(apiToken),
-      });
-      return parseResponse<{ label: string; path: string }[]>(response);
+      return requestJson<{ label: string; path: string }[]>(baseUrl, "/api/utils/common-dirs", {}, apiToken);
     },
     async getHistory() {
-      const response = await fetch(joinUrl(baseUrl, "/api/history"), {
-        headers: buildAuthHeaders(apiToken),
-      });
-      return parseResponse<HistoryItem[]>(response);
+      return requestJson<HistoryItem[]>(baseUrl, "/api/history", {}, apiToken);
     },
     async deleteHistoryEntry(entry_id) {
-      const response = await fetch(joinUrl(baseUrl, `/api/history/${entry_id}`), {
-        method: "DELETE",
-        headers: buildAuthHeaders(apiToken),
-      });
-      return parseResponse<{ status: string; entry_id: string; entry_type: string }>(response);
+      return requestJson<{ status: string; entry_id: string; entry_type: string }>(
+        baseUrl,
+        `/api/history/${entry_id}`,
+        { method: "DELETE" },
+        apiToken,
+      );
     },
     async getSettings() {
-      const response = await fetch(joinUrl(baseUrl, "/api/settings"), {
-        headers: buildAuthHeaders(apiToken),
-      });
-      return parseResponse<SettingsSnapshot>(response);
+      return requestJson<SettingsSnapshot>(baseUrl, "/api/settings", {}, apiToken);
     },
     async getSettingsRuntime(family) {
-      const response = await fetch(joinUrl(baseUrl, `/api/settings/runtime/${family}`), {
-        headers: buildAuthHeaders(apiToken),
-      });
-      return parseResponse(response);
+      return requestJson(baseUrl, `/api/settings/runtime/${family}`, {}, apiToken);
     },
     async updateSettings(payload) {
-      const response = await fetch(joinUrl(baseUrl, "/api/settings"), {
-        method: "PATCH",
-        headers: buildAuthHeaders(apiToken, { "Content-Type": "application/json" }),
-        body: JSON.stringify(payload),
-      });
-      return parseResponse<SettingsSnapshot>(response);
+      return requestJson<SettingsSnapshot>(
+        baseUrl,
+        "/api/settings",
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+        apiToken,
+      );
     },
     async activateSettingsPreset(family, id) {
-      const response = await fetch(joinUrl(baseUrl, `/api/settings/presets/${family}/${id}/activate`), {
-        method: "POST",
-        headers: buildAuthHeaders(apiToken),
-      });
-      return parseResponse<{ status: string }>(response);
+      return requestJson<{ status: string }>(
+        baseUrl,
+        `/api/settings/presets/${family}/${id}/activate`,
+        { method: "POST" },
+        apiToken,
+      );
     },
     async createSettingsPreset(family, payload) {
-      const response = await fetch(joinUrl(baseUrl, `/api/settings/presets/${family}`), {
-        method: "POST",
-        headers: buildAuthHeaders(apiToken, { "Content-Type": "application/json" }),
-        body: JSON.stringify(payload),
-      });
-      return parseResponse<{ status: string; id: string }>(response);
+      return requestJson<{ status: string; id: string }>(
+        baseUrl,
+        `/api/settings/presets/${family}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+        apiToken,
+      );
     },
     async deleteSettingsPreset(family, id) {
-      const response = await fetch(joinUrl(baseUrl, `/api/settings/presets/${family}/${id}`), {
-        method: "DELETE",
-        headers: buildAuthHeaders(apiToken),
-      });
-      return parseResponse<{ status: string }>(response);
+      return requestJson<{ status: string }>(
+        baseUrl,
+        `/api/settings/presets/${family}/${id}`,
+        { method: "DELETE" },
+        apiToken,
+      );
     },
     async testSettings(payload) {
-      const response = await fetch(joinUrl(baseUrl, "/api/settings/test"), {
+      const runtime = await resolveRequestRuntime(baseUrl, apiToken);
+      const response = await fetch(joinUrl(runtime.baseUrl, "/api/settings/test"), {
         method: "POST",
-        headers: buildAuthHeaders(apiToken, { "Content-Type": "application/json" }),
+        headers: buildAuthHeaders(runtime.apiToken, { "Content-Type": "application/json" }),
         body: JSON.stringify(payload),
       });
       const data = (await response.json()) as SettingsTestResult;
