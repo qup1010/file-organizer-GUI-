@@ -62,6 +62,7 @@ jobs:
             --noconsole `
             --name file_organizer_api `
             --paths . `
+            --add-data "frontend/src/lib/strategy-catalog.json;frontend/src/lib" `
             --collect-submodules file_organizer `
             --collect-submodules uvicorn `
             --collect-submodules fastapi `
