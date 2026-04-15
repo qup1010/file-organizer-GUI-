@@ -86,6 +86,7 @@ struct DesktopState {
     backend_executable: Option<PathBuf>,
     backend_process: Mutex<Option<backend::ManagedBackendProcess>>,
     runtime_script: Mutex<Option<String>>,
+    injected_runtime: Mutex<Option<runtime::InjectedRuntimeConfig>>,
 }
 
 impl DesktopState {
@@ -95,6 +96,7 @@ impl DesktopState {
             backend_executable,
             backend_process: Mutex::new(None),
             runtime_script: Mutex::new(None),
+            injected_runtime: Mutex::new(None),
         }
     }
 
@@ -108,8 +110,17 @@ impl DesktopState {
         *guard = Some(script);
     }
 
+    fn set_injected_runtime(&self, runtime_config: runtime::InjectedRuntimeConfig) {
+        let mut guard = self.injected_runtime.lock().expect("injected runtime lock");
+        *guard = Some(runtime_config);
+    }
+
     fn runtime_script(&self) -> Option<String> {
         self.runtime_script.lock().expect("runtime script lock").clone()
+    }
+
+    fn injected_runtime(&self) -> Option<runtime::InjectedRuntimeConfig> {
+        self.injected_runtime.lock().expect("injected runtime lock").clone()
     }
 
     fn stop_backend(&self) {
@@ -210,8 +221,10 @@ fn bootstrap_backend(app: &App) -> Result<(), String> {
     };
 
     let script = runtime::build_runtime_injection_script(&config, &api_token);
+    let injected_runtime = runtime::build_injected_runtime_config(&config, &api_token);
     state.set_backend_process(process);
     state.set_runtime_script(script.clone());
+    state.set_injected_runtime(injected_runtime);
 
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.eval(&script);
@@ -225,6 +238,12 @@ fn rehydrate_runtime(webview: &tauri::Webview) {
     if let Some(script) = state.runtime_script() {
         let _ = webview.eval(&script);
     }
+}
+
+#[tauri::command]
+fn get_runtime_config(app: tauri::AppHandle) -> Option<runtime::InjectedRuntimeConfig> {
+    let state = app.state::<DesktopState>();
+    state.injected_runtime()
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -286,6 +305,7 @@ pub fn run() {
             pick_directories,
             open_directory,
             save_file_as,
+            get_runtime_config,
             apply_folder_icon,
             apply_ready_icons,
             clear_folder_icon,

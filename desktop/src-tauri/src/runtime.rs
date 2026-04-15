@@ -6,7 +6,6 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DesktopRuntimeConfig {
@@ -17,6 +16,18 @@ pub struct DesktopRuntimeConfig {
     pub started_at: String,
     #[serde(default)]
     pub instance_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct InjectedRuntimeConfig {
+    pub base_url: String,
+    pub host: String,
+    pub port: u16,
+    pub pid: u32,
+    pub started_at: String,
+    #[serde(default)]
+    pub instance_id: Option<String>,
+    pub api_token: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -38,20 +49,27 @@ pub fn read_runtime_config(path: &Path) -> Result<DesktopRuntimeConfig, String> 
 }
 
 pub fn build_runtime_injection_script(config: &DesktopRuntimeConfig, api_token: &str) -> String {
-    let payload = json!({
-        "base_url": config.base_url,
-        "host": config.host,
-        "port": config.port,
-        "pid": config.pid,
-        "started_at": config.started_at,
-        "instance_id": config.instance_id,
-        "api_token": api_token,
-    });
+    let payload = build_injected_runtime_config(config, api_token);
     let payload =
         serde_json::to_string(&payload).expect("serializing desktop runtime config should not fail");
     format!(
         "(() => {{ const runtime = Object.freeze({payload}); window.__FILE_ORGANIZER_RUNTIME__ = runtime; window.dispatchEvent(new CustomEvent('file-organizer-runtime-ready', {{ detail: runtime }})); }})()"
     )
+}
+
+pub fn build_injected_runtime_config(
+    config: &DesktopRuntimeConfig,
+    api_token: &str,
+) -> InjectedRuntimeConfig {
+    InjectedRuntimeConfig {
+        base_url: config.base_url.clone(),
+        host: config.host.clone(),
+        port: config.port,
+        pid: config.pid,
+        started_at: config.started_at.clone(),
+        instance_id: config.instance_id.clone(),
+        api_token: api_token.to_string(),
+    }
 }
 
 pub fn wait_for_runtime_config(
@@ -163,8 +181,9 @@ fn connect_backend(config: &DesktopRuntimeConfig, timeout: Duration) -> Option<T
 #[cfg(test)]
 mod tests {
     use super::{
-        backend_reports_expected_instance, backend_runtime_path, build_runtime_injection_script, read_runtime_config,
-        runtime_file_is_owned_by_active_backend, wait_for_runtime_config, DesktopRuntimeConfig,
+        backend_reports_expected_instance, backend_runtime_path, build_injected_runtime_config,
+        build_runtime_injection_script, read_runtime_config, runtime_file_is_owned_by_active_backend,
+        wait_for_runtime_config, DesktopRuntimeConfig,
     };
     use std::fs;
     use std::io::{Read, Write};
@@ -213,6 +232,24 @@ mod tests {
         assert!(script.contains("window.__FILE_ORGANIZER_RUNTIME__"));
         assert!(script.contains("http://127.0.0.1:8765"));
         assert!(script.contains("desktop-token"));
+    }
+
+    #[test]
+    fn build_injected_runtime_config_includes_api_token() {
+        let config = DesktopRuntimeConfig {
+            base_url: "http://127.0.0.1:8765".into(),
+            host: "127.0.0.1".into(),
+            port: 8765,
+            pid: 1234,
+            started_at: "2026-03-21T00:00:00Z".into(),
+            instance_id: Some("desktop-instance".into()),
+        };
+
+        let injected = build_injected_runtime_config(&config, "desktop-token");
+
+        assert_eq!(injected.base_url, "http://127.0.0.1:8765");
+        assert_eq!(injected.api_token, "desktop-token");
+        assert_eq!(injected.instance_id.as_deref(), Some("desktop-instance"));
     }
 
     #[test]
