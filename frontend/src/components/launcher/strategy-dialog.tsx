@@ -4,7 +4,15 @@ import { CheckCircle2, Layers3, Sparkles, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { CAUTION_LEVEL_OPTIONS, NAMING_STYLE_OPTIONS, STRATEGY_TEMPLATES, getTemplateMeta } from "@/lib/strategy-templates";
+import {
+  buildStrategySummary,
+  CAUTION_LEVEL_OPTIONS,
+  DENSITY_OPTIONS,
+  getTemplateMeta,
+  LANGUAGE_OPTIONS,
+  PREFIX_STYLE_OPTIONS,
+  STRATEGY_TEMPLATES,
+} from "@/lib/strategy-templates";
 import { SessionStrategySelection } from "@/types/session";
 
 export function StrategyDialog({
@@ -15,7 +23,9 @@ export function StrategyDialog({
   onClose,
   onConfirm,
   onTemplateSelect,
-  onChangeNaming,
+  onChangeLanguage,
+  onChangeDensity,
+  onChangePrefixStyle,
   onChangeCaution,
   onChangeNote,
 }: {
@@ -26,14 +36,14 @@ export function StrategyDialog({
   onClose: () => void;
   onConfirm: () => void;
   onTemplateSelect: (templateId: SessionStrategySelection["template_id"]) => void;
-  onChangeNaming: (id: SessionStrategySelection["naming_style"]) => void;
+  onChangeLanguage: (id: SessionStrategySelection["language"]) => void;
+  onChangeDensity: (id: SessionStrategySelection["density"]) => void;
+  onChangePrefixStyle: (id: SessionStrategySelection["prefix_style"]) => void;
   onChangeCaution: (id: SessionStrategySelection["caution_level"]) => void;
   onChangeNote: (value: string) => void;
 }) {
   const currentTemplate = useMemo(() => getTemplateMeta(strategy.template_id), [strategy.template_id]);
-  const previewDirectories = currentTemplate.previewDirectories[strategy.naming_style] || [];
-  const namingLabel = NAMING_STYLE_OPTIONS.find((item) => item.id === strategy.naming_style)?.label || "中文目录";
-  const cautionLabel = CAUTION_LEVEL_OPTIONS.find((item) => item.id === strategy.caution_level)?.label || "平衡";
+  const summary = useMemo(() => buildStrategySummary(strategy), [strategy]);
 
   useEffect(() => {
     if (!open) {
@@ -56,7 +66,7 @@ export function StrategyDialog({
             initial={{ opacity: 0, scale: 0.97, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 20 }}
-            className="ui-dialog flex h-[min(92vh,760px)] w-full max-w-[980px] flex-col overflow-hidden bg-surface-container-lowest"
+            className="ui-dialog flex h-[min(92vh,820px)] w-full max-w-[1080px] flex-col overflow-hidden bg-surface-container-lowest"
           >
             <div className="flex items-start justify-between gap-6 border-b border-on-surface/8 bg-surface px-5 py-3 lg:px-6 shadow-sm">
               <div className="space-y-1.5">
@@ -66,7 +76,7 @@ export function StrategyDialog({
                 </div>
                 <div className="space-y-0.5">
                   <h2 className="text-[1.1rem] font-black tracking-tight text-on-surface">补充本轮整理策略</h2>
-                  <p className="max-w-2xl text-[12px] leading-relaxed text-ui-muted">完成模板与命名偏好设置，随后进入 AI 扫描分析。</p>
+                  <p className="max-w-2xl text-[12px] leading-relaxed text-ui-muted">完成模板、命名和整理偏好设置，随后进入 AI 扫描分析。</p>
                 </div>
               </div>
 
@@ -116,16 +126,18 @@ export function StrategyDialog({
                   <div className="rounded-[10px] border border-on-surface/8 bg-surface-container-lowest p-4">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="rounded-full border border-primary/12 bg-primary/8 px-2.5 py-0.5 text-[11px] font-bold text-primary">{currentTemplate.label}</span>
-                      <span className="rounded-full border border-on-surface/8 bg-surface px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant/70">{namingLabel}</span>
-                      <span className="rounded-full border border-on-surface/8 bg-surface px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant/70">{cautionLabel}</span>
+                      <span className="rounded-full border border-on-surface/8 bg-surface px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant/70">{summary.language_label}</span>
+                      <span className="rounded-full border border-on-surface/8 bg-surface px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant/70">{summary.density_label}</span>
+                      <span className="rounded-full border border-on-surface/8 bg-surface px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant/70">{summary.prefix_style_label}</span>
+                      <span className="rounded-full border border-on-surface/8 bg-surface px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant/70">{summary.caution_level_label}</span>
                     </div>
                     <p className="mt-2.5 text-[13px] leading-relaxed text-ui-muted">{currentTemplate.description}</p>
 
                     <div className="mt-4 rounded-[10px] border border-on-surface/8 bg-surface px-3.5 py-2.5">
                       <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ui-muted/60">预计目录结构</div>
                       <div className="mt-2.5 flex flex-wrap gap-1.5">
-                        {previewDirectories.map((directory) => (
-                          <span key={`${strategy.template_id}-${strategy.naming_style}-${directory}`} className="rounded-[4px] border border-on-surface/8 bg-surface-container-lowest px-2 py-0.5 text-[11px] font-semibold text-on-surface">
+                        {summary.preview_directories?.map((directory) => (
+                          <span key={`${strategy.template_id}-${strategy.language}-${strategy.density}-${strategy.prefix_style}-${directory}`} className="rounded-[4px] border border-on-surface/8 bg-surface-container-lowest px-2 py-0.5 text-[11px] font-semibold text-on-surface">
                             {directory}
                           </span>
                         ))}
@@ -133,17 +145,71 @@ export function StrategyDialog({
                     </div>
                   </div>
 
-                  <div className="grid gap-4 lg:grid-cols-2">
+                  <div className="grid gap-4 xl:grid-cols-2">
                     <div className="rounded-[10px] border border-on-surface/8 bg-surface p-3.5">
-                      <div className="mb-2.5 text-[10px] font-bold uppercase tracking-[0.15em] text-ui-muted">目录命名风格</div>
+                      <div className="mb-2.5 text-[10px] font-bold uppercase tracking-[0.15em] text-ui-muted">目录语言</div>
                       <div className="grid gap-1.5">
-                        {NAMING_STYLE_OPTIONS.map((option) => {
-                          const active = strategy.naming_style === option.id;
+                        {LANGUAGE_OPTIONS.map((option) => {
+                          const active = strategy.language === option.id;
                           return (
                             <button
                               key={option.id}
                               type="button"
-                              onClick={() => onChangeNaming(option.id)}
+                              onClick={() => onChangeLanguage(option.id)}
+                              disabled={loading}
+                              className={cn(
+                                "rounded-[8px] border px-3 py-2 text-left transition-all disabled:opacity-50",
+                                active ? "border-primary/25 bg-primary/10 shadow-sm" : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
+                              )}
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <p className={cn("text-[12.5px] font-bold", active ? "text-primary" : "text-on-surface")}>{option.label}</p>
+                                {active ? <CheckCircle2 className="h-3.5 w-3.5 text-primary" /> : null}
+                              </div>
+                              <p className="mt-0.5 text-[11px] leading-[1.5] text-ui-muted/80">{option.description}</p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="rounded-[10px] border border-on-surface/8 bg-surface p-3.5">
+                      <div className="mb-2.5 text-[10px] font-bold uppercase tracking-[0.15em] text-ui-muted">分类粒度</div>
+                      <div className="grid gap-1.5">
+                        {DENSITY_OPTIONS.map((option) => {
+                          const active = strategy.density === option.id;
+                          return (
+                            <button
+                              key={option.id}
+                              type="button"
+                              onClick={() => onChangeDensity(option.id)}
+                              disabled={loading}
+                              className={cn(
+                                "rounded-[8px] border px-3 py-2 text-left transition-all disabled:opacity-50",
+                                active ? "border-primary/25 bg-primary/10 shadow-sm" : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
+                              )}
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <p className={cn("text-[12.5px] font-bold", active ? "text-primary" : "text-on-surface")}>{option.label}</p>
+                                {active ? <CheckCircle2 className="h-3.5 w-3.5 text-primary" /> : null}
+                              </div>
+                              <p className="mt-0.5 text-[11px] leading-[1.5] text-ui-muted/80">{option.description}</p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="rounded-[10px] border border-on-surface/8 bg-surface p-3.5">
+                      <div className="mb-2.5 text-[10px] font-bold uppercase tracking-[0.15em] text-ui-muted">目录前缀</div>
+                      <div className="grid gap-1.5">
+                        {PREFIX_STYLE_OPTIONS.map((option) => {
+                          const active = strategy.prefix_style === option.id;
+                          return (
+                            <button
+                              key={option.id}
+                              type="button"
+                              onClick={() => onChangePrefixStyle(option.id)}
                               disabled={loading}
                               className={cn(
                                 "rounded-[8px] border px-3 py-2 text-left transition-all disabled:opacity-50",
@@ -215,18 +281,20 @@ export function StrategyDialog({
             </div>
 
             <div className="shrink-0 border-t border-on-surface/8 bg-surface px-5 py-3 lg:px-6">
-               <div className="flex flex-wrap items-center justify-between gap-4">
-                 <div className="flex flex-wrap items-center gap-1.5 opacity-80">
-                   <span className="rounded-full border border-primary/12 bg-primary/8 px-2.5 py-0.5 text-[11px] font-bold text-primary">{currentTemplate.label}</span>
-                   <span className="rounded-full border border-on-surface/8 bg-surface-container-lowest px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant">{namingLabel}</span>
-                   <span className="rounded-full border border-on-surface/8 bg-surface-container-lowest px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant">{cautionLabel}</span>
-                 </div>
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex flex-wrap items-center gap-1.5 opacity-80">
+                  <span className="rounded-full border border-primary/12 bg-primary/8 px-2.5 py-0.5 text-[11px] font-bold text-primary">{currentTemplate.label}</span>
+                  <span className="rounded-full border border-on-surface/8 bg-surface-container-lowest px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant">{summary.language_label}</span>
+                  <span className="rounded-full border border-on-surface/8 bg-surface-container-lowest px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant">{summary.density_label}</span>
+                  <span className="rounded-full border border-on-surface/8 bg-surface-container-lowest px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant">{summary.prefix_style_label}</span>
+                  <span className="rounded-full border border-on-surface/8 bg-surface-container-lowest px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant">{summary.caution_level_label}</span>
+                </div>
 
-                 <div className="flex items-center gap-2.5">
-                   <Button variant="secondary" onClick={onClose} className="h-9 px-5 text-[13px] rounded-[8px]">取消</Button>
-                   <Button variant="primary" onClick={onConfirm} disabled={loading} className="h-9 px-6 text-[13px] rounded-[8px]">确认并开始</Button>
-                 </div>
-               </div>
+                <div className="flex items-center gap-2.5">
+                  <Button variant="secondary" onClick={onClose} className="h-9 px-5 text-[13px] rounded-[8px]">取消</Button>
+                  <Button variant="primary" onClick={onConfirm} disabled={loading} className="h-9 px-6 text-[13px] rounded-[8px]">确认并开始</Button>
+                </div>
+              </div>
             </div>
           </motion.div>
         </div>

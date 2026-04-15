@@ -35,10 +35,12 @@ import {
   buildStrategySummary,
   CAUTION_LEVEL_OPTIONS,
   DEFAULT_STRATEGY_SELECTION,
+  DENSITY_OPTIONS,
   getLaunchStrategyFromConfig,
   getSuggestedSelection,
   getTemplateMeta,
-  NAMING_STYLE_OPTIONS,
+  LANGUAGE_OPTIONS,
+  PREFIX_STYLE_OPTIONS,
   shouldSkipLaunchStrategyPrompt,
   STRATEGY_TEMPLATES,
 } from "@/lib/strategy-templates";
@@ -49,14 +51,7 @@ import { StrategyDialog } from "./launcher/strategy-dialog";
 import { ResumePromptDialog } from "./launcher/resume-prompt-dialog";
 
 
-const DEFAULT_STRATEGY_SUMMARY: SessionStrategySummary = {
-  ...DEFAULT_STRATEGY_SELECTION,
-  template_label: "通用下载",
-  template_description: "适合下载目录、桌面暂存区等混合文件场景。",
-  naming_style_label: "中文目录",
-  caution_level_label: "平衡",
-  preview_directories: ["项目资料", "财务票据", "学习资料", "安装程序", "待确认"],
-};
+const DEFAULT_STRATEGY_SUMMARY: SessionStrategySummary = buildStrategySummary(DEFAULT_STRATEGY_SELECTION);
 
 export function SessionLauncher() {
   const router = useRouter();
@@ -81,7 +76,9 @@ export function SessionLauncher() {
   const isCompletedResume = resumeStage === "completed";
   const currentSummary = buildStrategySummary(savedLaunchStrategy);
   const currentTemplate = getTemplateMeta(savedLaunchStrategy.template_id);
-  const namingLabel = currentSummary.naming_style_label;
+  const languageLabel = currentSummary.language_label;
+  const densityLabel = currentSummary.density_label;
+  const prefixStyleLabel = currentSummary.prefix_style_label;
   const cautionLabel = currentSummary.caution_level_label;
   function getHistoryItemMeta(item: HistoryItem) {
     const name = item.target_dir?.replace(/[\\/]$/, "").split(/[\\/]/).pop() || "任务";
@@ -217,7 +214,9 @@ export function SessionLauncher() {
     setDraftStrategy((prev) => ({
       ...prev,
       template_id: templateId,
-      naming_style: suggested.naming_style,
+      language: suggested.language,
+      density: suggested.density,
+      prefix_style: suggested.prefix_style,
       caution_level: suggested.caution_level,
     }));
   }
@@ -492,7 +491,9 @@ export function SessionLauncher() {
                     修改规则 <ChevronRight className="h-3.5 w-3.5 opacity-70" />
                   </button>
                   <div className="flex flex-row sm:flex-col items-center sm:items-end gap-1.5 opacity-80 pt-1 pointer-events-none">
-                    <span className="inline-flex rounded-[4px] bg-primary/[0.06] px-1.5 py-0.5 text-[10px] font-black tracking-widest text-primary uppercase border border-primary/5">{namingLabel}</span>
+                    <span className="inline-flex rounded-[4px] bg-primary/[0.06] px-1.5 py-0.5 text-[10px] font-black tracking-widest text-primary uppercase border border-primary/5">{languageLabel}</span>
+                    <span className="inline-flex rounded-[4px] bg-primary/[0.06] px-1.5 py-0.5 text-[10px] font-black tracking-widest text-primary uppercase border border-primary/5">{densityLabel}</span>
+                    <span className="inline-flex rounded-[4px] bg-primary/[0.06] px-1.5 py-0.5 text-[10px] font-black tracking-widest text-primary uppercase border border-primary/5">{prefixStyleLabel}</span>
                     <span className="inline-flex rounded-[4px] bg-primary/[0.06] px-1.5 py-0.5 text-[10px] font-black tracking-widest text-primary uppercase border border-primary/5">{cautionLabel}</span>
                   </div>
                 </div>
@@ -615,7 +616,9 @@ export function SessionLauncher() {
         onClose={() => setStrategyDialogOpen(false)}
         onConfirm={() => void launchWithStrategy(draftStrategy)}
         onTemplateSelect={handleTemplateSelect}
-        onChangeNaming={(id) => setDraftStrategy((prev) => ({ ...prev, naming_style: id }))}
+        onChangeLanguage={(id) => setDraftStrategy((prev) => ({ ...prev, language: id }))}
+        onChangeDensity={(id) => setDraftStrategy((prev) => ({ ...prev, density: id }))}
+        onChangePrefixStyle={(id) => setDraftStrategy((prev) => ({ ...prev, prefix_style: id }))}
         onChangeCaution={(id) => setDraftStrategy((prev) => ({ ...prev, caution_level: id }))}
         onChangeNote={(value) => setDraftStrategy((prev) => ({ ...prev, note: value }))}
       />

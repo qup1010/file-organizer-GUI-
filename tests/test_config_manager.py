@@ -249,7 +249,9 @@ class ConfigManagerPresetTests(unittest.TestCase):
         active = manager.get_active_config(mask_secrets=False)
 
         self.assertEqual(active["LAUNCH_DEFAULT_TEMPLATE_ID"], "general_downloads")
-        self.assertEqual(active["LAUNCH_DEFAULT_NAMING_STYLE"], "zh")
+        self.assertEqual(active["LAUNCH_DEFAULT_LANGUAGE"], "zh")
+        self.assertEqual(active["LAUNCH_DEFAULT_DENSITY"], "normal")
+        self.assertEqual(active["LAUNCH_DEFAULT_PREFIX_STYLE"], "none")
         self.assertEqual(active["LAUNCH_DEFAULT_CAUTION_LEVEL"], "balanced")
         self.assertEqual(active["LAUNCH_DEFAULT_NOTE"], "")
         self.assertFalse(active["LAUNCH_SKIP_STRATEGY_PROMPT"])

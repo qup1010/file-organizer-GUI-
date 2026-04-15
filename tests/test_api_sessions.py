@@ -92,7 +92,9 @@ class SessionApiTests(unittest.TestCase):
                 "resume_if_exists": False,
                 "strategy": {
                     "template_id": "office_admin",
-                    "naming_style": "en",
+                    "language": "en",
+                    "density": "normal",
+                    "prefix_style": "none",
                     "caution_level": "balanced",
                     "note": "票据优先归财务目录",
                 },
@@ -113,7 +115,9 @@ class SessionApiTests(unittest.TestCase):
                 "resume_if_exists": False,
                 "strategy": {
                     "template_id": "project_workspace",
-                    "naming_style": "en",
+                    "language": "en",
+                    "density": "normal",
+                    "prefix_style": "none",
                     "caution_level": "balanced",
                     "note": "旧策略",
                 },
@@ -127,7 +131,9 @@ class SessionApiTests(unittest.TestCase):
                 "resume_if_exists": True,
                 "strategy": {
                     "template_id": "study_materials",
-                    "naming_style": "zh",
+                    "language": "zh",
+                    "density": "normal",
+                    "prefix_style": "none",
                     "caution_level": "conservative",
                     "note": "新策略不应覆盖旧会话",
                 },

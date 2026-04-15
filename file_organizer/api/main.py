@@ -382,12 +382,13 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
     app.state.icon_workbench_service = IconWorkbenchService()
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-
-
-
-
-
+        allow_origins=[
+            "http://127.0.0.1:3000",
+            "http://localhost:3000",
+            "tauri://localhost",
+            "https://tauri.localhost",
+        ],
+        allow_origin_regex=r"https?://(127\.0\.0\.1|localhost)(:\d+)?$",
         allow_methods=["*"],
         allow_headers=["*"],
     )

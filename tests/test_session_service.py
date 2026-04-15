@@ -80,7 +80,9 @@ class OrganizerSessionServiceTests(unittest.TestCase):
             resume_if_exists=False,
             strategy={
                 "template_id": "project_workspace",
-                "naming_style": "en",
+                "language": "en",
+                "density": "normal",
+                "prefix_style": "none",
                 "caution_level": "balanced",
                 "note": "项目文件尽量按交付物归档",
             },
@@ -91,14 +93,41 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         snapshot = self.service.get_snapshot(session.session_id)
 
         self.assertEqual(session.strategy_template_id, "project_workspace")
-        self.assertEqual(session.naming_style, "en")
+        self.assertEqual(session.language, "en")
+        self.assertEqual(session.density, "normal")
+        self.assertEqual(session.prefix_style, "none")
         self.assertEqual(session.caution_level, "balanced")
         self.assertEqual(session.strategy_note, "项目文件尽量按交付物归档")
         self.assertEqual(session.user_constraints, ["项目文件尽量按交付物归档"])
         self.assertEqual(snapshot["strategy"]["template_id"], "project_workspace")
         self.assertEqual(snapshot["strategy"]["template_label"], "项目资料")
-        self.assertEqual(snapshot["strategy"]["naming_style_label"], "英文目录")
+        self.assertEqual(snapshot["strategy"]["language_label"], "英文目录")
+        self.assertEqual(snapshot["strategy"]["density_label"], "常规分类")
+        self.assertEqual(snapshot["strategy"]["prefix_style_label"], "无前缀")
         self.assertEqual(snapshot["strategy"]["note"], "项目文件尽量按交付物归档")
+
+    def test_create_session_supports_personal_archive_template(self):
+        created = self.service.create_session(
+            str(self.target_dir),
+            resume_if_exists=False,
+            strategy={
+                "template_id": "personal_archive",
+                "language": "zh",
+                "density": "normal",
+                "prefix_style": "none",
+                "caution_level": "balanced",
+                "note": "证件和账单优先分开",
+            },
+        )
+
+        session = created.session
+        assert session is not None
+        snapshot = self.service.get_snapshot(session.session_id)
+
+        self.assertEqual(session.strategy_template_id, "personal_archive")
+        self.assertEqual(snapshot["strategy"]["template_id"], "personal_archive")
+        self.assertEqual(snapshot["strategy"]["template_label"], "个人资料")
+        self.assertEqual(snapshot["strategy"]["note"], "证件和账单优先分开")
 
     def test_create_session_requires_abandon_before_replacing_active_session(self):
         self.service.create_session(str(self.target_dir), resume_if_exists=False)
@@ -1135,7 +1164,9 @@ class OrganizerSessionServiceTests(unittest.TestCase):
             resume_if_exists=False,
             strategy={
                 "template_id": "project_workspace",
-                "naming_style": "en",
+                "language": "en",
+                "density": "normal",
+                "prefix_style": "none",
                 "caution_level": "balanced",
                 "note": "按项目语义整理",
             },
@@ -1161,7 +1192,9 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         _, kwargs = build_messages_mock.call_args
         self.assertIsInstance(kwargs["strategy"], dict)
         self.assertEqual(kwargs["strategy"]["template_id"], "project_workspace")
-        self.assertEqual(kwargs["strategy"]["naming_style"], "en")
+        self.assertEqual(kwargs["strategy"]["language"], "en")
+        self.assertEqual(kwargs["strategy"]["density"], "normal")
+        self.assertEqual(kwargs["strategy"]["prefix_style"], "none")
 
     def test_fail_async_scan_event_includes_interrupted_snapshot(self):
         service = OrganizerSessionService(self.store, scanner=ImmediateScanner())
@@ -1375,7 +1408,9 @@ class OrganizerSessionServiceTests(unittest.TestCase):
             resume_if_exists=False,
             strategy={
                 "template_id": "study_materials",
-                "naming_style": "zh",
+                "language": "zh",
+                "density": "normal",
+                "prefix_style": "none",
                 "caution_level": "conservative",
                 "note": "模糊项都进待确认",
             },

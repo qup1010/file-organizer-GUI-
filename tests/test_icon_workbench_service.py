@@ -2,6 +2,7 @@ import shutil
 import threading
 import time
 import unittest
+import json
 from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
@@ -271,6 +272,32 @@ class IconWorkbenchServiceTests(unittest.TestCase):
         self.assertEqual(deleted["template_id"], updated["template_id"])
         remaining = self.service.list_templates()
         self.assertFalse(any(item["template_id"] == updated["template_id"] for item in remaining))
+
+    def test_template_store_reads_legacy_payload_and_rewrites_with_schema_version(self):
+        legacy_payload = {
+            "user_templates": [
+                {
+                    "template_id": "legacy_template",
+                    "name": "旧模板",
+                    "description": "旧格式",
+                    "prompt_template": "Legacy {{subject}}",
+                    "created_at": "2026-01-01T00:00:00+00:00",
+                    "updated_at": "2026-01-01T00:00:00+00:00",
+                }
+            ]
+        }
+        self.store.templates_path.parent.mkdir(parents=True, exist_ok=True)
+        self.store.templates_path.write_text(json.dumps(legacy_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        loaded = self.service.list_templates()
+        self.assertTrue(any(item["template_id"] == "legacy_template" for item in loaded))
+
+        updated = self.service.update_template("legacy_template", {"description": "已迁移"})
+        self.assertEqual(updated["description"], "已迁移")
+
+        persisted = json.loads(self.store.templates_path.read_text(encoding="utf-8"))
+        self.assertEqual(persisted["schema_version"], 1)
+        self.assertEqual(persisted["user_templates"][0]["template_id"], "legacy_template")
 
     def test_prepare_apply_ready_only_returns_ready_versions(self):
         session = self.service.create_session([str(self.alpha_dir), str(self.beta_dir)])

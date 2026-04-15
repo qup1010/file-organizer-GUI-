@@ -41,10 +41,13 @@ import { buildFamilySavePayload, isEditablePreset } from "@/app/settings/preset-
 import { createApiClient } from "@/lib/api";
 import { getApiBaseUrl, getApiToken, invokeTauriCommand, isTauriDesktop } from "@/lib/runtime";
 import {
+  buildStrategySummary,
   CAUTION_LEVEL_OPTIONS,
+  DENSITY_OPTIONS,
   getSuggestedSelection,
   getTemplateMeta,
-  NAMING_STYLE_OPTIONS,
+  LANGUAGE_OPTIONS,
+  PREFIX_STYLE_OPTIONS,
   STRATEGY_TEMPLATES,
 } from "@/lib/strategy-templates";
 import { cn } from "@/lib/utils";
@@ -311,6 +314,14 @@ export default function SettingsPage() {
   }, []);
 
   const launchTemplate = getTemplateMeta(draft?.global_config.LAUNCH_DEFAULT_TEMPLATE_ID ?? "general_downloads");
+  const launchStrategyPreview = buildStrategySummary({
+    template_id: draft?.global_config.LAUNCH_DEFAULT_TEMPLATE_ID ?? "general_downloads",
+    language: draft?.global_config.LAUNCH_DEFAULT_LANGUAGE ?? "zh",
+    density: draft?.global_config.LAUNCH_DEFAULT_DENSITY ?? "normal",
+    prefix_style: draft?.global_config.LAUNCH_DEFAULT_PREFIX_STYLE ?? "none",
+    caution_level: draft?.global_config.LAUNCH_DEFAULT_CAUTION_LEVEL ?? "balanced",
+    note: draft?.global_config.LAUNCH_DEFAULT_NOTE ?? "",
+  });
 
   const updateDraft = <K extends keyof DraftState>(key: K, updater: (current: DraftState[K]) => DraftState[K]) => {
     setDraft((current) => {
@@ -1238,8 +1249,10 @@ export default function SettingsPage() {
                 <div className="rounded-[12px] border border-on-surface/8 bg-surface px-4 py-4">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-full border border-primary/12 bg-primary/8 px-3 py-1 text-[12px] font-semibold text-primary">{launchTemplate.label}</span>
-                    <span className="rounded-full border border-on-surface/8 bg-surface-container-low px-3 py-1 text-[12px] font-medium text-on-surface-variant">{draft.global_config.LAUNCH_DEFAULT_NAMING_STYLE}</span>
-                    <span className="rounded-full border border-on-surface/8 bg-surface-container-low px-3 py-1 text-[12px] font-medium text-on-surface-variant">{draft.global_config.LAUNCH_DEFAULT_CAUTION_LEVEL}</span>
+                    <span className="rounded-full border border-on-surface/8 bg-surface-container-low px-3 py-1 text-[12px] font-medium text-on-surface-variant">{launchStrategyPreview.language_label}</span>
+                    <span className="rounded-full border border-on-surface/8 bg-surface-container-low px-3 py-1 text-[12px] font-medium text-on-surface-variant">{launchStrategyPreview.density_label}</span>
+                    <span className="rounded-full border border-on-surface/8 bg-surface-container-low px-3 py-1 text-[12px] font-medium text-on-surface-variant">{launchStrategyPreview.prefix_style_label}</span>
+                    <span className="rounded-full border border-on-surface/8 bg-surface-container-low px-3 py-1 text-[12px] font-medium text-on-surface-variant">{launchStrategyPreview.caution_level_label}</span>
                   </div>
                   <p className="mt-3 text-[13px] leading-6 text-on-surface-variant/70">保存后，首页“当前预设”和新任务启动流程会立即读取这些值。</p>
                 </div>
@@ -1254,7 +1267,9 @@ export default function SettingsPage() {
                         onClick={() => {
                           const suggested = getSuggestedSelection(template.id);
                           updateGlobal("LAUNCH_DEFAULT_TEMPLATE_ID", template.id);
-                          updateGlobal("LAUNCH_DEFAULT_NAMING_STYLE", suggested.naming_style);
+                          updateGlobal("LAUNCH_DEFAULT_LANGUAGE", suggested.language);
+                          updateGlobal("LAUNCH_DEFAULT_DENSITY", suggested.density);
+                          updateGlobal("LAUNCH_DEFAULT_PREFIX_STYLE", suggested.prefix_style);
                           updateGlobal("LAUNCH_DEFAULT_CAUTION_LEVEL", suggested.caution_level);
                         }}
                       />
@@ -1262,10 +1277,24 @@ export default function SettingsPage() {
                   </div>
                 </FieldGroup>
                 <div className="grid gap-4 xl:grid-cols-2">
-                  <FieldGroup label="命名风格">
+                  <FieldGroup label="目录语言">
                     <div className="grid gap-3">
-                      {NAMING_STYLE_OPTIONS.map((option) => (
-                        <StrategyOptionButton key={option.id} active={draft.global_config.LAUNCH_DEFAULT_NAMING_STYLE === option.id} label={option.label} description={option.description} onClick={() => updateGlobal("LAUNCH_DEFAULT_NAMING_STYLE", option.id)} />
+                      {LANGUAGE_OPTIONS.map((option) => (
+                        <StrategyOptionButton key={option.id} active={draft.global_config.LAUNCH_DEFAULT_LANGUAGE === option.id} label={option.label} description={option.description} onClick={() => updateGlobal("LAUNCH_DEFAULT_LANGUAGE", option.id)} />
+                      ))}
+                    </div>
+                  </FieldGroup>
+                  <FieldGroup label="分类粒度">
+                    <div className="grid gap-3">
+                      {DENSITY_OPTIONS.map((option) => (
+                        <StrategyOptionButton key={option.id} active={draft.global_config.LAUNCH_DEFAULT_DENSITY === option.id} label={option.label} description={option.description} onClick={() => updateGlobal("LAUNCH_DEFAULT_DENSITY", option.id)} />
+                      ))}
+                    </div>
+                  </FieldGroup>
+                  <FieldGroup label="目录前缀">
+                    <div className="grid gap-3">
+                      {PREFIX_STYLE_OPTIONS.map((option) => (
+                        <StrategyOptionButton key={option.id} active={draft.global_config.LAUNCH_DEFAULT_PREFIX_STYLE === option.id} label={option.label} description={option.description} onClick={() => updateGlobal("LAUNCH_DEFAULT_PREFIX_STYLE", option.id)} />
                       ))}
                     </div>
                   </FieldGroup>

@@ -348,7 +348,9 @@ class OrganizerSessionService:
         normalized_strategy = normalize_strategy_selection(strategy)
         session.strategy_template_id = normalized_strategy["template_id"]
         session.strategy_template_label = normalized_strategy["template_label"]
-        session.naming_style = normalized_strategy["naming_style"]
+        session.language = normalized_strategy["language"]
+        session.density = normalized_strategy["density"]
+        session.prefix_style = normalized_strategy["prefix_style"]
         session.caution_level = normalized_strategy["caution_level"]
         session.strategy_note = normalized_strategy["note"]
         session.user_constraints = [normalized_strategy["note"]] if normalized_strategy["note"] else []
@@ -2075,6 +2077,7 @@ class OrganizerSessionService:
         self._normalize_pending_plan_identifiers(session)
         self._normalize_unresolved_request_blocks(session)
         self._ensure_plan_snapshot_consistency(session)
+        strategy_summary = normalize_strategy_selection(self._strategy_selection(session))
         return {
             "session_id": session.session_id,
             "target_dir": str(session.target_dir),
@@ -2096,13 +2099,19 @@ class OrganizerSessionService:
             "created_at": session.created_at,
             "updated_at": session.updated_at,
             "strategy": {
-                "template_id": session.strategy_template_id,
-                "template_label": session.strategy_template_label,
-                "naming_style": session.naming_style,
-                "naming_style_label": {"zh": "中文目录", "en": "英文目录", "minimal": "极简目录"}.get(session.naming_style, session.naming_style),
-                "caution_level": session.caution_level,
-                "caution_level_label": {"conservative": "保守", "balanced": "平衡"}.get(session.caution_level, session.caution_level),
-                "note": session.strategy_note,
+                "template_id": strategy_summary["template_id"],
+                "template_label": strategy_summary["template_label"],
+                "template_description": strategy_summary["template_description"],
+                "language": strategy_summary["language"],
+                "language_label": strategy_summary["language_label"],
+                "density": strategy_summary["density"],
+                "density_label": strategy_summary["density_label"],
+                "prefix_style": strategy_summary["prefix_style"],
+                "prefix_style_label": strategy_summary["prefix_style_label"],
+                "caution_level": strategy_summary["caution_level"],
+                "caution_level_label": strategy_summary["caution_level_label"],
+                "note": strategy_summary["note"],
+                "preview_directories": strategy_summary["preview_directories"],
             }
         }
 
@@ -2582,7 +2591,9 @@ class OrganizerSessionService:
     def _strategy_selection(self, session: OrganizerSession) -> dict:
         return {
             "template_id": session.strategy_template_id,
-            "naming_style": session.naming_style,
+            "language": session.language,
+            "density": session.density,
+            "prefix_style": session.prefix_style,
             "caution_level": session.caution_level,
             "note": session.strategy_note,
         }

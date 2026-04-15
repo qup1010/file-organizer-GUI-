@@ -46,6 +46,9 @@ function createSnapshot(): SettingsSnapshot {
     global_config: {
       IMAGE_ANALYSIS_ENABLED: true,
       LAUNCH_DEFAULT_TEMPLATE_ID: "general_downloads",
+      LAUNCH_DEFAULT_LANGUAGE: "zh",
+      LAUNCH_DEFAULT_DENSITY: "normal",
+      LAUNCH_DEFAULT_PREFIX_STYLE: "none",
       DEBUG_MODE: false,
     },
     families: {

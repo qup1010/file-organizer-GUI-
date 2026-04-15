@@ -21,15 +21,20 @@ export type StrategyTemplateId =
   | "project_workspace"
   | "study_materials"
   | "office_admin"
-  | "conservative";
+  | "personal_archive"
+  | "media_assets";
 
-export type StrategyNamingStyle = "zh" | "en" | "minimal";
+export type StrategyLanguage = "zh" | "en";
+export type StrategyDensity = "normal" | "minimal";
+export type StrategyPrefixStyle = "none" | "numeric" | "category";
 
 export type StrategyCautionLevel = "conservative" | "balanced";
 
 export interface SessionStrategySelection {
   template_id: StrategyTemplateId;
-  naming_style: StrategyNamingStyle;
+  language: StrategyLanguage;
+  density: StrategyDensity;
+  prefix_style: StrategyPrefixStyle;
   caution_level: StrategyCautionLevel;
   note: string;
 }
@@ -37,14 +42,18 @@ export interface SessionStrategySelection {
 export interface SessionStrategySummary extends SessionStrategySelection {
   template_label: string;
   template_description?: string;
-  naming_style_label: string;
+  language_label: string;
+  density_label: string;
+  prefix_style_label: string;
   caution_level_label: string;
   preview_directories?: string[];
 }
 
 export interface LaunchStrategyConfig {
   LAUNCH_DEFAULT_TEMPLATE_ID?: StrategyTemplateId;
-  LAUNCH_DEFAULT_NAMING_STYLE?: StrategyNamingStyle;
+  LAUNCH_DEFAULT_LANGUAGE?: StrategyLanguage;
+  LAUNCH_DEFAULT_DENSITY?: StrategyDensity;
+  LAUNCH_DEFAULT_PREFIX_STYLE?: StrategyPrefixStyle;
   LAUNCH_DEFAULT_CAUTION_LEVEL?: StrategyCautionLevel;
   LAUNCH_DEFAULT_NOTE?: string;
   LAUNCH_SKIP_STRATEGY_PROMPT?: boolean;

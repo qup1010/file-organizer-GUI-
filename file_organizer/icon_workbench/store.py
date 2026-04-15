@@ -1,13 +1,38 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import time
 from pathlib import Path
+from typing import Any
 
 from file_organizer.icon_workbench.config import IconWorkbenchConfigStore
 from file_organizer.icon_workbench.models import IconTemplate, IconWorkbenchSession
 from file_organizer.icon_workbench.templates import builtin_templates
 from file_organizer.shared.settings_service import SettingsService
+
+
+TEMPLATES_SCHEMA_VERSION = 1
+
+
+def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = path.with_suffix(path.suffix + ".tmp")
+    temp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    max_retries = 5
+    for attempt in range(max_retries):
+        try:
+            if path.exists():
+                os.replace(temp_path, path)
+            else:
+                os.rename(temp_path, path)
+            return
+        except PermissionError:
+            if attempt == max_retries - 1:
+                raise
+            time.sleep(0.05 * (attempt + 1))
 
 
 class IconWorkbenchStore:
@@ -55,7 +80,7 @@ class IconWorkbenchStore:
             self.save_user_templates([])
             return builtin_templates()
 
-        payload = json.loads(self.templates_path.read_text(encoding="utf-8"))
+        payload = self._load_templates_payload()
         users = [IconTemplate.from_dict(item) for item in payload.get("user_templates", [])]
         for user_template in users:
             user_template.is_builtin = False
@@ -63,6 +88,7 @@ class IconWorkbenchStore:
 
     def save_user_templates(self, templates: list[IconTemplate]) -> None:
         data = {
+            "schema_version": TEMPLATES_SCHEMA_VERSION,
             "user_templates": [
                 {
                     **template.to_dict(),
@@ -71,5 +97,23 @@ class IconWorkbenchStore:
                 for template in templates
             ]
         }
-        self.templates_path.parent.mkdir(parents=True, exist_ok=True)
-        self.templates_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        _atomic_write_json(self.templates_path, data)
+
+    def _load_templates_payload(self) -> dict[str, Any]:
+        payload = json.loads(self.templates_path.read_text(encoding="utf-8"))
+        if isinstance(payload, list):
+            return {
+                "schema_version": TEMPLATES_SCHEMA_VERSION,
+                "user_templates": payload,
+            }
+
+        if isinstance(payload, dict):
+            return {
+                "schema_version": int(payload.get("schema_version", TEMPLATES_SCHEMA_VERSION) or TEMPLATES_SCHEMA_VERSION),
+                "user_templates": list(payload.get("user_templates", [])),
+            }
+
+        return {
+            "schema_version": TEMPLATES_SCHEMA_VERSION,
+            "user_templates": [],
+        }

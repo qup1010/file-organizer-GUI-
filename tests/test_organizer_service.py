@@ -2,6 +2,7 @@ import unittest
 
 from file_organizer.organize import service as organizer_service
 from file_organizer.organize.prompts import build_prompt
+from file_organizer.organize.strategy_templates import build_preview_directories
 
 
 class OrganizerServiceTests(unittest.TestCase):
@@ -45,7 +46,9 @@ class OrganizerServiceTests(unittest.TestCase):
             "合同.pdf | 财务/合同 | 付款协议",
             {
                 "template_id": "office_admin",
-                "naming_style": "en",
+                "language": "en",
+                "density": "minimal",
+                "prefix_style": "category",
                 "caution_level": "conservative",
                 "note": "票据优先归财务目录",
             },
@@ -53,8 +56,20 @@ class OrganizerServiceTests(unittest.TestCase):
 
         self.assertIn("办公事务", prompt)
         self.assertIn("英文目录", prompt)
+        self.assertIn("分类粒度：极简", prompt)
+        self.assertIn("类别标签前缀", prompt)
         self.assertIn("整理保守度：保守", prompt)
         self.assertIn("票据优先归财务目录", prompt)
+
+    def test_build_preview_directories_applies_density_and_prefix_style(self):
+        preview = build_preview_directories(
+            "media_assets",
+            language="zh",
+            density="minimal",
+            prefix_style="numeric",
+        )
+
+        self.assertEqual(preview[:3], ["01_截图", "02_媒体", "03_设计"])
 
 
 if __name__ == "__main__":
