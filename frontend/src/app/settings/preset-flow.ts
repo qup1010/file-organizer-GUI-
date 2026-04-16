@@ -11,7 +11,7 @@ type FamilyFields = {
 };
 
 export function isEditablePreset(presetId: string | null | undefined): boolean {
-  return Boolean(presetId && presetId !== "default");
+  return Boolean(presetId);
 }
 
 export function buildFamilySavePayload(family: "text", fields: FamilyFields["text"]): { preset: FamilyFields["text"] };

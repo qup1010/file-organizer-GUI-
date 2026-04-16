@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 import os
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from queue import Queue
+from threading import Lock
 
 from file_organizer.icon_workbench.client import (
     IconWorkbenchImageClient,
@@ -22,6 +25,8 @@ from file_organizer.icon_workbench.store import IconWorkbenchStore
 from file_organizer.icon_workbench.templates import render_prompt_template
 from file_organizer.shared.config_manager import config_manager
 
+logger = logging.getLogger(__name__)
+
 
 class IconWorkbenchService:
     MISSING_TARGET_ERROR = "目标文件夹不存在。"
@@ -37,6 +42,9 @@ class IconWorkbenchService:
         self.store = store or IconWorkbenchStore(root, settings_service=config_manager.service)
         self.text_client = text_client or IconWorkbenchTextClient()
         self.image_client = image_client or IconWorkbenchImageClient()
+        self._event_log: dict[str, list[dict]] = {}
+        self._subscribers: dict[str, list[Queue]] = {}
+        self._event_lock = Lock()
 
     def create_session(self, target_paths: list[str]) -> dict:
         normalized_paths = self._normalize_target_paths(target_paths)
@@ -47,6 +55,8 @@ class IconWorkbenchService:
         )
         self.store.remove_session_assets(session.session_id)
         self.store.save_session(session)
+        self._log_runtime_event("session.created", session, target_count=len(session.folders))
+        self._record_event("icon.session.created", session)
         return self._serialize_session(session)
 
     def get_session(self, session_id: str) -> dict:
@@ -77,6 +87,7 @@ class IconWorkbenchService:
         self.store.save_session(session)
         for folder_id in removed_ids:
             self.store.remove_folder_assets(session.session_id, folder_id)
+        self._record_event("icon.targets.updated", session, mode=normalized_mode, removed_ids=removed_ids)
         return self._serialize_session(session)
 
     def remove_session_target(self, session_id: str, folder_id: str) -> dict:
@@ -89,6 +100,7 @@ class IconWorkbenchService:
         session.updated_at = utc_now_iso()
         self.store.save_session(session)
         self.store.remove_folder_assets(session.session_id, folder_id)
+        self._record_event("icon.targets.updated", session, mode="remove", removed_ids=[folder_id])
         return self._serialize_session(session)
 
     def analyze_folders(self, session_id: str, folder_ids: list[str] | None = None) -> dict:
@@ -98,7 +110,22 @@ class IconWorkbenchService:
             raise ValueError("请先在全局设置中填写文本模型接口地址、模型 ID 和 API 密钥。")
 
         targets = self._resolve_target_folders(session, folder_ids)
-        for folder, outcome in self._run_folder_jobs(
+        total_targets = len(targets)
+        for folder in targets:
+            folder.analysis_status = "analyzing"
+            folder.last_error = None
+            folder.updated_at = utc_now_iso()
+        session.updated_at = utc_now_iso()
+        self.store.save_session(session)
+        self._log_runtime_event("analysis.started", session, total=total_targets)
+        self._record_event(
+            "icon.analysis.started",
+            session,
+            progress=self._build_progress_payload("analyzing", total_targets, 0),
+        )
+
+        completed = 0
+        for folder, outcome in self._iter_folder_jobs(
             targets,
             max_workers=config.analysis_concurrency_limit,
             worker=self._analyze_folder_job,
@@ -117,9 +144,38 @@ class IconWorkbenchService:
                 folder.analysis_status = "error"
                 folder.last_error = outcome["error"]
             folder.updated_at = utc_now_iso()
+            completed += 1
+            session.updated_at = utc_now_iso()
+            self.store.save_session(session)
+            self._log_runtime_event(
+                "analysis.progress",
+                session,
+                completed=completed,
+                total=total_targets,
+                folder_name=folder.folder_name,
+                status=folder.analysis_status,
+            )
+            self._record_event(
+                "icon.analysis.progress",
+                session,
+                progress=self._build_progress_payload(
+                    "analyzing",
+                    total_targets,
+                    completed,
+                    current_folder=folder,
+                ),
+                folder_id=folder.folder_id,
+                status=folder.analysis_status,
+            )
 
         session.updated_at = utc_now_iso()
         self.store.save_session(session)
+        self._log_runtime_event("analysis.completed", session, total=total_targets)
+        self._record_event(
+            "icon.analysis.completed",
+            session,
+            progress=self._build_progress_payload("analyzing", total_targets, total_targets),
+        )
         return self._serialize_session(session)
 
     def update_folder_prompt(self, session_id: str, folder_id: str, prompt: str) -> dict:
@@ -144,28 +200,98 @@ class IconWorkbenchService:
             raise ValueError("请先在全局设置中填写图标工坊的图像生成接口地址、模型 ID 和 API 密钥。")
 
         targets = self._resolve_target_folders(session, folder_ids)
-        for folder, outcome in self._run_folder_jobs(
-            targets,
-            max_workers=config.image_concurrency_limit,
-            worker=self._generate_preview_job,
-            session_id=session.session_id,
-            config=config,
-        ):
-            if outcome["status"] == "missing_prompt":
+        prepared_targets: list[FolderIconCandidate] = []
+        total_targets = len(targets)
+        for folder in targets:
+            prompt = folder.current_prompt.strip() or (folder.analysis.suggested_prompt if folder.analysis else "")
+            if not prompt:
                 folder.last_error = "请先分析文件夹或手动填写提示词。"
                 folder.updated_at = utc_now_iso()
                 continue
 
-            folder.versions.append(outcome["version"])
-            if outcome["status"] == "ok":
-                folder.current_version_id = outcome["version"].version_id
-                folder.last_error = None
-            else:
-                folder.last_error = outcome["error"]
+            version_number = len(folder.versions) + 1
+            version_id = uuid.uuid4().hex
+            image_path = self.store.preview_directory(session.session_id, folder.folder_id) / f"v{version_number}.png"
+            folder.versions.append(
+                IconPreviewVersion(
+                    version_id=version_id,
+                    version_number=version_number,
+                    prompt=prompt,
+                    image_path=str(image_path.resolve()),
+                    status="generating",
+                )
+            )
+            folder.current_version_id = version_id
+            folder.last_error = None
             folder.updated_at = utc_now_iso()
+            prepared_targets.append(folder)
 
         session.updated_at = utc_now_iso()
         self.store.save_session(session)
+        self._log_runtime_event(
+            "generation.started",
+            session,
+            total=total_targets,
+            runnable=len(prepared_targets),
+        )
+        self._record_event(
+            "icon.generation.started",
+            session,
+            progress=self._build_progress_payload("generating", total_targets, 0),
+        )
+
+        completed = 0
+        for folder, outcome in self._iter_folder_jobs(
+            prepared_targets,
+            max_workers=config.image_concurrency_limit,
+            worker=self._generate_preview_job,
+            config=config,
+        ):
+            target_version = next((item for item in folder.versions if item.version_id == folder.current_version_id), None)
+            if not target_version:
+                continue
+
+            if outcome["status"] == "ok":
+                target_version.status = "ready"
+                target_version.error_message = None
+                folder.last_error = None
+            else:
+                target_version.status = "error"
+                target_version.error_message = outcome["error"]
+                folder.last_error = outcome["error"]
+            folder.updated_at = utc_now_iso()
+            completed += 1
+            session.updated_at = utc_now_iso()
+            self.store.save_session(session)
+            self._log_runtime_event(
+                "generation.progress",
+                session,
+                completed=completed,
+                total=total_targets,
+                folder_name=folder.folder_name,
+                status=target_version.status,
+            )
+            self._record_event(
+                "icon.generation.progress",
+                session,
+                progress=self._build_progress_payload(
+                    "generating",
+                    total_targets,
+                    completed,
+                    current_folder=folder,
+                ),
+                folder_id=folder.folder_id,
+                status=target_version.status,
+            )
+
+        session.updated_at = utc_now_iso()
+        self.store.save_session(session)
+        self._log_runtime_event("generation.completed", session, total=total_targets)
+        self._record_event(
+            "icon.generation.completed",
+            session,
+            progress=self._build_progress_payload("generating", total_targets, total_targets),
+        )
         return self._serialize_session(session)
 
     def add_processed_version(
@@ -227,6 +353,38 @@ class IconWorkbenchService:
                     raise FileNotFoundError(version.image_path)
                 return path
         raise FileNotFoundError(version_id)
+
+    def delete_version(self, session_id: str, folder_id: str, version_id: str) -> dict:
+        session = self.store.load_session(session_id)
+        folder = self._get_folder(session, folder_id)
+        target_version = next((version for version in folder.versions if version.version_id == version_id), None)
+        if not target_version:
+            raise FileNotFoundError(version_id)
+
+        folder.versions = [version for version in folder.versions if version.version_id != version_id]
+        if folder.current_version_id == version_id:
+            ready_versions = [version for version in folder.versions if version.status == "ready"]
+            folder.current_version_id = (
+                max(ready_versions, key=lambda version: version.version_number).version_id if ready_versions else None
+            )
+        image_path = Path(target_version.image_path)
+        try:
+            if image_path.exists():
+                image_path.unlink()
+        except OSError:
+            logger.warning("icon_workbench.version.delete_file_failed path=%s", image_path, exc_info=True)
+
+        folder.updated_at = utc_now_iso()
+        session.updated_at = utc_now_iso()
+        self.store.save_session(session)
+        self._log_runtime_event(
+            "version.deleted",
+            session,
+            folder_name=folder.folder_name,
+            version_id=version_id,
+        )
+        self._record_event("icon.version.deleted", session, folder_id=folder_id, version_id=version_id)
+        return self._serialize_session(session)
 
     def get_config(self) -> dict:
         return self.store.config_store.get_payload()
@@ -494,32 +652,31 @@ class IconWorkbenchService:
             if os.path.abspath(folder.folder_path).lower() not in next_path_set
         ]
 
-    def _run_folder_jobs(
+    def _iter_folder_jobs(
         self,
         folders: list[FolderIconCandidate],
         *,
         max_workers: int,
         worker,
         **worker_kwargs,
-    ) -> list[tuple[FolderIconCandidate, dict]]:
+    ):
         if not folders:
-            return []
+            return
 
         worker_count = max(1, min(int(max_workers or 1), len(folders)))
         if worker_count == 1:
-            return [(folder, worker(folder, **worker_kwargs)) for folder in folders]
+            for folder in folders:
+                yield folder, worker(folder, **worker_kwargs)
+            return
 
-        outcomes: dict[str, dict] = {}
         with ThreadPoolExecutor(max_workers=worker_count) as executor:
             futures = {
-                executor.submit(worker, folder, **worker_kwargs): folder.folder_id
+                executor.submit(worker, folder, **worker_kwargs): folder
                 for folder in folders
             }
             for future in as_completed(futures):
-                folder_id = futures[future]
-                outcomes[folder_id] = future.result()
-
-        return [(folder, outcomes[folder.folder_id]) for folder in folders]
+                folder = futures[future]
+                yield folder, future.result()
 
     def _analyze_folder_job(self, folder: FolderIconCandidate, *, config) -> dict:
         try:
@@ -534,40 +691,20 @@ class IconWorkbenchService:
         except Exception as exc:
             return {"status": "error", "error": str(exc)}
 
-    def _generate_preview_job(self, folder: FolderIconCandidate, *, session_id: str, config) -> dict:
+    def _generate_preview_job(self, folder: FolderIconCandidate, *, config) -> dict:
         prompt = folder.current_prompt.strip() or (folder.analysis.suggested_prompt if folder.analysis else "")
         if not prompt:
             return {"status": "missing_prompt"}
-
-        version_number = len(folder.versions) + 1
-        version_id = uuid.uuid4().hex
-        image_path = self.store.preview_directory(session_id, folder.folder_id) / f"v{version_number}.png"
+        target_version = next((item for item in folder.versions if item.version_id == folder.current_version_id), None)
+        if not target_version:
+            return {"status": "error", "error": "图标版本初始化失败"}
+        image_path = Path(target_version.image_path)
         try:
             image_bytes = self.image_client.generate_png(config.image_model, prompt, config.image_size)
             image_path.write_bytes(image_bytes)
-            return {
-                "status": "ok",
-                "version": IconPreviewVersion(
-                    version_id=version_id,
-                    version_number=version_number,
-                    prompt=prompt,
-                    image_path=str(image_path.resolve()),
-                    status="ready",
-                ),
-            }
+            return {"status": "ok"}
         except Exception as exc:
-            return {
-                "status": "error",
-                "error": str(exc),
-                "version": IconPreviewVersion(
-                    version_id=version_id,
-                    version_number=version_number,
-                    prompt=prompt,
-                    image_path=str(image_path.resolve()),
-                    status="error",
-                    error_message=str(exc),
-                ),
-            }
+            return {"status": "error", "error": str(exc)}
 
     def _resolve_target_folders(
         self,
@@ -607,3 +744,55 @@ class IconWorkbenchService:
             )
         )
         return payload
+
+    def subscribe(self, session_id: str) -> Queue:
+        subscriber: Queue = Queue()
+        with self._event_lock:
+            self._subscribers.setdefault(session_id, []).append(subscriber)
+        return subscriber
+
+    def unsubscribe(self, session_id: str, subscriber: Queue) -> None:
+        with self._event_lock:
+            current = self._subscribers.get(session_id, [])
+            self._subscribers[session_id] = [item for item in current if item is not subscriber]
+            if not self._subscribers[session_id]:
+                self._subscribers.pop(session_id, None)
+
+    def _build_progress_payload(
+        self,
+        stage: str,
+        total_folders: int,
+        completed_folders: int,
+        current_folder: FolderIconCandidate | None = None,
+    ) -> dict:
+        return {
+            "stage": stage,
+            "totalFolders": max(0, total_folders),
+            "completedFolders": max(0, completed_folders),
+            "currentFolderId": current_folder.folder_id if current_folder else None,
+            "currentFolderName": current_folder.folder_name if current_folder else None,
+        }
+
+    def _log_runtime_event(self, event_type: str, session: IconWorkbenchSession, **payload) -> None:
+        extras = " ".join(f"{key}={value}" for key, value in payload.items() if value not in {None, ""})
+        suffix = f" {extras}" if extras else ""
+        logger.info(
+            "icon_workbench.%s session_id=%s target_count=%s%s",
+            event_type,
+            session.session_id,
+            len(session.folders),
+            suffix,
+        )
+
+    def _record_event(self, event_type: str, session: IconWorkbenchSession, **kwargs) -> None:
+        event = {
+            "event_type": event_type,
+            "session_id": session.session_id,
+            "session_snapshot": self._serialize_session(session),
+            **kwargs,
+        }
+        with self._event_lock:
+            self._event_log.setdefault(session.session_id, []).append(event)
+            subscribers = list(self._subscribers.get(session.session_id, []))
+        for subscriber in subscribers:
+            subscriber.put(event)

@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Check, ZoomIn, LoaderCircle, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { IconPreviewVersion } from "@/types/icon-workbench";
@@ -41,9 +41,15 @@ export function IconWorkbenchVersionThumb({
 }: IconWorkbenchVersionThumbProps) {
   const isReady = version.status === "ready";
   const isGenerating = version.status === "generating";
-  
-  // 给图片路径加上时间戳参数刷新缓存，假设每次抠图后前端都会改变这个URL或添加时间戳
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
+
   const imgSrc = isReady ? buildImageSrc(version, baseUrl, apiToken) : "";
+
+  useEffect(() => {
+    setImageLoaded(false);
+    setImageFailed(false);
+  }, [version.version_id, imgSrc]);
 
   return (
     <div
@@ -58,11 +64,32 @@ export function IconWorkbenchVersionThumb({
       {/* 图片预览 */}
       <div className="relative aspect-square overflow-hidden rounded-lg border border-on-surface/4 bg-surface-container-lowest">
         {isReady ? (
-          <img
-            src={imgSrc}
-            alt={`v${version.version_number}`}
-            className="h-full w-full object-cover relative z-10"
-          />
+          <>
+            {!imageLoaded && !imageFailed ? (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-surface-container-lowest">
+                <LoaderCircle className="h-5 w-5 animate-spin text-primary/40" />
+              </div>
+            ) : null}
+            {imageFailed ? (
+              <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-error/60">
+                <AlertCircle className="h-6 w-6" />
+                <span className="text-[10px] font-medium">加载失败</span>
+              </div>
+            ) : (
+              <img
+                src={imgSrc}
+                alt={`v${version.version_number}`}
+                loading="lazy"
+                decoding="async"
+                onLoad={() => setImageLoaded(true)}
+                onError={() => setImageFailed(true)}
+                className={cn(
+                  "relative z-10 h-full w-full object-cover transition-opacity duration-200",
+                  imageLoaded ? "opacity-100" : "opacity-0",
+                )}
+              />
+            )}
+          </>
         ) : isGenerating ? (
           <div className="flex h-full w-full items-center justify-center">
             <LoaderCircle className="h-6 w-6 animate-spin text-primary/40" />

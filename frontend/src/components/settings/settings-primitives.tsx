@@ -358,16 +358,14 @@ export function PresetSelector({
                     <p className="mt-0.5 text-[11px] text-on-surface-variant/45">{preset.id}</p>
                   </div>
                 </button>
-                {preset.id !== "default" ? (
-                  <button
-                    type="button"
-                    onClick={() => onDelete(preset)}
-                    className="rounded-[10px] p-2 text-on-surface-variant/35 transition-colors hover:bg-error/6 hover:text-error"
-                    aria-label={`删除预设 ${preset.name}`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                ) : null}
+                <button
+                  type="button"
+                  onClick={() => onDelete(preset)}
+                  className="rounded-[10px] p-2 text-on-surface-variant/35 transition-colors hover:bg-error/6 hover:text-error"
+                  aria-label={`删除预设 ${preset.name}`}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
               </div>
             );
           })}

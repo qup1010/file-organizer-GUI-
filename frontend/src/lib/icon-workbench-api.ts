@@ -59,6 +59,7 @@ export interface IconWorkbenchApiClient {
   generatePreviews(session_id: string, folder_ids: string[]): Promise<IconWorkbenchSession>;
   updatePrompt(session_id: string, folder_id: string, prompt: string): Promise<IconWorkbenchSession>;
   selectVersion(session_id: string, folder_id: string, version_id: string): Promise<IconWorkbenchSession>;
+  deleteVersion(session_id: string, folder_id: string, version_id: string): Promise<IconWorkbenchSession>;
   getConfig(): Promise<IconWorkbenchConfigPayload>;
   updateConfig(config: IconWorkbenchConfig): Promise<IconWorkbenchConfig>;
   switchConfigPreset(id: string): Promise<IconWorkbenchConfigPayload>;
@@ -168,6 +169,14 @@ export function createIconWorkbenchApiClient(baseUrl: string, apiToken?: string)
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ version_id }),
         },
+        apiToken,
+      );
+    },
+    async deleteVersion(session_id, folder_id, version_id) {
+      return requestJson<IconWorkbenchSession>(
+        baseUrl,
+        `/api/icon-workbench/sessions/${session_id}/folders/${folder_id}/versions/${version_id}`,
+        { method: "DELETE" },
         apiToken,
       );
     },

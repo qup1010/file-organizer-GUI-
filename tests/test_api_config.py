@@ -258,7 +258,9 @@ class ApiConfigTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "ok")
-        openai_mock.assert_called_once_with(api_key="text-secret", base_url="https://text.example/v1")
+        openai_mock.assert_called_once()
+        self.assertEqual(openai_mock.call_args.kwargs["api_key"], "text-secret")
+        self.assertEqual(openai_mock.call_args.kwargs["base_url"], "https://text.example/v1")
         mock_client.chat.completions.create.assert_called_once()
 
     def test_test_settings_vision_sends_inline_image_probe(self):
@@ -381,7 +383,9 @@ class ApiConfigTests(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 200)
-        openai_mock.assert_called_once_with(api_key="stored-text-key", base_url="https://text.example/v1")
+        openai_mock.assert_called_once()
+        self.assertEqual(openai_mock.call_args.kwargs["api_key"], "stored-text-key")
+        self.assertEqual(openai_mock.call_args.kwargs["base_url"], "https://text.example/v1")
 
     def test_create_app_does_not_register_duplicate_api_routes(self):
         route_counts = Counter(

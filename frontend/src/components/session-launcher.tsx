@@ -62,6 +62,7 @@ export function SessionLauncher() {
   const [draftStrategy, setDraftStrategy] = useState<SessionStrategySelection>(DEFAULT_STRATEGY_SELECTION);
   const [launchSkipPrompt, setLaunchSkipPrompt] = useState(false);
   const [launchPreferencesLoaded, setLaunchPreferencesLoaded] = useState(false);
+  const [textModelConfigured, setTextModelConfigured] = useState(true);
   const [effectiveLaunchStrategy, setEffectiveLaunchStrategy] = useState<SessionStrategySelection>(DEFAULT_STRATEGY_SELECTION);
   const [loading, setLoading] = useState(false);
   const [launchTransitionOpen, setLaunchTransitionOpen] = useState(false);
@@ -109,6 +110,7 @@ export function SessionLauncher() {
         setDraftStrategy(strategy);
         setEffectiveLaunchStrategy(strategy);
         setLaunchSkipPrompt(shouldSkipLaunchStrategyPrompt(data.global_config));
+        setTextModelConfigured(Boolean(data.status?.text_configured));
         setLaunchPreferencesLoaded(true);
       } catch {
         if (cancelled) {
@@ -118,6 +120,7 @@ export function SessionLauncher() {
         setDraftStrategy(DEFAULT_STRATEGY_SELECTION);
         setEffectiveLaunchStrategy(DEFAULT_STRATEGY_SELECTION);
         setLaunchSkipPrompt(false);
+        setTextModelConfigured(true);
         setLaunchPreferencesLoaded(true);
       }
     }
@@ -259,6 +262,10 @@ export function SessionLauncher() {
   }
 
   async function handlePrimaryLaunch() {
+    if (!textModelConfigured) {
+      setError("请先在设置中配置文本模型，然后再开始整理分析。");
+      return;
+    }
     if (launchSkipPrompt) {
       await launchWithStrategy(savedLaunchStrategy);
       return;
@@ -378,6 +385,29 @@ export function SessionLauncher() {
               </div>
             </div>
 
+            {!textModelConfigured && (
+              <div className="mb-5 flex items-center justify-between gap-4 rounded-[8px] border border-warning/18 bg-warning-container/18 px-5 py-4 shadow-[0_12px_32px_rgba(0,0,0,0.04)]">
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-warning/12 text-warning">
+                    <AlertTriangle className="h-4.5 w-4.5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[14px] font-black tracking-tight text-on-surface">AI 文本模型尚未配置</p>
+                    <p className="mt-1 text-[12px] font-medium leading-6 text-ui-muted">
+                      未配置文本模型时，系统只能扫描目录结构，无法稳定完成用途分析和整理规划。建议先前往“设置 &gt; 文本模型”完成配置。
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => router.push("/settings")}
+                  className="shrink-0 rounded-[6px] border border-warning/15 bg-surface px-4 py-2 text-[12px] font-black text-on-surface transition-colors hover:border-warning/30 hover:text-warning"
+                >
+                  去配置文本模型
+                </button>
+              </div>
+            )}
+
             {/* List-style Settings Group */}
             <div className="overflow-hidden rounded-[8px] border border-on-surface/8 bg-surface-container-lowest shadow-[0_12px_44px_rgba(0,0,0,0.06)]">
 
@@ -485,7 +515,7 @@ export function SessionLauncher() {
                 <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between gap-2.5 shrink-0 pt-0.5">
                   <button
                     onClick={() => openStrategyDialog()}
-                    disabled={loading || !targetDir.trim()}
+                    disabled={loading || !targetDir.trim() || !textModelConfigured}
                     className="flex shrink-0 items-center justify-center gap-1.5 h-9 px-4 rounded-[4px] border border-on-surface/8 bg-surface hover:bg-on-surface/5 text-[12px] font-bold text-on-surface-variant transition-colors hover:text-on-surface disabled:opacity-50 shadow-sm"
                   >
                     修改规则 <ChevronRight className="h-3.5 w-3.5 opacity-70" />
@@ -503,16 +533,20 @@ export function SessionLauncher() {
             {/* Actions */}
             <div className="mt-6 flex flex-col sm:flex-row items-center justify-end gap-6 sm:pl-4">
               <div className="flex-1 text-center sm:text-left">
-                {launchSkipPrompt && (
+                {!textModelConfigured ? (
+                  <p className="text-[12px] font-bold text-warning flex items-center justify-center sm:justify-start gap-1.5">
+                    <AlertTriangle className="w-4 h-4" /> 未配置文本模型前，不能启动整理分析
+                  </p>
+                ) : launchSkipPrompt ? (
                   <p className="text-[12px] font-bold text-primary/80 flex items-center justify-center sm:justify-start gap-1.5">
                     <Sparkles className="w-4 h-4" /> 快速直达已开启
                   </p>
-                )}
+                ) : null}
               </div>
               <Button
                 variant="primary"
                 onClick={() => void handlePrimaryLaunch()}
-                disabled={loading || !targetDir.trim()}
+                disabled={loading || !targetDir.trim() || !textModelConfigured}
                 loading={loading}
                 className="h-10 w-full sm:w-auto min-w-[160px] rounded-[4px] text-[13px] font-bold shadow-sm"
               >

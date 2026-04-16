@@ -81,6 +81,9 @@ class FakeIconWorkbenchService:
     def select_version(self, session_id, folder_id, version_id):
         return {"session_id": session_id, "folder_id": folder_id, "version_id": version_id}
 
+    def delete_version(self, session_id, folder_id, version_id):
+        return {"session_id": session_id, "folder_id": folder_id, "deleted_version_id": version_id}
+
     def get_version_image_path(self, session_id, folder_id, version_id):
         return self.image_path
 
@@ -253,6 +256,12 @@ class ApiIconWorkbenchTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["version_id"], "version-1")
 
+        response = self.client.delete(
+            "/api/icon-workbench/sessions/icon-session/folders/folder-1/versions/version-1"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["deleted_version_id"], "version-1")
+
         response = self.client.get("/api/icon-workbench/config")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["config"]["image_size"], "512x512")
@@ -378,6 +387,15 @@ class ApiIconWorkbenchTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["content-type"], "image/png")
+
+    def test_events_route_returns_initial_snapshot(self):
+        response = self.client.get(
+            "/api/icon-workbench/sessions/icon-session/events",
+            headers={"x-file-organizer-once": "1"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("event: icon.session.snapshot", response.text)
 
 
 if __name__ == "__main__":

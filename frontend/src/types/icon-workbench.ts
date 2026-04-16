@@ -89,6 +89,24 @@ export interface IconWorkbenchSession {
   ready_count: number;
 }
 
+export interface IconWorkbenchProgressPayload {
+  stage: "analyzing" | "applying_template" | "generating" | string;
+  totalFolders: number;
+  completedFolders: number;
+  currentFolderId: string | null;
+  currentFolderName: string | null;
+}
+
+export interface IconWorkbenchEvent {
+  event_type: string;
+  session_id: string;
+  session_snapshot?: IconWorkbenchSession;
+  progress?: IconWorkbenchProgressPayload;
+  folder_id?: string | null;
+  version_id?: string | null;
+  status?: string | null;
+}
+
 export interface IconWorkbenchTargetUpdatePayload {
   target_paths: string[];
   mode?: "append" | "replace";

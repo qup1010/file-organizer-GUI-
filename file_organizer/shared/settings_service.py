@@ -14,6 +14,7 @@ from file_organizer.shared.constants import (
 )
 
 DEFAULT_PRESET_ID = "default"
+EMPTY_PRESET_ID = ""
 SETTINGS_VERSION = 2
 
 TEXT_FAMILY = "text"
@@ -144,13 +145,13 @@ class SettingsService:
             or (self._config_path.parent / "output" / "icon_workbench" / "config.json")
         )
         self._global_config = copy.deepcopy(DEFAULT_GLOBAL_CONFIG)
-        self._text_presets = {DEFAULT_PRESET_ID: copy.deepcopy(DEFAULT_TEXT_PRESET)}
-        self._vision_presets = {DEFAULT_PRESET_ID: copy.deepcopy(DEFAULT_VISION_PRESET)}
-        self._icon_image_presets = {DEFAULT_PRESET_ID: copy.deepcopy(DEFAULT_ICON_IMAGE_PRESET)}
+        self._text_presets: dict[str, dict[str, Any]] = {}
+        self._vision_presets: dict[str, dict[str, Any]] = {}
+        self._icon_image_presets: dict[str, dict[str, Any]] = {}
         self._bg_removal = copy.deepcopy(DEFAULT_BG_REMOVAL_CONFIG)
-        self._active_text_preset_id = DEFAULT_PRESET_ID
-        self._active_vision_preset_id = DEFAULT_PRESET_ID
-        self._active_icon_image_preset_id = DEFAULT_PRESET_ID
+        self._active_text_preset_id = EMPTY_PRESET_ID
+        self._active_vision_preset_id = EMPTY_PRESET_ID
+        self._active_icon_image_preset_id = EMPTY_PRESET_ID
         self._load()
         self._apply_to_env()
 
@@ -235,19 +236,26 @@ class SettingsService:
             "custom": self._sanitize_bg_removal_custom(data.get("custom")),
         }
 
+    def _normalize_active_preset_id(self, presets: dict[str, dict[str, Any]], active_preset_id: str) -> str:
+        if active_preset_id and active_preset_id in presets:
+            return active_preset_id
+        if presets:
+            return next(iter(presets))
+        return EMPTY_PRESET_ID
+
+    def _prune_placeholder_default_presets(self) -> None:
+        if self._text_presets.get(DEFAULT_PRESET_ID) == self._sanitize_text_preset(DEFAULT_TEXT_PRESET):
+            self._text_presets.pop(DEFAULT_PRESET_ID, None)
+        if self._vision_presets.get(DEFAULT_PRESET_ID) == self._sanitize_vision_preset(DEFAULT_VISION_PRESET):
+            self._vision_presets.pop(DEFAULT_PRESET_ID, None)
+        if self._icon_image_presets.get(DEFAULT_PRESET_ID) == self._sanitize_icon_image_preset(DEFAULT_ICON_IMAGE_PRESET):
+            self._icon_image_presets.pop(DEFAULT_PRESET_ID, None)
+
     def _ensure_defaults(self) -> None:
-        if DEFAULT_PRESET_ID not in self._text_presets:
-            self._text_presets[DEFAULT_PRESET_ID] = copy.deepcopy(DEFAULT_TEXT_PRESET)
-        if DEFAULT_PRESET_ID not in self._vision_presets:
-            self._vision_presets[DEFAULT_PRESET_ID] = copy.deepcopy(DEFAULT_VISION_PRESET)
-        if DEFAULT_PRESET_ID not in self._icon_image_presets:
-            self._icon_image_presets[DEFAULT_PRESET_ID] = copy.deepcopy(DEFAULT_ICON_IMAGE_PRESET)
-        if self._active_text_preset_id not in self._text_presets:
-            self._active_text_preset_id = DEFAULT_PRESET_ID
-        if self._active_vision_preset_id not in self._vision_presets:
-            self._active_vision_preset_id = DEFAULT_PRESET_ID
-        if self._active_icon_image_preset_id not in self._icon_image_presets:
-            self._active_icon_image_preset_id = DEFAULT_PRESET_ID
+        self._prune_placeholder_default_presets()
+        self._active_text_preset_id = self._normalize_active_preset_id(self._text_presets, self._active_text_preset_id)
+        self._active_vision_preset_id = self._normalize_active_preset_id(self._vision_presets, self._active_vision_preset_id)
+        self._active_icon_image_preset_id = self._normalize_active_preset_id(self._icon_image_presets, self._active_icon_image_preset_id)
         self._bg_removal = self._sanitize_bg_removal_config(self._bg_removal)
 
     def _sync_from_env(self) -> None:
@@ -265,25 +273,25 @@ class SettingsService:
             else:
                 flat[key] = raw
         self._global_config = self._sanitize_global(flat)
-        self._text_presets = {DEFAULT_PRESET_ID: self._sanitize_text_preset(flat)}
-        self._vision_presets = {DEFAULT_PRESET_ID: self._sanitize_vision_preset(flat)}
+        self._text_presets = {}
+        self._vision_presets = {}
+        self._active_text_preset_id = EMPTY_PRESET_ID
+        self._active_vision_preset_id = EMPTY_PRESET_ID
 
     def _load_legacy_icon_payload(self) -> tuple[dict[str, dict[str, Any]], str] | None:
         if not self._legacy_icon_config_path.exists():
             return None
         raw = json.loads(self._legacy_icon_config_path.read_text(encoding="utf-8"))
         presets: dict[str, dict[str, Any]] = {}
-        active_id = DEFAULT_PRESET_ID
+        active_id = EMPTY_PRESET_ID
         if "presets" in raw:
-            active_id = str(raw.get("active_preset_id") or DEFAULT_PRESET_ID)
+            active_id = str(raw.get("active_preset_id") or EMPTY_PRESET_ID)
             for preset_id, preset in dict(raw.get("presets", {}) or {}).items():
                 presets[str(preset_id)] = self._sanitize_icon_image_preset(preset)
         else:
             presets[DEFAULT_PRESET_ID] = self._sanitize_icon_image_preset(raw)
-        if DEFAULT_PRESET_ID not in presets:
-            presets[DEFAULT_PRESET_ID] = copy.deepcopy(DEFAULT_ICON_IMAGE_PRESET)
         if active_id not in presets:
-            active_id = DEFAULT_PRESET_ID
+            active_id = self._normalize_active_preset_id(presets, active_id)
         return presets, active_id
 
     def _load_new_schema(self, data: dict[str, Any]) -> None:
@@ -301,9 +309,9 @@ class SettingsService:
             for preset_id, preset in dict(data.get("icon_image_presets", {}) or {}).items()
         }
         self._bg_removal = self._sanitize_bg_removal_config(data.get("bg_removal"))
-        self._active_text_preset_id = str(data.get("active_text_preset_id") or DEFAULT_PRESET_ID)
-        self._active_vision_preset_id = str(data.get("active_vision_preset_id") or DEFAULT_PRESET_ID)
-        self._active_icon_image_preset_id = str(data.get("active_icon_image_preset_id") or DEFAULT_PRESET_ID)
+        self._active_text_preset_id = str(data.get("active_text_preset_id") or EMPTY_PRESET_ID)
+        self._active_vision_preset_id = str(data.get("active_vision_preset_id") or EMPTY_PRESET_ID)
+        self._active_icon_image_preset_id = str(data.get("active_icon_image_preset_id") or EMPTY_PRESET_ID)
 
     def _load_old_root_schema(self, data: dict[str, Any]) -> None:
         if "global_config" in data or "text_presets" in data or "vision_presets" in data:
@@ -316,8 +324,8 @@ class SettingsService:
                 str(preset_id): self._sanitize_vision_preset(preset)
                 for preset_id, preset in dict(data.get("vision_presets", {}) or {}).items()
             }
-            self._active_text_preset_id = str(data.get("active_text_preset_id") or DEFAULT_PRESET_ID)
-            self._active_vision_preset_id = str(data.get("active_vision_preset_id") or DEFAULT_PRESET_ID)
+            self._active_text_preset_id = str(data.get("active_text_preset_id") or EMPTY_PRESET_ID)
+            self._active_vision_preset_id = str(data.get("active_vision_preset_id") or EMPTY_PRESET_ID)
             return
 
         if "config" in data:
@@ -393,13 +401,13 @@ class SettingsService:
         self._config_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def _get_active_text_preset(self) -> dict[str, Any]:
-        return copy.deepcopy(self._text_presets[self._active_text_preset_id])
+        return copy.deepcopy(self._text_presets.get(self._active_text_preset_id) or DEFAULT_TEXT_PRESET)
 
     def _get_active_vision_preset(self) -> dict[str, Any]:
-        return copy.deepcopy(self._vision_presets[self._active_vision_preset_id])
+        return copy.deepcopy(self._vision_presets.get(self._active_vision_preset_id) or DEFAULT_VISION_PRESET)
 
     def _get_active_icon_image_preset(self) -> dict[str, Any]:
-        return copy.deepcopy(self._icon_image_presets[self._active_icon_image_preset_id])
+        return copy.deepcopy(self._icon_image_presets.get(self._active_icon_image_preset_id) or DEFAULT_ICON_IMAGE_PRESET)
 
     def _text_preset_to_public(self, preset_id: str, preset: dict[str, Any]) -> dict[str, Any]:
         return {
@@ -463,7 +471,7 @@ class SettingsService:
             "model_id": custom["model_id"],
             "api_type": custom["api_type"],
             "payload_template": custom["payload_template"],
-            "hf_api_token": custom["hf_api_token"],
+            "hf_api_token": str(custom.get("hf_api_token") or ""),
             "secret_state": _secret_state(custom.get("hf_api_token", "")),
         }
 
@@ -471,13 +479,14 @@ class SettingsService:
         if self._bg_removal.get("mode") == "custom":
             return self._bg_removal_custom_to_public()
         preset = self._get_bg_removal_builtin_preset(str(self._bg_removal.get("preset_id") or DEFAULT_BG_REMOVAL_PRESET_ID))
+        hf_token = str(self._bg_removal.get("custom", {}).get("hf_api_token", "") or "")
         return {
             "name": preset["name"],
             "model_id": preset["model_id"],
             "api_type": preset["api_type"],
             "payload_template": preset["payload_template"],
-            "hf_api_token": str(self._bg_removal.get("custom", {}).get("hf_api_token", "") or ""),
-            "secret_state": _secret_state(str(self._bg_removal.get("custom", {}).get("hf_api_token", "") or "")),
+            "hf_api_token": hf_token,
+            "secret_state": _secret_state(hf_token),
         }
 
     def get_settings_snapshot(self) -> dict[str, Any]:
@@ -565,14 +574,20 @@ class SettingsService:
         return flat.get(key, default)
 
     def is_text_configured(self) -> bool:
+        if self._active_text_preset_id not in self._text_presets:
+            return False
         preset = self._get_active_text_preset()
         return bool(preset.get("OPENAI_BASE_URL") and preset.get("OPENAI_MODEL") and preset.get(TEXT_SECRET_KEY))
 
     def is_vision_configured(self) -> bool:
+        if self._active_vision_preset_id not in self._vision_presets:
+            return False
         preset = self._get_active_vision_preset()
         return bool(preset.get("IMAGE_ANALYSIS_BASE_URL") and preset.get("IMAGE_ANALYSIS_MODEL") and preset.get(VISION_SECRET_KEY))
 
     def is_icon_image_configured(self) -> bool:
+        if self._active_icon_image_preset_id not in self._icon_image_presets:
+            return False
         preset = self._get_active_icon_image_preset()
         image_model = dict(preset.get("image_model") or {})
         return bool(image_model.get("base_url") and image_model.get("model") and image_model.get("api_key"))
@@ -653,6 +668,9 @@ class SettingsService:
         next_vision = copy.deepcopy(self._vision_presets)
         next_icon = copy.deepcopy(self._icon_image_presets)
         next_bg_removal = copy.deepcopy(self._bg_removal)
+        next_active_text_preset_id = self._active_text_preset_id
+        next_active_vision_preset_id = self._active_vision_preset_id
+        next_active_icon_image_preset_id = self._active_icon_image_preset_id
 
         if "global_config" in payload:
             next_global = self._sanitize_global({**next_global, **dict(payload.get("global_config") or {})})
@@ -660,45 +678,61 @@ class SettingsService:
         families = dict(payload.get("families") or {})
         if TEXT_FAMILY in families:
             family_payload = dict(families.get(TEXT_FAMILY) or {})
-            current = copy.deepcopy(next_text[self._active_text_preset_id])
-            if "preset" in family_payload:
-                preset_patch = dict(family_payload.get("preset") or {})
-                current = self._sanitize_text_preset({**current, **preset_patch, TEXT_SECRET_KEY: current.get(TEXT_SECRET_KEY, "")})
-            current[TEXT_SECRET_KEY] = self._apply_secret_action(current.get(TEXT_SECRET_KEY, ""), family_payload.get("secret"))
-            next_text[self._active_text_preset_id] = current
+            if next_active_text_preset_id not in next_text and ("preset" in family_payload or "secret" in family_payload):
+                next_active_text_preset_id = str(uuid.uuid4())[:8]
+                next_text[next_active_text_preset_id] = copy.deepcopy(DEFAULT_TEXT_PRESET)
+            if next_active_text_preset_id in next_text:
+                current = copy.deepcopy(next_text[next_active_text_preset_id])
+                if "preset" in family_payload:
+                    preset_patch = dict(family_payload.get("preset") or {})
+                    current = self._sanitize_text_preset({**current, **preset_patch, TEXT_SECRET_KEY: current.get(TEXT_SECRET_KEY, "")})
+                current[TEXT_SECRET_KEY] = self._apply_secret_action(current.get(TEXT_SECRET_KEY, ""), family_payload.get("secret"))
+                next_text[next_active_text_preset_id] = current
 
         if VISION_FAMILY in families:
             family_payload = dict(families.get(VISION_FAMILY) or {})
-            current = copy.deepcopy(next_vision[self._active_vision_preset_id])
-            if "preset" in family_payload:
-                preset_patch = dict(family_payload.get("preset") or {})
-                current = self._sanitize_vision_preset({**current, **preset_patch, VISION_SECRET_KEY: current.get(VISION_SECRET_KEY, "")})
-            current[VISION_SECRET_KEY] = self._apply_secret_action(current.get(VISION_SECRET_KEY, ""), family_payload.get("secret"))
-            next_vision[self._active_vision_preset_id] = current
+            if next_active_vision_preset_id not in next_vision and ("preset" in family_payload or "secret" in family_payload):
+                next_active_vision_preset_id = str(uuid.uuid4())[:8]
+                next_vision[next_active_vision_preset_id] = copy.deepcopy(DEFAULT_VISION_PRESET)
+            if next_active_vision_preset_id in next_vision:
+                current = copy.deepcopy(next_vision[next_active_vision_preset_id])
+                if "preset" in family_payload:
+                    preset_patch = dict(family_payload.get("preset") or {})
+                    current = self._sanitize_vision_preset({**current, **preset_patch, VISION_SECRET_KEY: current.get(VISION_SECRET_KEY, "")})
+                current[VISION_SECRET_KEY] = self._apply_secret_action(current.get(VISION_SECRET_KEY, ""), family_payload.get("secret"))
+                next_vision[next_active_vision_preset_id] = current
+            elif "secret" in family_payload:
+                self._apply_secret_action("", family_payload.get("secret"))
             if "enabled" in family_payload:
                 next_global["IMAGE_ANALYSIS_ENABLED"] = bool(family_payload.get("enabled"))
 
         if ICON_IMAGE_FAMILY in families:
             family_payload = dict(families.get(ICON_IMAGE_FAMILY) or {})
-            current = copy.deepcopy(next_icon[self._active_icon_image_preset_id])
-            if "preset" in family_payload:
-                preset_patch = dict(family_payload.get("preset") or {})
-                merged_image_model = {
-                    **dict(current.get("image_model") or {}),
-                    **dict(preset_patch.get("image_model") or {}),
-                }
-                current = self._sanitize_icon_image_preset({
-                    **current,
-                    **preset_patch,
-                    "image_model": {
-                        **merged_image_model,
-                        "api_key": dict(current.get("image_model") or {}).get("api_key", ""),
-                    },
-                })
-            image_model = dict(current.get("image_model") or {})
-            image_model["api_key"] = self._apply_secret_action(str(image_model.get("api_key", "") or ""), family_payload.get("secret"))
-            current["image_model"] = image_model
-            next_icon[self._active_icon_image_preset_id] = self._sanitize_icon_image_preset(current)
+            if next_active_icon_image_preset_id not in next_icon and ("preset" in family_payload or "secret" in family_payload):
+                next_active_icon_image_preset_id = str(uuid.uuid4())[:8]
+                next_icon[next_active_icon_image_preset_id] = copy.deepcopy(DEFAULT_ICON_IMAGE_PRESET)
+            if next_active_icon_image_preset_id in next_icon:
+                current = copy.deepcopy(next_icon[next_active_icon_image_preset_id])
+                if "preset" in family_payload:
+                    preset_patch = dict(family_payload.get("preset") or {})
+                    merged_image_model = {
+                        **dict(current.get("image_model") or {}),
+                        **dict(preset_patch.get("image_model") or {}),
+                    }
+                    current = self._sanitize_icon_image_preset({
+                        **current,
+                        **preset_patch,
+                        "image_model": {
+                            **merged_image_model,
+                            "api_key": dict(current.get("image_model") or {}).get("api_key", ""),
+                        },
+                    })
+                image_model = dict(current.get("image_model") or {})
+                image_model["api_key"] = self._apply_secret_action(str(image_model.get("api_key", "") or ""), family_payload.get("secret"))
+                current["image_model"] = image_model
+                next_icon[next_active_icon_image_preset_id] = self._sanitize_icon_image_preset(current)
+            elif "secret" in family_payload:
+                self._apply_secret_action("", family_payload.get("secret"))
 
         if BG_REMOVAL_FAMILY in families:
             family_payload = dict(families.get(BG_REMOVAL_FAMILY) or {})
@@ -726,6 +760,9 @@ class SettingsService:
         self._vision_presets = next_vision
         self._icon_image_presets = next_icon
         self._bg_removal = next_bg_removal
+        self._active_text_preset_id = next_active_text_preset_id
+        self._active_vision_preset_id = next_active_vision_preset_id
+        self._active_icon_image_preset_id = next_active_icon_image_preset_id
         self._ensure_defaults()
         self._apply_to_env()
         self.save()
@@ -806,26 +843,24 @@ class SettingsService:
         self.save()
 
     def delete_preset(self, family: str, preset_id: str) -> None:
-        if preset_id == DEFAULT_PRESET_ID:
-            raise ValueError("默认预设不可删除")
         if family == TEXT_FAMILY:
             if preset_id not in self._text_presets:
                 raise ValueError("文本预设不存在")
             self._text_presets.pop(preset_id, None)
             if self._active_text_preset_id == preset_id:
-                self._active_text_preset_id = DEFAULT_PRESET_ID
+                self._active_text_preset_id = self._normalize_active_preset_id(self._text_presets, EMPTY_PRESET_ID)
         elif family == VISION_FAMILY:
             if preset_id not in self._vision_presets:
                 raise ValueError("图片预设不存在")
             self._vision_presets.pop(preset_id, None)
             if self._active_vision_preset_id == preset_id:
-                self._active_vision_preset_id = DEFAULT_PRESET_ID
+                self._active_vision_preset_id = self._normalize_active_preset_id(self._vision_presets, EMPTY_PRESET_ID)
         elif family == ICON_IMAGE_FAMILY:
             if preset_id not in self._icon_image_presets:
                 raise ValueError("图标生图预设不存在")
             self._icon_image_presets.pop(preset_id, None)
             if self._active_icon_image_preset_id == preset_id:
-                self._active_icon_image_preset_id = DEFAULT_PRESET_ID
+                self._active_icon_image_preset_id = self._normalize_active_preset_id(self._icon_image_presets, EMPTY_PRESET_ID)
         else:
             raise ValueError("不支持的预设类型")
         self._apply_to_env()

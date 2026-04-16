@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
@@ -37,6 +37,7 @@ interface IconWorkbenchFolderCardProps {
   isApplyingId?: string | null;
   desktopReady: boolean;
   hasSelectedStyle: boolean;
+  generateBlockedReason?: string | null;
   isProcessing?: boolean;
   isActiveProcessing?: boolean;
 }
@@ -59,12 +60,20 @@ export function IconWorkbenchFolderCard({
   isApplyingId,
   desktopReady,
   hasSelectedStyle,
+  generateBlockedReason,
   isProcessing,
   isActiveProcessing,
 }: IconWorkbenchFolderCardProps) {
   const currentPreview = useMemo(() => resolvePreviewVersion(folder), [folder]);
   const hasVersions = folder.versions.length > 0;
-  const generateLabel = hasVersions ? "重新生成" : "生成第一版";
+  const generateLabel = "生成新版本";
+  const [previewLoaded, setPreviewLoaded] = useState(false);
+  const [previewFailed, setPreviewFailed] = useState(false);
+
+  useEffect(() => {
+    setPreviewLoaded(false);
+    setPreviewFailed(false);
+  }, [currentPreview?.version_id]);
 
   const status = useMemo(() => {
     if (isActiveProcessing) {
@@ -99,7 +108,27 @@ export function IconWorkbenchFolderCard({
       <div className="flex cursor-pointer items-center gap-3 px-4 py-3" onClick={onToggleExpand}>
         <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-[10px] border border-on-surface/6 bg-surface-container-lowest">
           {currentPreview ? (
-            <img src={buildImageSrc(currentPreview, baseUrl, apiToken)} alt="preview" className="h-full w-full object-cover" />
+            <div className="relative h-full w-full">
+              {!previewLoaded && !previewFailed ? (
+                <div className="absolute inset-0 z-10 flex items-center justify-center bg-surface-container-lowest">
+                  <LoaderCircle className="h-4 w-4 animate-spin text-primary/40" />
+                </div>
+              ) : null}
+              {!previewFailed ? (
+                <img
+                  src={buildImageSrc(currentPreview, baseUrl, apiToken)}
+                  alt="preview"
+                  loading="lazy"
+                  decoding="async"
+                  onLoad={() => setPreviewLoaded(true)}
+                  onError={() => setPreviewFailed(true)}
+                  className={cn(
+                    "h-full w-full object-cover transition-opacity duration-200",
+                    previewLoaded ? "opacity-100" : "opacity-0",
+                  )}
+                />
+              ) : null}
+            </div>
           ) : (
             <FolderOpen className="h-5 w-5 text-primary/30" />
           )}
@@ -147,7 +176,7 @@ export function IconWorkbenchFolderCard({
                     event.stopPropagation();
                     onRegenerate();
                   }}
-                  disabled={isProcessing || !hasSelectedStyle}
+                  disabled={isProcessing || !hasSelectedStyle || Boolean(generateBlockedReason)}
                 >
                   <RefreshCw className="mr-2 h-3.5 w-3.5" />
                   {generateLabel}
@@ -168,6 +197,8 @@ export function IconWorkbenchFolderCard({
 
             {!hasSelectedStyle ? (
               <p className="text-[12px] leading-6 text-ui-muted">请先选择风格，再为这个目标文件夹生成图标版本。</p>
+            ) : generateBlockedReason ? (
+              <p className="text-[12px] leading-6 text-error/80">{generateBlockedReason}</p>
             ) : null}
 
             {isActiveProcessing ? (
@@ -204,8 +235,8 @@ export function IconWorkbenchFolderCard({
                 </div>
                 <p className="px-5 text-center text-[12.5px] font-medium leading-relaxed text-ui-muted opacity-80">
                   {!hasSelectedStyle
-                    ? "先选择风格模板后，才能为这个目标文件夹生成第一版图标。"
-                    : "可以直接为这个目标文件夹生成第一版图标。"}
+                    ? "先选择风格模板后，才能为这个目标文件夹生成新版本图标。"
+                    : "可以直接为这个目标文件夹生成新版本图标。"}
                 </p>
               </div>
             )}

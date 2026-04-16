@@ -55,7 +55,7 @@ function createSnapshot(): SettingsSnapshot {
       text: {
         family: "text",
         configured: false,
-        active_preset_id: "default",
+        active_preset_id: "",
         active_preset: {
           id: "default",
           name: "默认文本模型",
@@ -64,22 +64,13 @@ function createSnapshot(): SettingsSnapshot {
           OPENAI_API_KEY: "",
           secret_state: "empty",
         },
-        presets: [
-          {
-            id: "default",
-            name: "默认文本模型",
-            OPENAI_BASE_URL: "https://api.openai.com/v1",
-            OPENAI_MODEL: "gpt-5.4",
-            OPENAI_API_KEY: "",
-            secret_state: "empty",
-          },
-        ],
+        presets: [],
       },
       vision: {
         family: "vision",
         enabled: true,
         configured: false,
-        active_preset_id: "default",
+        active_preset_id: "",
         active_preset: {
           id: "default",
           name: "默认图片理解",
@@ -89,22 +80,12 @@ function createSnapshot(): SettingsSnapshot {
           IMAGE_ANALYSIS_API_KEY: "",
           secret_state: "empty",
         },
-        presets: [
-          {
-            id: "default",
-            name: "默认图片理解",
-            IMAGE_ANALYSIS_NAME: "默认图片理解",
-            IMAGE_ANALYSIS_BASE_URL: "https://host.example/v1",
-            IMAGE_ANALYSIS_MODEL: "gpt-4o-mini",
-            IMAGE_ANALYSIS_API_KEY: "",
-            secret_state: "empty",
-          },
-        ],
+        presets: [],
       },
       icon_image: {
         family: "icon_image",
         configured: false,
-        active_preset_id: "default",
+        active_preset_id: "",
         active_preset: {
           id: "default",
           name: "默认图标生图",
@@ -123,21 +104,7 @@ function createSnapshot(): SettingsSnapshot {
             secret_state: "empty",
           },
         },
-        presets: [
-          {
-            id: "default",
-            name: "默认图标生图",
-            image_model: {
-              base_url: "https://host.example/v1",
-              model: "gpt-image-1",
-              secret_state: "empty",
-            },
-            image_size: "1024x1024",
-            analysis_concurrency_limit: 1,
-            image_concurrency_limit: 1,
-            save_mode: "in_folder",
-          },
-        ],
+        presets: [],
       },
       bg_removal: {
         family: "bg_removal",
@@ -192,6 +159,14 @@ describe("SettingsPage preset flow", () => {
 
     expect(await screen.findByText("请先点击 + 创建一个预设")).toBeInTheDocument();
     expect(screen.queryByDisplayValue("gpt-5.4")).not.toBeInTheDocument();
+  });
+
+
+  it("shows a reminder banner when the text model is not configured", async () => {
+    render(<SettingsPage />);
+
+    expect(await screen.findByText("当前还没有可用的文本模型")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /去配置文本模型/i }).length).toBeGreaterThan(0);
   });
 
   it("opens the create preset dialog from the add button", async () => {

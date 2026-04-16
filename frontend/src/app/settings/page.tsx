@@ -480,9 +480,6 @@ export default function SettingsPage() {
   };
 
   const handleDeletePreset = (family: PresetConfigFamily, presetId: string, presetName: string) => {
-    if (presetId === "default") {
-      return;
-    }
     setDeletePresetDialog({ family, presetId, presetName });
   };
 
@@ -490,52 +487,65 @@ export default function SettingsPage() {
     if (!draft) {
       return null;
     }
+    const families: NonNullable<SettingsUpdatePayload["families"]> = {
+      bg_removal: {
+        mode: draft.bg_removal.mode,
+        preset: {
+          preset_id: draft.bg_removal.preset_id ?? undefined,
+        },
+        custom: {
+          name: draft.bg_removal.custom.name,
+          model_id: draft.bg_removal.custom.model_id,
+          api_type: draft.bg_removal.custom.api_type,
+          payload_template: draft.bg_removal.custom.payload_template,
+        },
+        secret: buildSecretPayload(bgRemovalSecret),
+      },
+    };
+
+    if (snapshot?.families.text.active_preset_id) {
+      families.text = {
+        ...buildFamilySavePayload("text", {
+          OPENAI_BASE_URL: draft.text.OPENAI_BASE_URL,
+          OPENAI_MODEL: draft.text.OPENAI_MODEL,
+        }),
+        secret: buildSecretPayload(textSecret),
+      };
+    }
+
+    families.vision = {
+      enabled: Boolean(draft.global_config.IMAGE_ANALYSIS_ENABLED),
+      ...(snapshot?.families.vision.active_preset_id
+        ? {
+            ...buildFamilySavePayload("vision", {
+              IMAGE_ANALYSIS_NAME: draft.vision.IMAGE_ANALYSIS_NAME,
+              IMAGE_ANALYSIS_BASE_URL: draft.vision.IMAGE_ANALYSIS_BASE_URL,
+              IMAGE_ANALYSIS_MODEL: draft.vision.IMAGE_ANALYSIS_MODEL,
+            }),
+            secret: buildSecretPayload(visionSecret),
+          }
+        : {}),
+    };
+
+    if (snapshot?.families.icon_image.active_preset_id) {
+      families.icon_image = {
+        ...buildFamilySavePayload("icon_image", {
+          image_model: {
+            base_url: draft.icon_image.image_model.base_url,
+            model: draft.icon_image.image_model.model,
+          },
+          image_size: normalizeImageSize(draft.icon_image.image_size),
+          analysis_concurrency_limit: clampConcurrencyInput(analysisConcurrencyInput, draft.icon_image.analysis_concurrency_limit),
+          image_concurrency_limit: clampConcurrencyInput(imageConcurrencyInput, draft.icon_image.image_concurrency_limit),
+          save_mode: draft.icon_image.save_mode,
+        }),
+        secret: buildSecretPayload(iconSecret),
+      };
+    }
+
     return {
       global_config: draft.global_config,
-      families: {
-        text: {
-          ...buildFamilySavePayload("text", {
-            OPENAI_BASE_URL: draft.text.OPENAI_BASE_URL,
-            OPENAI_MODEL: draft.text.OPENAI_MODEL,
-          }),
-          secret: buildSecretPayload(textSecret),
-        },
-        vision: {
-          enabled: Boolean(draft.global_config.IMAGE_ANALYSIS_ENABLED),
-          ...buildFamilySavePayload("vision", {
-            IMAGE_ANALYSIS_NAME: draft.vision.IMAGE_ANALYSIS_NAME,
-            IMAGE_ANALYSIS_BASE_URL: draft.vision.IMAGE_ANALYSIS_BASE_URL,
-            IMAGE_ANALYSIS_MODEL: draft.vision.IMAGE_ANALYSIS_MODEL,
-          }),
-          secret: buildSecretPayload(visionSecret),
-        },
-        icon_image: {
-          ...buildFamilySavePayload("icon_image", {
-            image_model: {
-              base_url: draft.icon_image.image_model.base_url,
-              model: draft.icon_image.image_model.model,
-            },
-            image_size: normalizeImageSize(draft.icon_image.image_size),
-            analysis_concurrency_limit: clampConcurrencyInput(analysisConcurrencyInput, draft.icon_image.analysis_concurrency_limit),
-            image_concurrency_limit: clampConcurrencyInput(imageConcurrencyInput, draft.icon_image.image_concurrency_limit),
-            save_mode: draft.icon_image.save_mode,
-          }),
-          secret: buildSecretPayload(iconSecret),
-        },
-        bg_removal: {
-          mode: draft.bg_removal.mode,
-          preset: {
-            preset_id: draft.bg_removal.preset_id ?? undefined,
-          },
-          custom: {
-            name: draft.bg_removal.custom.name,
-            model_id: draft.bg_removal.custom.model_id,
-            api_type: draft.bg_removal.custom.api_type,
-            payload_template: draft.bg_removal.custom.payload_template,
-          },
-          secret: buildSecretPayload(bgRemovalSecret),
-        },
-      },
+      families,
     };
   };
 
@@ -909,6 +919,25 @@ export default function SettingsPage() {
               <div className="mb-6 flex items-center gap-3 rounded-[6px] border border-success/10 bg-success/5 px-5 py-4 text-[13px] font-bold text-success-dim animate-in fade-in slide-in-from-top-2 duration-300">
                 <CheckCircle2 className="h-5 w-5" />
                 {success}
+              </div>
+            )}
+
+            {!snapshot.status.text_configured && (
+              <div className="mb-6 flex items-center justify-between gap-4 rounded-[10px] border border-warning/18 bg-warning-container/18 px-5 py-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-warning/12 text-warning">
+                    <AlertCircle className="h-4.5 w-4.5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[14px] font-black tracking-tight text-on-surface">当前还没有可用的文本模型</p>
+                    <p className="mt-1 text-[12px] font-medium leading-6 text-ui-muted">
+                      文本模型是整理分析主链路的核心配置。请先创建并补全文本预设，再回到首页启动任务。
+                    </p>
+                  </div>
+                </div>
+                <Button variant="secondary" size="sm" onClick={() => setActiveTab("text")}>
+                  去配置文本模型
+                </Button>
               </div>
             )}
 

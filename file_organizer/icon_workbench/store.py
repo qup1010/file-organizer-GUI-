@@ -56,8 +56,7 @@ class IconWorkbenchStore:
 
     def save_session(self, session: IconWorkbenchSession) -> IconWorkbenchSession:
         path = self.session_path(session.session_id)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(session.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+        _atomic_write_json(path, session.to_dict())
         return session
 
     def preview_directory(self, session_id: str, folder_id: str) -> Path:

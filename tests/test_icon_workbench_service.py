@@ -191,6 +191,24 @@ class IconWorkbenchServiceTests(unittest.TestCase):
         )
         self.assertEqual(selected["folders"][0]["current_version_id"], folder["versions"][0]["version_id"])
 
+    def test_delete_version_persists_and_falls_back_to_previous_ready_version(self):
+        session = self.service.create_session([str(self.alpha_dir)])
+        folder_id = session["folders"][0]["folder_id"]
+        self.service.analyze_folders(session["session_id"], [folder_id])
+        first = self.service.generate_previews(session["session_id"], [folder_id])
+        first_version = first["folders"][0]["versions"][0]
+        second = self.service.generate_previews(session["session_id"], [folder_id])
+        second_folder = second["folders"][0]
+        second_version = second_folder["versions"][1]
+
+        deleted = self.service.delete_version(session["session_id"], folder_id, second_version["version_id"])
+
+        folder = deleted["folders"][0]
+        self.assertEqual(len(folder["versions"]), 1)
+        self.assertEqual(folder["versions"][0]["version_id"], first_version["version_id"])
+        self.assertEqual(folder["current_version_id"], first_version["version_id"])
+        self.assertFalse(Path(second_version["image_path"]).exists())
+
     def test_update_config_persists_values(self):
         updated = self.service.update_config(
             {

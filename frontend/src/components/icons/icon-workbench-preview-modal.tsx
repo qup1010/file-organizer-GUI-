@@ -36,6 +36,7 @@ interface IconWorkbenchPreviewModalProps {
   onOpenFolder?: (path: string) => void;
   isApplying?: boolean;
   isApplied?: boolean;
+  regenerateDisabled?: boolean;
   imageModelName?: string;
 }
 
@@ -56,6 +57,7 @@ export function IconWorkbenchPreviewModal({
   onOpenFolder,
   isApplying = false,
   isApplied = false,
+  regenerateDisabled = false,
   imageModelName,
 }: IconWorkbenchPreviewModalProps) {
   const [showMockup, setShowMockup] = useState(false);
@@ -353,7 +355,8 @@ export function IconWorkbenchPreviewModal({
                 <Button 
                   variant="secondary" 
                   onClick={onRegenerate}
-                  className="h-11 rounded-[10px] border-white/10 bg-white/5 text-[12px] font-black text-white hover:bg-white/10"
+                  disabled={regenerateDisabled}
+                  className="h-11 rounded-[10px] border-white/10 bg-white/5 text-[12px] font-black text-white hover:bg-white/10 disabled:opacity-40"
                 >
                   <RefreshCw className="mr-2 h-3.5 w-3.5" />
                   重新生成

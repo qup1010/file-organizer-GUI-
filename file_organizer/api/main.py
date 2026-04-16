@@ -726,6 +726,38 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail="ICON_SESSION_NOT_FOUND")
 
+    @app.get("/api/icon-workbench/sessions/{session_id}/events")
+    def icon_workbench_events(session_id: str, request: Request):
+        try:
+            snapshot = app.state.icon_workbench_service.get_session(session_id)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="ICON_SESSION_NOT_FOUND")
+
+        def stream():
+            initial_event = {
+                "event_type": "icon.session.snapshot",
+                "session_id": session_id,
+                "session_snapshot": snapshot,
+            }
+            yield "event: icon.session.snapshot\n"
+            yield f"data: {json.dumps(initial_event, ensure_ascii=False)}\n\n"
+            if request.headers.get("x-file-organizer-once") == "1":
+                return
+            subscriber = app.state.icon_workbench_service.subscribe(session_id)
+            try:
+                while True:
+                    try:
+                        event = subscriber.get(timeout=5)
+                    except Empty:
+                        yield ": keep-alive\n\n"
+                        continue
+                    yield f"event: {event['event_type']}\n"
+                    yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+            finally:
+                app.state.icon_workbench_service.unsubscribe(session_id, subscriber)
+
+        return StreamingResponse(stream(), media_type="text/event-stream")
+
     @app.post("/api/icon-workbench/sessions/{session_id}/scan")
     def scan_icon_workbench_session(session_id: str):
         try:
@@ -782,6 +814,13 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
     def select_icon_workbench_version(session_id: str, folder_id: str, payload: IconWorkbenchSelectVersionPayload):
         try:
             return app.state.icon_workbench_service.select_version(session_id, folder_id, payload.version_id)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="ICON_VERSION_NOT_FOUND")
+
+    @app.delete("/api/icon-workbench/sessions/{session_id}/folders/{folder_id}/versions/{version_id}")
+    def delete_icon_workbench_version(session_id: str, folder_id: str, version_id: str):
+        try:
+            return app.state.icon_workbench_service.delete_version(session_id, folder_id, version_id)
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail="ICON_VERSION_NOT_FOUND")
 
