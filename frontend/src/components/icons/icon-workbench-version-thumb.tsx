@@ -9,6 +9,7 @@ import { buildImageSrc } from "./icon-workbench-utils";
 interface IconWorkbenchVersionThumbProps {
   version: IconPreviewVersion;
   isSelected: boolean;
+  isApplied?: boolean;
   onSelect: () => void;
   onZoom: () => void;
   onApply: () => void;
@@ -28,6 +29,7 @@ interface IconWorkbenchVersionThumbProps {
 export function IconWorkbenchVersionThumb({
   version,
   isSelected,
+  isApplied = false,
   onSelect,
   onZoom,
   onApply,
@@ -41,6 +43,7 @@ export function IconWorkbenchVersionThumb({
 }: IconWorkbenchVersionThumbProps) {
   const isReady = version.status === "ready";
   const isGenerating = version.status === "generating";
+  const applyButtonLabel = isApplied ? "重新应用" : "应用到系统";
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
 
@@ -116,7 +119,12 @@ export function IconWorkbenchVersionThumb({
             <span className="text-[14px] font-bold text-on-surface">v{version.version_number}</span>
             {isSelected && (
               <span className="truncate text-[10px] items-center flex font-semibold text-primary/70">
-                当前有效
+                当前版本
+              </span>
+            )}
+            {isApplied && (
+              <span className="truncate text-[10px] items-center flex font-semibold text-emerald-600/80">
+                已应用
               </span>
             )}
           </div>
@@ -127,7 +135,7 @@ export function IconWorkbenchVersionThumb({
           <div className="grid grid-cols-2 gap-1.5">
             <button
               onClick={(e) => { e.stopPropagation(); onZoom(); }}
-              className="flex h-[26px] items-center justify-center gap-1 rounded-md bg-on-surface/4 text-[11px] font-semibold text-on-surface/80 hover:bg-on-surface/8 hover:text-on-surface active:scale-95"
+              className="flex h-[26px] items-center justify-center gap-1 whitespace-nowrap rounded-md bg-on-surface/4 text-[11px] font-semibold text-on-surface/80 hover:bg-on-surface/8 hover:text-on-surface active:scale-95"
               title="查看大图"
             >
               <ZoomIn className="h-3 w-3" />
@@ -136,7 +144,7 @@ export function IconWorkbenchVersionThumb({
             <button
               onClick={(e) => { e.stopPropagation(); onRemoveBg(); }}
               disabled={isRemovingBg || isProcessing}
-              className="flex h-[26px] items-center justify-center gap-1 rounded-md bg-on-surface/4 text-[11px] font-semibold text-on-surface/80 hover:bg-primary/10 hover:text-primary active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
+              className="flex h-[26px] items-center justify-center gap-1 whitespace-nowrap rounded-md bg-on-surface/4 text-[11px] font-semibold text-on-surface/80 hover:bg-primary/10 hover:text-primary active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
               title="移除背景"
             >
               {isRemovingBg ? <LoaderCircle className="h-3 w-3 animate-spin" /> : <span className="text-[14px] leading-none mb-0.5">✂</span>}
@@ -145,16 +153,16 @@ export function IconWorkbenchVersionThumb({
             <button
               onClick={(e) => { e.stopPropagation(); onApply(); }}
               disabled={isApplying || isRemovingBg || isProcessing}
-              className="flex h-[26px] items-center justify-center gap-1 rounded-md bg-primary/10 text-[11px] font-semibold text-primary hover:bg-primary/20 hover:shadow-sm active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
-              title="应用图标"
+              className="flex h-[26px] items-center justify-center gap-1 whitespace-nowrap rounded-md bg-primary/10 text-[11px] font-semibold text-primary hover:bg-primary/20 hover:shadow-sm active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
+              title={applyButtonLabel}
             >
               {isApplying ? <LoaderCircle className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
-              应用
+              {applyButtonLabel}
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); onDelete(); }}
               disabled={isApplying || isRemovingBg || isProcessing}
-              className="flex h-[26px] items-center justify-center gap-1 rounded-md bg-error/5 text-[11px] font-semibold text-error/80 hover:bg-error/15 hover:text-error active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
+              className="flex h-[26px] items-center justify-center gap-1 whitespace-nowrap rounded-md bg-error/5 text-[11px] font-semibold text-error/80 hover:bg-error/15 hover:text-error active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
               title="移除废弃"
             >
               <span className="text-[12px] font-bold">×</span>

@@ -45,6 +45,7 @@ class IconWorkbenchService:
         self._event_log: dict[str, list[dict]] = {}
         self._subscribers: dict[str, list[Queue]] = {}
         self._event_lock = Lock()
+        self._session_locks: dict[str, Lock] = {}
 
     def create_session(self, target_paths: list[str]) -> dict:
         normalized_paths = self._normalize_target_paths(target_paths)
@@ -237,7 +238,7 @@ class IconWorkbenchService:
         self._record_event(
             "icon.generation.started",
             session,
-            progress=self._build_progress_payload("generating", total_targets, 0),
+            progress=self._build_progress_payload("generating", len(prepared_targets), 0),
         )
 
         completed = 0
@@ -276,7 +277,7 @@ class IconWorkbenchService:
                 session,
                 progress=self._build_progress_payload(
                     "generating",
-                    total_targets,
+                    len(prepared_targets),
                     completed,
                     current_folder=folder,
                 ),
@@ -290,7 +291,7 @@ class IconWorkbenchService:
         self._record_event(
             "icon.generation.completed",
             session,
-            progress=self._build_progress_payload("generating", total_targets, total_targets),
+            progress=self._build_progress_payload("generating", len(prepared_targets), len(prepared_targets)),
         )
         return self._serialize_session(session)
 
@@ -302,35 +303,36 @@ class IconWorkbenchService:
         image_bytes: bytes,
         suffix: str = "processed",
     ) -> dict:
-        session = self.store.load_session(session_id)
-        folder = self._get_folder(session, folder_id)
-        original = next(
-            (v for v in folder.versions if v.version_id == original_version_id),
-            None,
-        )
-        if not original:
-            raise FileNotFoundError(f"Original version {original_version_id} not found")
+        with self._get_session_lock(session_id):
+            session = self.store.load_session(session_id)
+            folder = self._get_folder(session, folder_id)
+            original = next(
+                (v for v in folder.versions if v.version_id == original_version_id),
+                None,
+            )
+            if not original:
+                raise FileNotFoundError(f"Original version {original_version_id} not found")
 
-        version_number = len(folder.versions) + 1
-        version_id = uuid.uuid4().hex
-        filename = f"v{version_number}_{suffix}.png" if suffix else f"v{version_number}.png"
-        image_path = self.store.preview_directory(session.session_id, folder.folder_id) / filename
-        
-        image_path.write_bytes(image_bytes)
-        
-        version = IconPreviewVersion(
-            version_id=version_id,
-            version_number=version_number,
-            prompt=original.prompt,
-            image_path=str(image_path.resolve()),
-            status="ready",
-        )
-        folder.versions.append(version)
-        folder.current_version_id = version.version_id
-        folder.updated_at = utc_now_iso()
-        session.updated_at = utc_now_iso()
-        self.store.save_session(session)
-        return self._serialize_session(session)
+            version_number = len(folder.versions) + 1
+            version_id = uuid.uuid4().hex
+            filename = f"v{version_number}_{suffix}.png" if suffix else f"v{version_number}.png"
+            image_path = self.store.preview_directory(session.session_id, folder.folder_id) / filename
+
+            image_path.write_bytes(image_bytes)
+
+            version = IconPreviewVersion(
+                version_id=version_id,
+                version_number=version_number,
+                prompt=original.prompt,
+                image_path=str(image_path.resolve()),
+                status="ready",
+            )
+            folder.versions.append(version)
+            folder.current_version_id = version.version_id
+            folder.updated_at = utc_now_iso()
+            session.updated_at = utc_now_iso()
+            self.store.save_session(session)
+            return self._serialize_session(session)
 
     def select_version(self, session_id: str, folder_id: str, version_id: str) -> dict:
         session = self.store.load_session(session_id)
@@ -367,6 +369,9 @@ class IconWorkbenchService:
             folder.current_version_id = (
                 max(ready_versions, key=lambda version: version.version_number).version_id if ready_versions else None
             )
+        if folder.applied_version_id == version_id:
+            folder.applied_version_id = None
+            folder.applied_at = None
         image_path = Path(target_version.image_path)
         try:
             if image_path.exists():
@@ -413,6 +418,27 @@ class IconWorkbenchService:
         failed_count = max(0, len(results) - success_count)
         skipped_count = len(skipped_items)
         action_label = "应用图标" if action_type == "apply_icons" else "恢复图标"
+
+        folders_by_id = {folder.folder_id: folder for folder in session.folders}
+        for item in results:
+            folder_id = str(item.get("folder_id", "") or "").strip()
+            if not folder_id:
+                continue
+            folder = folders_by_id.get(folder_id)
+            if not folder:
+                continue
+            status = str(item.get("status", "") or "").strip().lower()
+            if action_type == "apply_icons" and status == "applied":
+                version_id = str(item.get("version_id", "") or "").strip()
+                if version_id:
+                    folder.applied_version_id = version_id
+                    folder.applied_at = utc_now_iso()
+                    folder.updated_at = utc_now_iso()
+            if action_type == "restore_icons" and status == "restored":
+                folder.applied_version_id = None
+                folder.applied_at = None
+                folder.updated_at = utc_now_iso()
+
         content = f"{action_label}已完成：成功 {success_count}，失败 {failed_count}，跳过 {skipped_count}。"
         session.last_client_action = IconWorkbenchClientActionSummary(
             action_type=action_type or "client_action",
@@ -557,7 +583,9 @@ class IconWorkbenchService:
                     "folder_id": folder.folder_id,
                     "folder_name": folder.folder_name,
                     "folder_path": folder.folder_path,
+                    "version_id": current.version_id,
                     "image_path": current.image_path,
+                    "save_mode": config.save_mode,
                 }
             )
 
@@ -772,6 +800,14 @@ class IconWorkbenchService:
             "currentFolderId": current_folder.folder_id if current_folder else None,
             "currentFolderName": current_folder.folder_name if current_folder else None,
         }
+
+    def _get_session_lock(self, session_id: str) -> Lock:
+        with self._event_lock:
+            lock = self._session_locks.get(session_id)
+            if lock is None:
+                lock = Lock()
+                self._session_locks[session_id] = lock
+            return lock
 
     def _log_runtime_event(self, event_type: str, session: IconWorkbenchSession, **payload) -> None:
         extras = " ".join(f"{key}={value}" for key, value in payload.items() if value not in {None, ""})

@@ -230,6 +230,8 @@ class FolderIconCandidate:
     prompt_customized: bool = False
     versions: list[IconPreviewVersion] = field(default_factory=list)
     current_version_id: str | None = None
+    applied_version_id: str | None = None
+    applied_at: str | None = None
     last_error: str | None = None
     updated_at: str = field(default_factory=utc_now_iso)
 
@@ -245,6 +247,8 @@ class FolderIconCandidate:
             prompt_customized=bool(payload.get("prompt_customized", False)),
             versions=[IconPreviewVersion.from_dict(item) for item in payload.get("versions", [])],
             current_version_id=payload.get("current_version_id"),
+            applied_version_id=payload.get("applied_version_id"),
+            applied_at=payload.get("applied_at"),
             last_error=payload.get("last_error"),
             updated_at=str(payload.get("updated_at", "") or utc_now_iso()),
         )
@@ -260,6 +264,8 @@ class FolderIconCandidate:
             "prompt_customized": self.prompt_customized,
             "versions": [item.to_dict() for item in self.versions],
             "current_version_id": self.current_version_id,
+            "applied_version_id": self.applied_version_id,
+            "applied_at": self.applied_at,
             "last_error": self.last_error,
             "updated_at": self.updated_at,
         }

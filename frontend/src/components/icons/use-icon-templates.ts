@@ -8,13 +8,13 @@ import type { IconTemplate } from "@/types/icon-workbench";
 interface UseIconTemplatesOptions {
   iconApi: ReturnType<typeof createIconWorkbenchApiClient>;
   setError: Dispatch<SetStateAction<string | null>>;
-  setNotice: Dispatch<SetStateAction<string | null>>;
+  showNotice: (message: string | null, detail?: string | null) => void;
 }
 
 export function useIconTemplates({
   iconApi,
   setError,
-  setNotice,
+  showNotice,
 }: UseIconTemplatesOptions) {
   const [templates, setTemplates] = useState<IconTemplate[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(true);
@@ -98,7 +98,7 @@ export function useIconTemplates({
         prompt_template: templatePromptDraft.trim(),
       });
       await reloadTemplates(created.template_id);
-      setNotice("模板创建成功");
+      showNotice("模板创建成功");
     } catch {
       setError("创建模板失败");
     } finally {
@@ -108,7 +108,7 @@ export function useIconTemplates({
     iconApi,
     reloadTemplates,
     setError,
-    setNotice,
+    showNotice,
     templateDescriptionDraft,
     templateNameDraft,
     templatePromptDraft,
@@ -126,7 +126,7 @@ export function useIconTemplates({
         prompt_template: templatePromptDraft.trim(),
       });
       await reloadTemplates(updated.template_id);
-      setNotice("模板更新成功");
+      showNotice("模板更新成功");
     } catch {
       setError("更新模板失败");
     } finally {
@@ -137,7 +137,7 @@ export function useIconTemplates({
     reloadTemplates,
     selectedTemplate,
     setError,
-    setNotice,
+    showNotice,
     templateDescriptionDraft,
     templateNameDraft,
     templatePromptDraft,
@@ -151,13 +151,13 @@ export function useIconTemplates({
     try {
       await iconApi.deleteTemplate(selectedTemplate.template_id);
       await reloadTemplates();
-      setNotice("模板已删除");
+      showNotice("模板已删除");
     } catch {
       setError("删除模板失败");
     } finally {
       setTemplateActionLoading(false);
     }
-  }, [iconApi, reloadTemplates, selectedTemplate, setError, setNotice]);
+  }, [iconApi, reloadTemplates, selectedTemplate, setError, showNotice]);
 
   return {
     templates,

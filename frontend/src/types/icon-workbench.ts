@@ -62,6 +62,8 @@ export interface FolderIconCandidate {
   prompt_customized: boolean;
   versions: IconPreviewVersion[];
   current_version_id: string | null;
+  applied_version_id: string | null;
+  applied_at: string | null;
   last_error?: string | null;
   updated_at: string;
 }
@@ -116,6 +118,7 @@ export interface ApplyReadyTask {
   folder_id: string;
   folder_name: string;
   folder_path: string;
+  version_id: string;
   image_path: string;
   save_mode: "in_folder" | "centralized";
 }
@@ -146,6 +149,7 @@ export interface IconWorkbenchClientActionResult {
   folder_id?: string | null;
   folder_name?: string | null;
   folder_path?: string | null;
+  version_id?: string | null;
   status: string;
   message: string;
 }
@@ -160,6 +164,7 @@ export interface ApplyIconResult {
   folder_id?: string | null;
   folder_name?: string | null;
   folder_path: string;
+  version_id?: string | null;
   status: "applied" | "restored" | "failed" | string;
   message: string;
 }

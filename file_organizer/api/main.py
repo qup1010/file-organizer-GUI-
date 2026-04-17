@@ -152,6 +152,7 @@ class IconWorkbenchClientActionResultPayload(BaseModel):
     folder_id: str | None = None
     folder_name: str | None = None
     folder_path: str | None = None
+    version_id: str | None = None
     status: str
     message: str = ""
 

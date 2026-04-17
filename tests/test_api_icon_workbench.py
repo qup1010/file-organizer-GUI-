@@ -163,7 +163,9 @@ class FakeIconWorkbenchService:
                     "folder_id": folder_ids[0],
                     "folder_name": "Alpha",
                     "folder_path": "D:/Icons/Alpha",
+                    "version_id": "version-1",
                     "image_path": str(self.image_path),
+                    "save_mode": "centralized",
                 }
             ] if folder_ids else [],
             "skipped_items": [
@@ -335,6 +337,7 @@ class ApiIconWorkbenchTests(unittest.TestCase):
         self.assertEqual(payload["total"], 2)
         self.assertEqual(payload["ready_count"], 1)
         self.assertEqual(payload["tasks"][0]["folder_id"], "folder-1")
+        self.assertEqual(payload["tasks"][0]["version_id"], "version-1")
         self.assertEqual(payload["skipped_items"][0]["folder_id"], "folder-2")
 
     def test_removed_chat_routes_return_not_found(self):
@@ -360,6 +363,7 @@ class ApiIconWorkbenchTests(unittest.TestCase):
                         "folder_id": "folder-1",
                         "folder_name": "Alpha",
                         "folder_path": "D:/Icons/Alpha",
+                        "version_id": "version-1",
                         "status": "applied",
                         "message": "已应用",
                     }
@@ -378,6 +382,7 @@ class ApiIconWorkbenchTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["session"]["last_client_action"]["summary"]["success_count"], 1)
         self.assertEqual(self.fake_service.last_report_payload["action_type"], "apply_icons")
+        self.assertEqual(self.fake_service.last_report_payload["results"][0]["version_id"], "version-1")
         self.assertEqual(self.fake_service.last_report_payload["skipped_items"][0]["status"], "skipped")
 
     def test_image_route_streams_png(self):

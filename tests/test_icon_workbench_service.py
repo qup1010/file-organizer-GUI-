@@ -344,6 +344,7 @@ class IconWorkbenchServiceTests(unittest.TestCase):
         self.assertEqual(prepared["ready_count"], 1)
         self.assertEqual(prepared["skipped_count"], 1)
         self.assertEqual(prepared["tasks"][0]["folder_id"], folder_a)
+        self.assertTrue(prepared["tasks"][0]["version_id"])
         self.assertEqual(prepared["skipped_items"][0]["folder_id"], folder_b)
         self.assertEqual(prepared["skipped_items"][0]["message"], "当前版本未就绪")
 
@@ -387,6 +388,81 @@ class IconWorkbenchServiceTests(unittest.TestCase):
         self.assertEqual(updated["last_client_action"]["summary"]["skipped_count"], 1)
         self.assertEqual(updated["last_client_action"]["results"][0]["status"], "applied")
         self.assertEqual(updated["last_client_action"]["results"][2]["status"], "skipped")
+
+    def test_report_client_action_persists_applied_version_and_restore_clears_it(self):
+        session = self.service.create_session([str(self.alpha_dir)])
+        folder_id = session["folders"][0]["folder_id"]
+        self.service.analyze_folders(session["session_id"], [folder_id])
+        generated = self.service.generate_previews(session["session_id"], [folder_id])
+        version_id = generated["folders"][0]["versions"][0]["version_id"]
+
+        applied = self.service.report_client_action(
+            session["session_id"],
+            {
+                "action_type": "apply_icons",
+                "results": [
+                    {
+                        "folder_id": folder_id,
+                        "folder_name": "Alpha",
+                        "folder_path": str(self.alpha_dir),
+                        "version_id": version_id,
+                        "status": "applied",
+                        "message": "已应用",
+                    }
+                ],
+                "skipped_items": [],
+            },
+        )
+
+        folder = applied["folders"][0]
+        self.assertEqual(folder["applied_version_id"], version_id)
+        self.assertIsNotNone(folder["applied_at"])
+
+        restored = self.service.report_client_action(
+            session["session_id"],
+            {
+                "action_type": "restore_icons",
+                "results": [
+                    {
+                        "folder_id": folder_id,
+                        "folder_name": "Alpha",
+                        "folder_path": str(self.alpha_dir),
+                        "status": "restored",
+                        "message": "已恢复",
+                    }
+                ],
+                "skipped_items": [],
+            },
+        )
+
+        folder = restored["folders"][0]
+        self.assertIsNone(folder["applied_version_id"])
+        self.assertIsNone(folder["applied_at"])
+
+    def test_report_client_action_does_not_persist_applied_without_version_id(self):
+        session = self.service.create_session([str(self.alpha_dir)])
+        folder_id = session["folders"][0]["folder_id"]
+
+        updated = self.service.report_client_action(
+            session["session_id"],
+            {
+                "action_type": "apply_icons",
+                "results": [
+                    {
+                        "folder_id": folder_id,
+                        "folder_name": "Alpha",
+                        "folder_path": str(self.alpha_dir),
+                        "status": "applied",
+                        "message": "已应用",
+                    }
+                ],
+                "skipped_items": [],
+            },
+        )
+
+        folder = updated["folders"][0]
+        self.assertIsNone(folder["applied_version_id"])
+        self.assertIsNone(folder["applied_at"])
 
     def test_analyze_folders_uses_configured_analysis_concurrency_limit(self):
         concurrent_text_client = RecordingConcurrentTextClient()
@@ -456,6 +532,52 @@ class IconWorkbenchServiceTests(unittest.TestCase):
         self.assertEqual(len(concurrent_image_client.prompts), 3)
         self.assertGreaterEqual(concurrent_image_client.max_active, 2)
         self.assertTrue(all(len(folder["versions"]) == 1 for folder in updated["folders"]))
+
+    def test_add_processed_version_keeps_all_versions_under_concurrent_requests(self):
+        session = self.service.create_session([str(self.alpha_dir)])
+        folder_id = session["folders"][0]["folder_id"]
+        self.service.analyze_folders(session["session_id"], [folder_id])
+        generated = self.service.generate_previews(session["session_id"], [folder_id])
+        original_version_id = generated["folders"][0]["versions"][0]["version_id"]
+        png_bytes = StubImageClient().generate_png(None, "", "")
+
+        original_load_session = self.store.load_session
+
+        def delayed_load_session(session_id):
+            loaded = original_load_session(session_id)
+            time.sleep(0.05)
+            return loaded
+
+        errors: list[Exception] = []
+        start_event = threading.Event()
+
+        def worker(index: int):
+            start_event.wait()
+            try:
+                self.service.add_processed_version(
+                    session["session_id"],
+                    folder_id,
+                    original_version_id,
+                    png_bytes,
+                    suffix=f"nobg{index}",
+                )
+            except Exception as exc:  # pragma: no cover - assertion below will surface it
+                errors.append(exc)
+
+        threads = [threading.Thread(target=worker, args=(index,)) for index in range(2)]
+        with patch.object(self.store, "load_session", side_effect=delayed_load_session):
+            for thread in threads:
+                thread.start()
+            start_event.set()
+            for thread in threads:
+                thread.join()
+
+        self.assertEqual(errors, [])
+        updated = self.service.get_session(session["session_id"])
+        folder = updated["folders"][0]
+        self.assertEqual(len(folder["versions"]), 3)
+        self.assertEqual(sorted(version["version_number"] for version in folder["versions"]), [1, 2, 3])
+        self.assertEqual(len({version["version_id"] for version in folder["versions"]}), 3)
 
 
 if __name__ == "__main__":

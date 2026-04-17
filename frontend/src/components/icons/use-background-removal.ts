@@ -11,19 +11,35 @@ interface UseBackgroundRemovalOptions {
   session: IconWorkbenchSession | null;
   setSession: Dispatch<SetStateAction<IconWorkbenchSession | null>>;
   setError: Dispatch<SetStateAction<string | null>>;
-  setNotice: Dispatch<SetStateAction<string | null>>;
+  showNotice: (message: string | null, detail?: string | null) => void;
 }
+
+export interface BackgroundRemovalBatchProgress {
+  total: number;
+  completed: number;
+  success: number;
+  failed: number;
+  activeFolderNames: string[];
+}
+
+interface RemoveBgOutcome {
+  ok: boolean;
+  message: string;
+}
+
+const BG_BATCH_CONCURRENCY = 2;
 
 export function useBackgroundRemoval({
   desktopReady,
   session,
   setSession,
   setError,
-  setNotice,
+  showNotice,
 }: UseBackgroundRemovalOptions) {
   const api = useMemo(() => createApiClient(getApiBaseUrl(), getApiToken()), []);
   const [processingBgVersionIds, setProcessingBgVersionIds] = useState<Set<string>>(new Set());
   const [isRemovingBgBatch, setIsRemovingBgBatch] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<BackgroundRemovalBatchProgress | null>(null);
 
   const loadBgRemovalRuntime = useCallback(async () => {
     return api.getSettingsRuntime<{
@@ -34,10 +50,21 @@ export function useBackgroundRemoval({
     }>("bg_removal");
   }, [api]);
 
-  const handleRemoveBg = useCallback(async (folderId: string, version: IconPreviewVersion) => {
+  const removeBackgroundForVersion = useCallback(async (
+    folderId: string,
+    version: IconPreviewVersion,
+    options?: {
+      folderName?: string | null;
+      showSuccessNotice?: boolean;
+      showErrorNotice?: boolean;
+    },
+  ): Promise<RemoveBgOutcome> => {
     if (!desktopReady || !session) {
-      setError("抠图功能目前仅支持桌面端。");
-      return;
+      const message = "抠图功能目前仅支持桌面端。";
+      if (options?.showErrorNotice ?? true) {
+        setError(message);
+      }
+      return { ok: false, message };
     }
 
     const processingKey = `${folderId}-${version.version_id}`;
@@ -91,15 +118,24 @@ export function useBackgroundRemoval({
         setSession(result.session);
       }
 
-      setNotice(`已基于 v${version.version_number} 生成了移除背景的新版本。`);
+      const successMessage = options?.folderName
+        ? `已为「${options.folderName}」基于 v${version.version_number} 生成去背景版本。`
+        : `已基于 v${version.version_number} 生成了移除背景的新版本。`;
+      if (options?.showSuccessNotice ?? true) {
+        showNotice(successMessage);
+      }
+      return { ok: true, message: successMessage };
     } catch (err) {
       console.error("抠图异常详情 (Trace):", err);
       const isNetworkError = err instanceof TypeError && err.message === "Failed to fetch";
       const errorMsg = isNetworkError 
         ? "Failed to fetch (无法连接至本地服务，请确认后端 API 是否连接正常且 Token 正确)" 
         : (err instanceof Error ? err.message : String(err));
-      
-      setError(`抠图失败: ${errorMsg}`);
+      const message = `抠图失败: ${errorMsg}`;
+      if (options?.showErrorNotice ?? true) {
+        setError(message);
+      }
+      return { ok: false, message };
     } finally {
       setProcessingBgVersionIds((prev) => {
         const next = new Set(prev);
@@ -107,44 +143,109 @@ export function useBackgroundRemoval({
         return next;
       });
     }
-  }, [desktopReady, loadBgRemovalRuntime, session, setError, setNotice, setSession]);
+  }, [desktopReady, loadBgRemovalRuntime, session, setError, setSession, showNotice]);
+
+  const handleRemoveBg = useCallback(async (folderId: string, version: IconPreviewVersion) => {
+    await removeBackgroundForVersion(folderId, version, {
+      showSuccessNotice: true,
+      showErrorNotice: true,
+    });
+  }, [removeBackgroundForVersion]);
 
   const handleRemoveBgBatch = useCallback(async () => {
     if (!session || session.folders.length === 0 || !desktopReady) {
       return;
     }
 
+    const tasks = session.folders.flatMap((folder) => {
+      if (!folder.current_version_id) {
+        return [];
+      }
+      const version = folder.versions.find(
+        (item) => item.version_id === folder.current_version_id && item.status === "ready",
+      );
+      if (!version) {
+        return [];
+      }
+      return [{
+        folderId: folder.folder_id,
+        folderName: folder.folder_name,
+        version,
+      }];
+    });
+
+    if (tasks.length === 0) {
+      showNotice("没有可去除背景的就绪版本。");
+      return;
+    }
+
     setIsRemovingBgBatch(true);
-    let successCount = 0;
+    setBatchProgress({
+      total: tasks.length,
+      completed: 0,
+      success: 0,
+      failed: 0,
+      activeFolderNames: [],
+    });
+
     try {
-      for (const folder of session.folders) {
-        if (!folder.current_version_id) {
-          continue;
+      let nextTaskIndex = 0;
+      let successCount = 0;
+      let failedCount = 0;
+      const worker = async () => {
+        while (nextTaskIndex < tasks.length) {
+          const task = tasks[nextTaskIndex];
+          nextTaskIndex += 1;
+          setBatchProgress((current) => {
+            if (!current) {
+              return current;
+            }
+            return {
+              ...current,
+              activeFolderNames: current.activeFolderNames.includes(task.folderName)
+                ? current.activeFolderNames
+                : [...current.activeFolderNames, task.folderName],
+            };
+          });
+          const outcome = await removeBackgroundForVersion(task.folderId, task.version, {
+            folderName: task.folderName,
+            showSuccessNotice: false,
+            showErrorNotice: false,
+          });
+          successCount += outcome.ok ? 1 : 0;
+          failedCount += outcome.ok ? 0 : 1;
+          setBatchProgress((current) => {
+            if (!current) {
+              return current;
+            }
+            return {
+              ...current,
+              completed: current.completed + 1,
+              success: current.success + (outcome.ok ? 1 : 0),
+              failed: current.failed + (outcome.ok ? 0 : 1),
+              activeFolderNames: current.activeFolderNames.filter((name) => name !== task.folderName),
+            };
+          });
         }
-        const version = folder.versions.find(
-          (item) => item.version_id === folder.current_version_id && item.status === "ready",
-        );
-        if (!version) {
-          continue;
-        }
-        try {
-          await handleRemoveBg(folder.folder_id, version);
-          successCount += 1;
-        } catch (error) {
-          console.error(error);
-        }
-      }
-      if (successCount > 0) {
-        setNotice(`成功为 ${successCount} 个就绪版本移除背景。`);
-      }
+      };
+
+      await Promise.all(
+        Array.from({ length: Math.min(BG_BATCH_CONCURRENCY, tasks.length) }, () => worker()),
+      );
+      const summaryNotice = failedCount > 0
+        ? `批量去除背景完成：成功 ${successCount}，失败 ${failedCount}。`
+        : `批量去除背景完成：已为 ${successCount} 个目标生成去背景版本。`;
+      showNotice(summaryNotice);
     } finally {
       setIsRemovingBgBatch(false);
+      setBatchProgress(null);
     }
-  }, [desktopReady, handleRemoveBg, session, setNotice]);
+  }, [desktopReady, removeBackgroundForVersion, session, showNotice]);
 
   return {
     processingBgVersionIds,
     isRemovingBgBatch,
+    batchProgress,
     handleRemoveBg,
     handleRemoveBgBatch,
   };

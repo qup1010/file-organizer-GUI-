@@ -16,7 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { FolderIconCandidate, IconPreviewVersion } from "@/types/icon-workbench";
-import { buildImageSrc, resolvePreviewVersion } from "./icon-workbench-utils";
+import { buildImageSrc, getCurrentVersion, hasReadyVersion, resolvePreviewVersion } from "./icon-workbench-utils";
 import { IconWorkbenchVersionThumb } from "./icon-workbench-version-thumb";
 
 interface IconWorkbenchFolderCardProps {
@@ -64,6 +64,7 @@ export function IconWorkbenchFolderCard({
   isProcessing,
   isActiveProcessing,
 }: IconWorkbenchFolderCardProps) {
+  const currentVersion = useMemo(() => getCurrentVersion(folder), [folder]);
   const currentPreview = useMemo(() => resolvePreviewVersion(folder), [folder]);
   const hasVersions = folder.versions.length > 0;
   const generateLabel = "生成新版本";
@@ -77,22 +78,54 @@ export function IconWorkbenchFolderCard({
 
   const status = useMemo(() => {
     if (isActiveProcessing) {
-      return { label: "生成中", color: "text-primary", icon: LoaderCircle, animate: true };
-    }
-    if (folder.last_error) return { label: "异常", color: "text-error", icon: AlertCircle };
-    if (folder.versions.some((version) => version.status === "ready")) {
       return {
-        label: `v${currentPreview?.version_number || 1} 就绪`,
+        label: "生成中",
+        detail: "当前版本正在刷新",
+        color: "text-primary",
+        icon: LoaderCircle,
+        animate: true,
+      };
+    }
+    if (currentVersion?.status === "error") {
+      return {
+        label: `当前版本 v${currentVersion.version_number} 异常`,
+        detail: currentVersion.error_message || folder.last_error || "请重新生成或切换到其他版本",
+        color: "text-error",
+        icon: AlertCircle,
+      };
+    }
+    if (currentVersion?.status === "ready") {
+      return {
+        label: `当前版本 v${currentVersion.version_number} 就绪`,
+        detail: folder.applied_version_id === currentVersion.version_id ? "已应用到文件夹" : "尚未应用到系统图标",
         color: "text-primary",
         icon: CheckCircle2,
         animate: false,
       };
     }
-    if (folder.analysis_status === "ready") {
-      return { label: "分析完成", color: "text-primary/70", icon: CheckCircle2, animate: false };
+    if (folder.last_error) {
+      return {
+        label: "当前文件夹异常",
+        detail: folder.last_error,
+        color: "text-error",
+        icon: AlertCircle,
+      };
     }
-    return { label: "待处理", color: "text-ui-muted", icon: CircleDashed, animate: false };
-  }, [currentPreview?.version_number, folder, isActiveProcessing]);
+    if (hasReadyVersion(folder)) {
+      const readyVersion = currentPreview;
+      return {
+        label: `已有可用版本${readyVersion ? ` v${readyVersion.version_number}` : ""}`,
+        detail: "展开后可预览、切换或应用",
+        color: "text-primary/80",
+        icon: CheckCircle2,
+        animate: false,
+      };
+    }
+    if (folder.analysis_status === "ready") {
+      return { label: "分析完成", detail: "可以继续生成首个图标版本", color: "text-primary/70", icon: CheckCircle2, animate: false };
+    }
+    return { label: "待处理", detail: "请先选择模板并开始生成", color: "text-ui-muted", icon: CircleDashed, animate: false };
+  }, [currentPreview, currentVersion, folder, isActiveProcessing]);
 
   const StatusIcon = status.icon;
 
@@ -139,10 +172,39 @@ export function IconWorkbenchFolderCard({
           <p className="truncate text-[11px] text-ui-muted">{folder.folder_path}</p>
         </div>
 
-        <div className={cn("hidden items-center gap-1.5 sm:flex", status.color)}>
-          <StatusIcon className={cn("h-3.5 w-3.5", status.animate ? "animate-spin" : undefined)} />
-          <span className="text-[12px] font-semibold">{status.label}</span>
+        <div className={cn("hidden min-w-[180px] flex-col items-end gap-0.5 sm:flex", status.color)}>
+          <div className="flex items-center gap-1.5">
+            <StatusIcon className={cn("h-3.5 w-3.5", status.animate ? "animate-spin" : undefined)} />
+            <span className="text-[12px] font-semibold">{status.label}</span>
+          </div>
+          <span className="max-w-[220px] truncate text-[10px] font-bold text-ui-muted">{status.detail}</span>
         </div>
+
+        {!isExpanded && currentVersion?.status === "ready" ? (
+          <div className="hidden items-center gap-2 md:flex">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={(event: React.MouseEvent) => {
+                event.stopPropagation();
+                onZoom(currentVersion);
+              }}
+            >
+              预览
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={(event: React.MouseEvent) => {
+                event.stopPropagation();
+                onApplyVersion(currentVersion);
+              }}
+              disabled={isProcessing || !desktopReady}
+            >
+              应用
+            </Button>
+          </div>
+        ) : null}
 
         <button
           type="button"
@@ -190,7 +252,7 @@ export function IconWorkbenchFolderCard({
                     onRestore();
                   }}
                 >
-                  恢复默认
+                  恢复上次状态
                 </Button>
               </div>
             </div>
@@ -215,6 +277,7 @@ export function IconWorkbenchFolderCard({
                     key={version.version_id}
                     version={version}
                     isSelected={version.version_id === folder.current_version_id}
+                    isApplied={version.version_id === folder.applied_version_id}
                     baseUrl={baseUrl}
                     apiToken={apiToken}
                     onSelect={() => onSelectVersion(version.version_id)}

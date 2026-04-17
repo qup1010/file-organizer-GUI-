@@ -47,6 +47,12 @@ export function IconWorkbenchTemplateDrawer({
   onUpdateTemplate,
   onDeleteTemplate,
 }: IconWorkbenchTemplateDrawerProps) {
+  const supportedPlaceholders = [
+    { label: "主题", value: "{{subject}}" },
+    { label: "文件夹名", value: "{{folder_name}}" },
+    { label: "分类", value: "{{category}}" },
+  ];
+
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -206,11 +212,25 @@ export function IconWorkbenchTemplateDrawer({
                       <textarea
                         value={templatePromptDraft}
                         onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onTemplatePromptChange(e.target.value)}
-                        placeholder="Apple style app icon of {visual_subject}, 3d render..."
+                        placeholder="Flat folder icon of {{subject}}, labeled for {{folder_name}}, visual category {{category}}..."
                         rows={10}
                         className="w-full resize-none rounded-[10px] border border-on-surface/10 bg-surface-container-lowest px-4 py-3 font-mono text-[13px] leading-6 outline-none transition-all focus:border-primary/20 focus:ring-4 focus:ring-primary/4"
                       />
-                      <p className="text-[11px] leading-5 text-ui-muted">使用 <code>{`{visual_subject}`}</code> 作为文件夹内容主题的占位符。</p>
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {supportedPlaceholders.map((placeholder) => (
+                          <button
+                            key={placeholder.value}
+                            type="button"
+                            onClick={() => onTemplatePromptChange(`${templatePromptDraft}${templatePromptDraft ? "\n" : ""}${placeholder.value}`)}
+                            className="rounded-full border border-primary/16 bg-primary/6 px-3 py-1 text-[11px] font-bold text-primary transition-colors hover:bg-primary/12"
+                          >
+                            插入 {placeholder.label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[11px] leading-5 text-ui-muted">
+                        可用变量：<code>{`{{subject}}`}</code>、<code>{`{{folder_name}}`}</code>、<code>{`{{category}}`}</code>。
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -229,7 +249,7 @@ export function IconWorkbenchTemplateDrawer({
                       </Button>
                     ) : (
                       <p className="text-[11px] leading-5 text-ui-muted">
-                        {selectedTemplate?.is_builtin ? "系统模板可选用，但不能直接覆盖保存。" : "创建后会出现在风格选择器和模板管理列表中。"}
+                        {selectedTemplate?.is_builtin ? "系统模板可选用，但不能直接覆盖保存。请先复制为自定义模板后再修改。" : "创建后会出现在风格选择器和模板管理列表中。"}
                       </p>
                     )}
                   </div>

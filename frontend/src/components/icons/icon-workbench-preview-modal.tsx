@@ -36,6 +36,7 @@ interface IconWorkbenchPreviewModalProps {
   onOpenFolder?: (path: string) => void;
   isApplying?: boolean;
   isApplied?: boolean;
+  isCurrentVersion?: boolean;
   regenerateDisabled?: boolean;
   imageModelName?: string;
 }
@@ -57,6 +58,7 @@ export function IconWorkbenchPreviewModal({
   onOpenFolder,
   isApplying = false,
   isApplied = false,
+  isCurrentVersion = false,
   regenerateDisabled = false,
   imageModelName,
 }: IconWorkbenchPreviewModalProps) {
@@ -310,7 +312,10 @@ export function IconWorkbenchPreviewModal({
                            "mt-1 text-[13px] font-black",
                            isApplied ? "text-success-dim" : "text-success-dim/60"
                          )}>
-                            {isApplied ? "已应用" : "已就绪"}
+                            {isApplied ? "已应用" : "未应用"}
+                         </p>
+                         <p className="mt-1 text-[10px] font-bold leading-4 text-white/35">
+                           {isCurrentVersion ? "这是当前版本，但当前版本不等于已应用。" : "可先设为当前版本，再决定是否应用。"}
                          </p>
                       </div>
                    </div>
@@ -347,7 +352,7 @@ export function IconWorkbenchPreviewModal({
                   ) : (
                     <CheckCircle2 className="mr-2 h-4 w-4" />
                   )}
-                  {isApplied ? "在文件夹中查看" : "应用到文件夹"}
+                  {isApplied ? "打开文件夹查看" : "应用到文件夹"}
                 </Button>
              )}
              

@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
-import { FolderPlus, Palette, Search } from "lucide-react";
+import React, { useMemo } from "react";
+import { FolderPlus, Palette } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { FolderIconCandidate, IconPreviewVersion } from "@/types/icon-workbench";
@@ -56,6 +56,11 @@ export function IconWorkbenchFolderList({
   processingFolderId,
   onAddTargets,
 }: IconWorkbenchFolderListProps) {
+  const hasReadyVersions = useMemo(
+    () => folders.some((folder) => folder.versions.some((version) => version.status === "ready")),
+    [folders],
+  );
+
   return (
     <div className="flex flex-1 flex-col min-h-0 overflow-hidden">
       <div className="glass-surface flex flex-col gap-2 border-b border-on-surface/6 px-6 py-4">
@@ -70,7 +75,7 @@ export function IconWorkbenchFolderList({
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 scrollbar-thin">
-        {!hasSelectedStyle && folders.length > 0 && (
+        {!hasSelectedStyle && folders.length > 0 && !hasReadyVersions && (
           <div className="mb-6 flex animate-in fade-in slide-in-from-top-2 duration-500 flex-col items-center gap-4 rounded-xl border border-dashed border-primary/20 bg-primary/2 p-10 text-center">
             <div className="flex h-16 w-16 items-center justify-center rounded-[20px] bg-primary/10 text-primary shadow-sm ring-1 ring-primary/20">
               <Palette className="h-8 w-8" />
