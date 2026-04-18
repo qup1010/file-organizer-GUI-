@@ -23,6 +23,8 @@ test_folder/
 legacy_drafts/
 .worktrees/
 .tmp/
+tmp/
+tmp_debug_scan_progress/
 
 # 缓存与调试
 .pytest_cache/

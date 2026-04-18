@@ -2,9 +2,12 @@ name: Windows Desktop Bundle
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - "v*"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-windows-bundle:
@@ -148,8 +151,19 @@ jobs:
       - name: Upload Windows bundle artifact
         uses: actions/upload-artifact@v6
         with:
-          name: filepilot-windows-bundle
+          name: filepilot-windows-bundle-${{ github.ref_name }}
           if-no-files-found: error
           path: |
+            desktop/src-tauri/target/release/bundle/**/*.msi
+            desktop/src-tauri/target/release/bundle/**/*.exe
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: FilePilot ${{ github.ref_name }}
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
             desktop/src-tauri/target/release/bundle/**/*.msi
             desktop/src-tauri/target/release/bundle/**/*.exe

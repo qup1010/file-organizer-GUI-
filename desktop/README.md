@@ -26,7 +26,7 @@
 - `runtime/backend.json.example`
   - 说明前后端共享的运行时文件结构
 
-## 当前运行方式
+## 本目录开发
 
 ```powershell
 Set-Location desktop
@@ -41,9 +41,11 @@ Set-Location desktop\src-tauri
 cargo check
 ```
 
+根目录 [README.md](../README.md) 提供统一的项目启动方式和常用命令，这里只保留桌面宿主特有说明。
+
 ## GitHub Actions 打包
 
-- 仓库提供了一个仅支持手动触发的 Windows 打包工作流：
+- 仓库提供了一个 Windows 桌面打包工作流：
   - `.github/workflows/windows-desktop-bundle.yml`
 - 触发后会在 GitHub Actions 中完成：
   - 安装 `frontend/` 与 `desktop/` 的 Node 依赖
@@ -52,13 +54,15 @@ cargo check
   - 执行 `npm run tauri:build`
   - 静默安装 MSI 并执行安装包 smoke test
   - 上传 Windows bundle 产物为 `filepilot-windows-bundle` artifact
-
-Tauri 启动后会：
-
-1. 开发态拉起 `python -m file_organizer.api`，打包态拉起内置的 `file_organizer_api.exe`
-2. 等待 `output/runtime/backend.json`
-3. 通过 `/api/health` 校验实例归属与健康状态
-4. 向前端注入运行时对象
+- 当前支持两种触发方式：
+  - 在 GitHub Actions 页面手动触发：只产出 artifact，适合先试打包
+  - 推送 `v*` tag：例如 `v0.1.1`，会在打包成功后自动创建 GitHub Release 并上传安装包
+- 推荐发版顺序：
+  1. 先同步更新桌面版本号
+     可直接执行 `powershell -ExecutionPolicy Bypass -File scripts\set_desktop_version.ps1 -Version 0.1.1`
+     或执行 `npm --prefix desktop run version:set -- 0.1.1`
+  2. 提交版本变更
+  3. 创建并推送 tag，例如 `git tag v0.1.1`、`git push origin v0.1.1`
 
 ## 安装包 Smoke 验证
 
@@ -76,6 +80,8 @@ powershell -ExecutionPolicy Bypass -File scripts\smoke_desktop_bundle.ps1 -AppPa
 4. 关闭桌面应用后，`file_organizer_api.exe` 会退出
 5. 再次启动后仍能恢复正常工作
 
+## 运行时契约
+
 前端读取入口固定为：
 
 ```ts
@@ -90,19 +96,7 @@ window.__FILE_ORGANIZER_RUNTIME__
 - `pid`
 - `started_at`
 - `instance_id`
-
-前端侧固定从以下入口读取运行时对象：
-
-- `window.__FILE_ORGANIZER_RUNTIME__`
-
-这部分契约如果要调整，需要同时检查：
-
-- `file_organizer/api/runtime.py`
-- `frontend/src/lib/*`
-- `desktop/src-tauri/src/runtime.rs`
 - `api_token`
-
-## 运行时契约
 
 后端地址发现只允许通过：
 
@@ -116,6 +110,15 @@ window.__FILE_ORGANIZER_RUNTIME__
 - `pid`
 - `started_at`
 - `instance_id`
+
+补充说明：
+
+- `api_token` 只存在于桌面壳注入给前端的 `window.__FILE_ORGANIZER_RUNTIME__`，不写入 `output/runtime/backend.json`。
+- 桌面壳会同时校验 runtime 文件中的 `instance_id` 与 `/api/health` 返回值，避免误连到旧实例或其他本地进程。
+- 这部分契约如果要调整，需要同时检查：
+  - `file_organizer/api/runtime.py`
+  - `frontend/src/lib/*`
+  - `desktop/src-tauri/src/runtime.rs`
 
 ## 当前限制
 

@@ -25,7 +25,7 @@
 - API client 已接入本地整理会话、历史、设置和图标工坊端点。
 - 当前前端已围绕真实 `session_snapshot`、扫描进度、预检结果、执行结果、历史记录和图标工坊状态进行渲染。
 
-## 运行
+## 本目录开发
 
 ```powershell
 Set-Location frontend
@@ -44,6 +44,8 @@ npm run typecheck
 ```powershell
 npm test
 ```
+
+根目录 [README.md](../README.md) 提供统一的项目启动方式和常用命令，这里只保留前端特有约定。
 
 ## 运行时发现与 Tauri 接线约定
 
@@ -77,4 +79,3 @@ window.__FILE_ORGANIZER_RUNTIME__ = {
 
 - 后端默认地址是 `http://127.0.0.1:8765`，但桌面壳场景应始终以运行时注入值为准。
 - 如果工作区没有拿到数据，优先检查 `output/runtime/backend.json`、后端 `/api/health`，以及桌面壳是否成功注入运行时对象。
-

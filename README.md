@@ -1,365 +1,106 @@
-# FilePilot / File Organizer
+<div align="center">
+  <img src="./frontend/public/app-icon.png" alt="FilePilot Logo" width="128" />
 
-本项目是一个本地文件整理工作台，当前包含：
+  <h1>FilePilot</h1>
 
-- FastAPI 本地 API
-- Next.js 工作台前端
-- Tauri 桌面壳
-- 图标工坊能力链路
+  <p>面向 Windows 的本地 AI 文件整理工作台</p>
 
-它不是单一的“命令行脚本”，而是一套围绕本地目录整理、执行确认、历史回看、最近一次回退、模型配置和图标生成的桌面化工具链。
+  <p>
+    <img src="https://img.shields.io/badge/Platform-Windows-0078D4?style=flat-square" alt="Platform Windows" />
+    <img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.11+" />
+    <img src="https://img.shields.io/badge/Tauri-v2-24C8DB?style=flat-square&logo=tauri&logoColor=white" alt="Tauri v2" />
+    <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=111827" alt="React 19" />
+    <img src="https://img.shields.io/badge/License-MIT-84cc16?style=flat-square" alt="MIT License" />
+  </p>
+
+  <p>
+    <a href="#项目简介">项目简介</a> |
+    <a href="#主要功能">主要功能</a> |
+    <a href="#界面截图">界面截图</a> |
+    <a href="#快速开始">快速开始</a> |
+    <a href="#使用提醒">使用提醒</a> |
+    <a href="#限制说明">限制说明</a> |
+  </p>
+
+</div>
+
+---
+
+## 项目简介
+
+FilePilot 用于整理本地目录：先扫描和分析，再生成整理方案，确认后执行，并支持查看历史和回退最近一次执行。
+
+适合这些场景：
+
+- 下载目录、桌面、素材目录长期堆积，需要重新归类和整理
+
+## 主要功能
+
+- 扫描目录并生成整理方案
+- 执行前预检，确认风险和冲突
+- 执行文件移动
+- 保存执行历史，并支持最近一次执行回退
+- 为文件夹生成、应用和恢复图标
+
+## 界面截图
+
+![FilePilot Screenshot](./docs/assets/filepilot-screenshot.png)
+
+
 
 ## 快速开始
 
-如果你只是想先把项目跑起来，推荐按这个顺序：
+### 安装方式
 
-1. 安装根目录 Python 依赖：`pip install -r requirements.txt`
-2. 启动本地 API：`python -m file_organizer.api`
-3. 进入 `frontend/` 安装依赖并启动前端：`npm install`、`npm run dev`
-4. 如果需要桌面联调，再进入 `desktop/` 运行 `npm install`、`npm run tauri:dev`
+前往 GitHub Releases 下载桌面安装包，安装后直接运行。
 
-## 当前能力概览
+### 首次使用
 
-### 文件整理主链路
+1. 打开应用
+2. 在设置中填写模型服务和 API Key
+3. 选择要整理的目录
+4. 先查看整理方案和预检结果
+5. 确认无误后再执行整理
 
-当前主链路已经覆盖：
+## 使用提醒
 
-`扫描目录 -> AI 分析 -> 增量整理对话 -> 执行预检 -> 输入大写 YES 确认执行 -> 写入执行日志 -> 支持最近一次回退`
+- 只对适合整理的目录使用，例如下载目录、桌面、素材暂存目录
+- 不要直接对系统目录、开发环境目录、同步盘根目录或正在频繁变化的工作目录执行整理
+- 第一次使用时，建议先拿测试目录或低风险目录试跑
+- 执行前先检查整理方案和预检结果，再决定是否继续
 
-整理流程的几个关键约束：
+## 限制说明
 
-- 分析阶段只处理目标目录当前层条目，并做结果校验。
-- 整理阶段使用增量交互，模型通过 `submit_plan_diff` 提交本轮变更，系统在本地维护完整待定计划。
-- 默认优先展示摘要视图，用户可以通过自然语言继续追问，例如 `看明细`、`看改动`、`看待确认项`、`执行`。
-- 未确认项默认可以暂存到 `Review/`，真正落盘前仍需输入大写 `YES`。
+- 目前只支持 Windows 环境
+- 需要用户自行配置模型服务和 API Key
+- 文件分析结果会受到模型能力和接口稳定性影响
+- 图标生成功能依赖额外模型配置
 
-### 工作台模块
+## 开发
 
-当前桌面工作台已经具备以下模块：
+项目统一入口和常用命令保留在这里；更细的桌面宿主与前端约定分别见 [desktop/README.md](desktop/README.md) 和 [frontend/README.md](frontend/README.md)。
 
-- 新建任务 / 当前任务：启动整理会话，查看扫描、预检、执行与结果
-- 整理历史：查看会话与执行档案，支持删除记录和回退最近一次执行
-- 设置：统一管理文本模型、图片理解、图标生图、抠图服务、启动默认值和调试开关
-- 图标工坊：扫描文件夹、分析语义、生成图标预览、选择版本，并联动桌面端应用 / 恢复 Windows 文件夹图标
-
-### 后端 API
-
-FastAPI 本地服务当前除了整理会话接口，还包含：
-
-- `/api/history`：历史记录与 journal
-- `/api/settings`：统一设置快照、预设切换和连接测试
-- `/api/icon-workbench/*`：图标工坊会话、模板、预览和客户端动作回报
-- `/api/utils/*`：目录选择、打开目录、兼容配置接口
-- `/api/sessions/{session_id}/events`：SSE 事件流
-
-如果设置了 `FILE_ORGANIZER_API_TOKEN`，除健康检查和必要的 `OPTIONS` 外，API 需要通过以下任一方式鉴权：
-
-- `Authorization: Bearer <token>`
-- `x-file-organizer-token: <token>`
-- SSE 场景使用 `?access_token=<token>`
-
-## 项目结构
-
-```text
-file_organizer/
-  analysis/         扫描分析、文件读取、归档/图片摘要
-  organize/         整理对话、增量计划、策略模板
-  execution/        执行计划、journal、报告
-  rollback/         最近一次执行回退
-  app/              工作台会话服务与会话存储
-  api/              FastAPI API 与运行时发现
-  icon_workbench/   图标工坊服务、模板、存储、客户端
-  shared/           配置、日志、路径工具、公共模型
-frontend/           Next.js 工作台前端
-desktop/            Tauri 桌面宿主
-tests/              Python 单元测试
-output/             运行时产物、历史记录、图标工坊输出
-logs/               后端运行日志与调试日志
-docs/               设计说明、评审记录、阶段性方案文档
-```
-
-补充说明：
-
-- [`frontend/README.md`](frontend/README.md) 主要记录工作台前端运行方式和运行时注入约定。
-- [`desktop/README.md`](desktop/README.md) 主要记录 Tauri 桌面壳职责、打包和 smoke 验证。
-- [`DESIGN.md`](DESIGN.md) 约束前端和桌面界面的设计方向，默认按桌面工作台而不是普通网页处理。
-
-## 环境要求
-
-- Python 3.11 及以上
-- Node.js 18 及以上
-- Windows 环境优先
-
-说明：
-
-- 项目大量处理 Windows 路径和文件夹图标能力，默认按 Windows 本地桌面工具使用。
-- Tauri 桌面链路还需要本机可用的 Rust / Cargo 环境。
-
-## 安装依赖
-
-### Python
-
-```powershell
-pip install -r requirements.txt
-```
-
-当前 Python 依赖包括：
-
-- `openai`
-- `pypdf`
-- `python-docx`
-- `pandas`
-- `openpyxl`
-- `fastapi`
-- `uvicorn`
-- `python-multipart`
-- `python-dotenv`
-
-### 前端
-
-```powershell
-Set-Location frontend
-npm install
-```
-
-### 桌面壳
-
-```powershell
-Set-Location desktop
-npm install
-```
-
-## 运行方式
-
-### 1. 启动本地 API
-
-```powershell
-python -m file_organizer.api
-```
-
-默认行为：
-
-- 地址：`http://127.0.0.1:8765`
-- 运行时文件：`output/runtime/backend.json`
-- 健康检查：`GET /api/health`
-
-可用环境变量：
-
-- `FILE_ORGANIZER_API_HOST`
-- `FILE_ORGANIZER_API_PORT`
-- `FILE_ORGANIZER_API_BASE_URL`
-- `FILE_ORGANIZER_API_RELOAD`
-- `FILE_ORGANIZER_API_TOKEN`
-- `FILE_ORGANIZER_INSTANCE_ID`
-
-### 2. 启动前端开发环境
-
-```powershell
-Set-Location frontend
-npm install
-npm run dev
-```
-
-前端读取运行时地址的优先级：
-
-1. `window.__FILE_ORGANIZER_RUNTIME__.base_url`
-2. `NEXT_PUBLIC_API_BASE_URL`
-3. 默认 `http://127.0.0.1:8765`
-
-如果桌面壳已注入 `api_token`，前端也会优先使用 `window.__FILE_ORGANIZER_RUNTIME__.api_token` 调用受保护接口。
-
-### 3. 启动 Tauri 桌面壳
-
-```powershell
-Set-Location desktop
-npm run tauri:dev
-```
-
-桌面壳当前会负责：
-
-- 拉起 `python -m file_organizer.api`
-- 等待 `output/runtime/backend.json`
-- 校验后端实例与健康状态
-- 向前端注入 `window.__FILE_ORGANIZER_RUNTIME__`
-- 提供目录选择、批量目录选择、应用 / 恢复文件夹图标、抠图测试等桌面命令
-
-### 4. 构建桌面应用
-
-```powershell
-Set-Location desktop
-npm install
-npm run tauri:build
-```
-
-## 配置说明
-
-### 推荐配置入口
-
-当前项目以根目录 `config.json` 为主配置文件，推荐通过设置页维护。
-
-仓库内只保留脱敏示例：
-
-- [`config.example.json`](config.example.json)
-- [`.env.example`](.env.example)
-
-说明：
-
-- `config.json` 已被忽略，不应提交到版本控制。
-- 统一设置服务会把文本模型、图片理解、图标生图、抠图配置整合到同一个根配置。
-- 老的零散配置会在读取时尽量迁移到当前 schema。
-
-### 当前设置家族
-
-设置页当前管理以下配置族：
-
-- `text`：主整理链路文本模型
-- `vision`：图片理解模型
-- `icon_image`：图标工坊生图模型
-- `bg_removal`：图标抠图服务
-- `global_config`：启动默认模板、命名风格、风险级别、默认备注、调试开关等
-
-### 文件读取与图片能力
-
-当前文件读取能力包括：
-
-- 普通文本读取，支持常见 Windows 中文编码 fallback
-- `PDF`、`Word`、`Excel` 摘要提取
-- `.zip` 索引预览，不解压、不读取内部正文
-- 图片简短摘要，使用独立 Vision 配置，不复用主整理模型上下文
-
-### 图标工坊配置特点
-
-图标工坊当前支持：
-
-- 文本分析与图像生成链路联动
-- 分开的 `analysis_concurrency_limit` / `image_concurrency_limit`
-- `centralized` 与 `in_folder` 两种保存模式
-- 内置抠图预设和自定义抠图服务配置
-
-## 输出与日志
-
-### 运行时文件
-
-- `output/runtime/backend.json`：后端运行时发现文件
-
-### 历史与执行产物
-
-- `output/history/executions`：执行 journal
-- `output/history/latest_by_directory.json`：目录到最近一次执行的索引
-- `output/icon_workbench/`：图标工坊会话与生成产物
-
-### 日志
-
-- `logs/backend/runtime.log`：后端基础运行日志
-- `logs/backend/runtime.log.YYYY-MM-DD`：按天轮转日志
-- `logs/backend/debug.jsonl`：结构化调试日志
-
-设置页里的“详细日志”只控制是否额外写入 `debug.jsonl`，不会关闭基础运行日志。
-
-## 测试与验证
-
-### Python 测试
+### 常用命令
 
 ```powershell
 python -m unittest discover -s tests -p "test_*.py"
-```
 
-常用测试模块：
-
-```powershell
-python -m unittest tests.test_session_service -v
-python -m unittest tests.test_api_runtime -v
-python -m unittest tests.test_api_icon_workbench -v
-python -m unittest tests.test_settings_service -v
-python -m unittest tests.test_rollback_service -v
-```
-
-### 前端类型检查
-
-```powershell
 Set-Location frontend
 npm run typecheck
-```
-
-### 前端测试
-
-```powershell
-Set-Location frontend
 npm test
-```
 
-### Rust 快速检查
-
-```powershell
-Set-Location desktop\\src-tauri
+Set-Location ..\desktop\src-tauri
 cargo check
 ```
 
-## 常见开发场景
+### 推荐开发流程
 
-### 只改 Python 后端
+1. 先运行 `python -m file_organizer.api`
+2. 前端开发时在 `frontend/` 运行 `npm run dev`
+3. 提交前至少执行相关 `unittest` 和 `npm run typecheck`
+4. 如涉及桌面端，再补跑 `cargo check` 或 `npm run tauri:dev`
 
-1. 运行 `python -m file_organizer.api`
-2. 定向执行相关 `unittest`
-3. 如果改动涉及会话、事件流或 API schema，再补看前端类型和运行时契约
 
-### 只改前端工作台
+## License
 
-1. 先确认本地 API 已启动
-2. 在 `frontend/` 运行 `npm run dev`
-3. 提交前至少执行 `npm run typecheck`
-4. 如果涉及设置页逻辑，顺手执行 `npm test`
-
-### 联调桌面壳
-
-1. 在 `desktop/` 运行 `npm run tauri:dev`
-2. 优先检查 `output/runtime/backend.json` 是否生成
-3. 如连接异常，优先看 `logs/backend/runtime.log`
-
-## 推荐开发工作流
-
-### 整理主链路开发
-
-1. 运行 `python -m file_organizer.api`。
-2. 如需前端联调，再在 `frontend/` 中运行 `npm run dev`。
-3. 若修改会话状态机、事件流、`session_snapshot` 或 API schema，至少同步检查：
-   - `tests/test_api_*.py`
-   - `tests/test_session_*.py`
-   - `tests/test_api_sessions.py`
-   - 前端 `src/types/*`
-
-### 图标工坊开发
-
-1. 在设置页先补齐文本模型、图标生图和抠图配置。
-2. 重点回归：
-   - `tests/test_api_icon_workbench.py`
-   - `tests/test_icon_workbench_service.py`
-   - `tests/test_icon_workbench_client.py`
-   - `tests/test_settings_service.py`
-
-### 桌面端联调
-
-1. 先确保 `frontend/` 与 `desktop/` 依赖已安装。
-2. 在 `desktop/` 运行 `npm run tauri:dev`。
-3. 若桌面无法连接后端，优先检查：
-   - `output/runtime/backend.json`
-   - `logs/backend/runtime.log`
-   - 前端是否读取了 `window.__FILE_ORGANIZER_RUNTIME__`
-
-## 设计约束
-
-前端和桌面交互默认按“桌面工作台”而不是“普通网页”设计，具体准则见 [`DESIGN.md`](DESIGN.md)。
-
-简要原则：
-
-- 优先稳定框架、信息密度和长时间使用的低疲劳体验
-- 优先工具栏 / 列表 / 主工作区 / 详情区这类结构化布局
-- 避免网页式 hero、大横幅、营销化文案和漂浮卡片堆叠
-
-## 提交前最小检查清单
-
-- Python 逻辑改动：运行相关 `unittest`
-- 前端改动：运行 `frontend` 下的 `npm run typecheck`
-- 前端交互或设置流程改动：补跑 `frontend` 下的 `npm test`
-- Tauri / Rust 改动：运行 `desktop/src-tauri` 下的 `cargo check`
-- 涉及主链路时，至少手动验证其一：`python -m file_organizer.api`、`npm run tauri:dev`
+[MIT](./LICENSE)
