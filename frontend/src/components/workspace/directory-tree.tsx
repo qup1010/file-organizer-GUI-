@@ -29,6 +29,11 @@ const getFileIcon = (filename: string) => {
   return FileText;
 };
 
+const getEntryIcon = (item: Pick<PlanItem, "display_name" | "entry_type">) => {
+  if (item.entry_type === "dir") return Folder;
+  return getFileIcon(item.display_name);
+};
+
 // 树节点接口
 export interface TreeNode {
   name: string;
@@ -207,7 +212,7 @@ function FolderNode({
               ))}
 
               {node.items.map((item) => {
-                const Icon = getFileIcon(item.display_name);
+                const Icon = getEntryIcon(item);
                 const isEditing = editingId === item.item_id;
                 return (
                   <div key={item.item_id} className="group/item flex flex-col pl-5 pr-1">

@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, FileText, Folder, FolderOpen, Layers, Search, ShieldAlert, Sparkles, Edit2, Info, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, FileText, Folder, FolderOpen, Layers, Search, Sparkles, Edit2, Info, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { MarkdownProse } from "./markdown-prose";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose } from "@/components/ui/dialog";
 
 import { cn } from "@/lib/utils";
-import type { PlanItem, PlanSnapshot, SessionStage } from "@/types/session";
+import type { PlanItem, PlanSnapshot, SessionStage, SourceTreeEntry } from "@/types/session";
 
 export type PreviewFilter = "all" | "changed" | "unresolved" | "review" | "invalidated";
 
@@ -26,11 +26,13 @@ interface PreviewPanelProps {
     preservingPreviousPlan: boolean;
     isRunning: boolean;
   } | null;
+  plannerRunKey?: string | null;
   readOnly?: boolean;
   onRunPrecheck: () => void;
   onUpdateItem: (itemId: string, payload: { target_dir?: string; move_to_review?: boolean }) => Promise<void> | void;
   precheckSummary?: { mkdir_preview?: string[] } | null;
   focusRequest?: PreviewFocusRequest | null;
+  sourceTreeEntries?: SourceTreeEntry[];
 }
 
 interface TreeNode {
@@ -38,6 +40,7 @@ interface TreeNode {
   path: string;
   kind: "directory" | "file";
   item?: PlanItem;
+  sourceEntry?: SourceTreeEntry;
   children: TreeNode[];
 }
 
@@ -50,7 +53,12 @@ function targetDir(item: Pick<PlanItem, "target_relpath">): string {
   return value.includes("/") ? value.slice(0, value.lastIndexOf("/")) : "";
 }
 
-function fileExtension(item: Pick<PlanItem, "display_name" | "source_relpath">): string {
+function normalizeEntryKind(entryType: string | null | undefined): "directory" | "file" {
+  return ["dir", "directory", "folder"].includes(String(entryType || "").toLowerCase()) ? "directory" : "file";
+}
+
+function fileExtension(item: Pick<PlanItem | SourceTreeEntry, "display_name" | "source_relpath" | "entry_type">): string {
+  if (normalizeEntryKind(item.entry_type) === "directory") return "目录";
   const source = item.display_name || item.source_relpath;
   const ext = source.split(".").pop()?.toLowerCase();
   return ext && ext !== source.toLowerCase() ? ext : "无后缀";
@@ -71,7 +79,19 @@ function matchesFilter(item: PlanItem, filter: PreviewFilter) {
   return item.status === "invalidated";
 }
 
-function buildTree(items: PlanItem[], mode: "before" | "after", mkdirPreview: string[]): TreeNode[] {
+function sortTree(root: TreeNode) {
+  const sortNode = (node: TreeNode) => {
+    node.children.sort((left, right) => {
+      if (left.kind !== right.kind) return left.kind === "directory" ? -1 : 1;
+      return left.name.localeCompare(right.name, "zh-CN");
+    });
+    node.children.forEach(sortNode);
+  };
+  sortNode(root);
+  return root.children;
+}
+
+function buildPlanTree(items: PlanItem[], mkdirPreview: string[]): TreeNode[] {
   const root: TreeNode = { name: "", path: "", kind: "directory", children: [] };
   const ensureDir = (parts: string[]) => {
     let current = root;
@@ -92,22 +112,64 @@ function buildTree(items: PlanItem[], mode: "before" | "after", mkdirPreview: st
     if (parts.length) ensureDir(parts);
   });
   items.forEach((item) => {
-    const rawPath = mode === "before" ? item.source_relpath : item.target_relpath || item.source_relpath;
+    const rawPath = item.target_relpath || item.source_relpath;
     const parts = normalizePath(rawPath).split("/").filter(Boolean);
+    if (parts.length === 0) return;
+    if (normalizeEntryKind(item.entry_type) === "directory") {
+      const directoryNode = ensureDir(parts);
+      directoryNode.item = directoryNode.item || item;
+      return;
+    }
     const filename = parts.pop();
     if (!filename) return;
     const parent = ensureDir(parts);
     parent.children.push({ name: filename, path: normalizePath(rawPath), kind: "file", item, children: [] });
   });
-  const sortNode = (node: TreeNode) => {
-    node.children.sort((left, right) => {
-      if (left.kind !== right.kind) return left.kind === "directory" ? -1 : 1;
-      return left.name.localeCompare(right.name, "zh-CN");
-    });
-    node.children.forEach(sortNode);
+  return sortTree(root);
+}
+
+function buildSourceTree(entries: SourceTreeEntry[], itemBySource: Map<string, PlanItem>): TreeNode[] {
+  const root: TreeNode = { name: "", path: "", kind: "directory", children: [] };
+  const ensureDir = (parts: string[]) => {
+    let current = root;
+    let currentPath = "";
+    for (const part of parts) {
+      currentPath = currentPath ? `${currentPath}/${part}` : part;
+      let next = current.children.find((child) => child.kind === "directory" && child.name === part);
+      if (!next) {
+        next = { name: part, path: currentPath, kind: "directory", children: [] };
+        current.children.push(next);
+      }
+      current = next;
+    }
+    return current;
   };
-  sortNode(root);
-  return root.children;
+
+  entries.forEach((entry) => {
+    const entryPath = normalizePath(entry.source_relpath);
+    const parts = entryPath.split("/").filter(Boolean);
+    if (parts.length === 0) return;
+    const linkedItem = itemBySource.get(entryPath);
+    if (normalizeEntryKind(entry.entry_type) === "directory") {
+      const directoryNode = ensureDir(parts);
+      directoryNode.sourceEntry = directoryNode.sourceEntry || entry;
+      directoryNode.item = directoryNode.item || linkedItem;
+      return;
+    }
+    const filename = parts.pop();
+    if (!filename) return;
+    const parent = ensureDir(parts);
+    parent.children.push({
+      name: filename,
+      path: entryPath,
+      kind: "file",
+      item: linkedItem,
+      sourceEntry: entry,
+      children: [],
+    });
+  });
+
+  return sortTree(root);
 }
 
 function TreeBranch({
@@ -127,38 +189,54 @@ function TreeBranch({
   onSelectItem: (itemId: string) => void;
   onEditItem: (itemId: string) => void;
 }) {
-  if (node.kind === "file" && node.item) {
-    const status = statusMeta(node.item.status);
+  if (node.kind === "file") {
+    if (node.item) {
+      const status = statusMeta(node.item.status);
+      const ItemIcon = normalizeEntryKind(node.item.entry_type) === "directory" ? Folder : FileText;
+      return (
+        <button
+          type="button"
+          onClick={() => onSelectItem(node.item!.item_id)}
+          className={cn(
+            "group flex w-full items-center gap-3 rounded-[8px] border py-2 pr-3 text-left transition-colors",
+            selectedItemId === node.item.item_id ? "border-primary/22 bg-primary/6" : "border-transparent hover:border-on-surface/8 hover:bg-on-surface/[0.02]",
+          )}
+          style={{ paddingLeft: 12 + depth * 16 }}
+        >
+          <ItemIcon className="h-4 w-4 shrink-0 text-on-surface-variant/60" />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[13px] font-semibold text-on-surface">{node.item.display_name}</p>
+            <p className="truncate text-[11px] text-ui-muted">{node.item.suggested_purpose || "未提供归类理由"}</p>
+          </div>
+          <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-bold shrink-0", status.tone)}>{status.label}</span>
+          <div
+            role="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onEditItem(node.item!.item_id);
+            }}
+            className={cn(
+              "flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] border border-on-surface/10 bg-surface shadow-sm transition-opacity hover:bg-on-surface/[0.02] active:scale-95",
+              selectedItemId === node.item.item_id ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus:opacity-100"
+            )}
+          >
+            <Edit2 className="h-3.5 w-3.5 text-on-surface-variant" />
+          </div>
+        </button>
+      );
+    }
+
     return (
-      <button
-        type="button"
-        onClick={() => onSelectItem(node.item!.item_id)}
-        className={cn(
-          "group flex w-full items-center gap-3 rounded-[8px] border py-2 pr-3 text-left transition-colors",
-          selectedItemId === node.item.item_id ? "border-primary/22 bg-primary/6" : "border-transparent hover:border-on-surface/8 hover:bg-on-surface/[0.02]",
-        )}
+      <div
+        className="flex w-full items-center gap-3 rounded-[8px] border border-transparent py-2 pr-3 text-left"
         style={{ paddingLeft: 12 + depth * 16 }}
       >
-        <FileText className="h-4 w-4 shrink-0 text-on-surface-variant/60" />
+        <FileText className="h-4 w-4 shrink-0 text-on-surface-variant/55" />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-semibold text-on-surface">{node.item.display_name}</p>
-          <p className="truncate text-[11px] text-ui-muted">{node.item.suggested_purpose || "未提供归类理由"}</p>
+          <p className="truncate text-[13px] font-medium text-on-surface">{node.sourceEntry?.display_name || node.name}</p>
+          <p className="truncate text-[11px] text-ui-muted">整理前原始条目</p>
         </div>
-        <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-bold shrink-0", status.tone)}>{status.label}</span>
-        <div
-          role="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onEditItem(node.item!.item_id);
-          }}
-          className={cn(
-            "flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] border border-on-surface/10 bg-surface shadow-sm transition-opacity hover:bg-on-surface/[0.02] active:scale-95",
-            selectedItemId === node.item.item_id ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus:opacity-100"
-          )}
-        >
-          <Edit2 className="h-3.5 w-3.5 text-on-surface-variant" />
-        </div>
-      </button>
+      </div>
     );
   }
 
@@ -236,13 +314,111 @@ function QueueCard({
             <span className="text-[11px] text-ui-muted">{fileExtension(item)}</span>
           </button>
         ))}
+        {items.length > 4 && (
+          <button type="button" onClick={onShowAll} className="w-full text-center text-[11px] text-ui-muted/70 hover:text-ui-muted transition-colors pt-1">
+            还有 {items.length - 4} 项，点击查看全部
+          </button>
+        )}
       </div>
     </section>
   );
 }
 
+function QueuePanel({
+  collapsed,
+  queueCount,
+  unresolvedCount,
+  reviewCount,
+  invalidatedCount,
+  children,
+  onToggle,
+}: {
+  collapsed: boolean;
+  queueCount: number;
+  unresolvedCount: number;
+  reviewCount: number;
+  invalidatedCount: number;
+  children: React.ReactNode;
+  onToggle: () => void;
+}) {
+  if (queueCount === 0) return null;
+  return (
+    <aside className="w-full shrink-0 min-w-0">
+      <section className="rounded-[10px] border border-on-surface/8 bg-surface shadow-sm">
+        <div className="flex items-center justify-between gap-3 border-b border-on-surface/6 px-3 py-2.5">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h3 className="text-[13px] font-bold text-on-surface">待处理队列</h3>
+              <span className="rounded-full bg-warning/10 px-2 py-0.5 text-[10px] font-bold text-warning">{queueCount}</span>
+            </div>
+            <p className="mt-0.5 text-[11px] text-ui-muted">
+              {invalidatedCount > 0 ? `重新确认 ${invalidatedCount}` : unresolvedCount > 0 ? `待决策 ${unresolvedCount}` : `待核对 ${reviewCount}`}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-expanded={!collapsed}
+            aria-controls="preview-queue-panel"
+            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-[8px] border border-on-surface/8 bg-surface px-2.5 text-[11px] font-semibold text-on-surface transition-colors hover:bg-on-surface/[0.03]"
+          >
+            {collapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
+            {collapsed ? "展开" : "收起"}
+          </button>
+        </div>
+        <AnimatePresence initial={false}>
+          {!collapsed ? (
+            <motion.div
+              id="preview-queue-panel"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="space-y-3 p-3">{children}</div>
+            </motion.div>
+          ) : (
+            <motion.div
+              id="preview-queue-panel"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="flex flex-wrap gap-2 px-3 py-2.5">
+                {invalidatedCount > 0 ? (
+                  <span className="rounded-full border border-error/12 bg-error-container/20 px-2 py-1 text-[10px] font-bold text-error">需重新确认 {invalidatedCount}</span>
+                ) : null}
+                {unresolvedCount > 0 ? (
+                  <span className="rounded-full border border-warning/12 bg-warning-container/25 px-2 py-1 text-[10px] font-bold text-warning">待决策 {unresolvedCount}</span>
+                ) : null}
+                {reviewCount > 0 ? (
+                  <span className="rounded-full border border-primary/12 bg-primary/5 px-2 py-1 text-[10px] font-bold text-primary">待核对 {reviewCount}</span>
+                ) : null}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </section>
+    </aside>
+  );
+}
+
 export function PreviewPanel(props: PreviewPanelProps) {
-  const { plan, stage, isBusy, isPlanSyncing = false, plannerStatus = null, readOnly = false, onRunPrecheck, onUpdateItem, precheckSummary, focusRequest } = props;
+  const {
+    plan,
+    stage,
+    isBusy,
+    isPlanSyncing = false,
+    plannerStatus = null,
+    plannerRunKey = null,
+    readOnly = false,
+    onRunPrecheck,
+    onUpdateItem,
+    precheckSummary,
+    focusRequest,
+    sourceTreeEntries = [],
+  } = props;
   const allItems = useMemo(() => {
     const merged = new Map<string, PlanItem>();
     [...(plan.items || []), ...(plan.invalidated_items || [])].forEach((item) => {
@@ -252,7 +428,8 @@ export function PreviewPanel(props: PreviewPanelProps) {
     });
     return Array.from(merged.values());
   }, [plan.invalidated_items, plan.items]);
-  const [viewMode, setViewMode] = useState<"before" | "after">("after");
+  const isPlanningRun = stage === "planning" && Boolean(plannerStatus?.isRunning);
+  const [viewMode, setViewMode] = useState<"before" | "after">(isPlanningRun ? "before" : "after");
   const [filter, setFilter] = useState<PreviewFilter>("all");
   const [search, setSearch] = useState("");
   const [extensionFilter, setExtensionFilter] = useState("all");
@@ -262,12 +439,30 @@ export function PreviewPanel(props: PreviewPanelProps) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [manualTarget, setManualTarget] = useState("");
   const [showManualInput, setShowManualInput] = useState(false);
+  const [queueCollapsed, setQueueCollapsed] = useState(false);
+  const previousPlannerRunKeyRef = useRef<string | null>(null);
 
   const unresolvedItems = useMemo(() => allItems.filter((item) => item.status === "unresolved"), [allItems]);
   const reviewItems = useMemo(() => allItems.filter((item) => item.status === "review"), [allItems]);
   const invalidatedItems = useMemo(() => (plan.invalidated_items || []).map((item) => ({ ...item, status: "invalidated" as const })), [plan.invalidated_items]);
+  const queueCount = invalidatedItems.length + unresolvedItems.length + reviewItems.length;
+  const itemBySource = useMemo(
+    () =>
+      new Map(
+        allItems
+          .filter((item) => normalizePath(item.source_relpath))
+          .map((item) => [normalizePath(item.source_relpath), item]),
+      ),
+    [allItems],
+  );
 
-  const extensionOptions = useMemo(() => ["all", ...Array.from(new Set(allItems.map((item) => fileExtension(item)))).sort((a, b) => a.localeCompare(b, "zh-CN"))], [allItems]);
+  const extensionOptions = useMemo(
+    () => [
+      "all",
+      ...Array.from(new Set([...allItems, ...sourceTreeEntries].map((item) => fileExtension(item)))).sort((a, b) => a.localeCompare(b, "zh-CN")),
+    ],
+    [allItems, sourceTreeEntries],
+  );
   const filteredItems = useMemo(() => {
     const keyword = search.trim().toLowerCase();
     return allItems.filter((item) => {
@@ -278,9 +473,27 @@ export function PreviewPanel(props: PreviewPanelProps) {
         .some((value) => value.toLowerCase().includes(keyword));
     });
   }, [allItems, extensionFilter, filter, search]);
+  const filteredSourceEntries = useMemo(() => {
+    const keyword = search.trim().toLowerCase();
+    return sourceTreeEntries.filter((entry) => {
+      const linkedItem = itemBySource.get(normalizePath(entry.source_relpath));
+      if (filter !== "all" && (!linkedItem || !matchesFilter(linkedItem, filter))) return false;
+      if (extensionFilter !== "all" && fileExtension(entry) !== extensionFilter) return false;
+      if (!keyword) return true;
+      return [
+        entry.display_name,
+        entry.source_relpath,
+        linkedItem?.target_relpath || "",
+        linkedItem?.suggested_purpose || "",
+        linkedItem?.content_summary || "",
+      ].some((value) => value.toLowerCase().includes(keyword));
+    });
+  }, [extensionFilter, filter, itemBySource, search, sourceTreeEntries]);
   const selectedItem = useMemo(() => allItems.find((item) => item.item_id === selectedItemId) || null, [allItems, selectedItemId]);
   const mkdirPreview = precheckSummary?.mkdir_preview || [];
-  const currentTree = useMemo(() => buildTree(filteredItems, viewMode, mkdirPreview), [filteredItems, mkdirPreview, viewMode]);
+  const beforeTree = useMemo(() => buildSourceTree(filteredSourceEntries, itemBySource), [filteredSourceEntries, itemBySource]);
+  const afterTree = useMemo(() => buildPlanTree(filteredItems, mkdirPreview), [filteredItems, mkdirPreview]);
+  const currentTree = viewMode === "before" ? beforeTree : afterTree;
   const availableDirectories = useMemo(() => {
     const dirs = new Set<string>(["Review"]);
     plan.groups.forEach((group) => group.directory && dirs.add(group.directory));
@@ -308,6 +521,18 @@ export function PreviewPanel(props: PreviewPanelProps) {
     setManualTarget(targetDir(editingItem || { target_relpath: "" }));
   }, [editingItem]);
 
+  useEffect(() => {
+    if (editingItem && (editingItem.status === "invalidated" || editingItem.status === "unresolved" || editingItem.status === "review")) {
+      setQueueCollapsed(false);
+    }
+  }, [editingItem]);
+
+  useEffect(() => {
+    if (focusRequest?.filter === "invalidated" || focusRequest?.filter === "unresolved" || focusRequest?.filter === "review") {
+      setQueueCollapsed(false);
+    }
+  }, [focusRequest]);
+
   const applyItemTarget = async (itemId: string, payload: { target_dir?: string; move_to_review?: boolean }) => {
     await Promise.resolve(onUpdateItem(itemId, payload));
   };
@@ -329,6 +554,21 @@ export function PreviewPanel(props: PreviewPanelProps) {
       : unresolvedItems.length > 0
         ? `仍有 ${unresolvedItems.length} 项待决策。`
         : "方案正在同步，稍后即可预检。";
+  const visibleCount = viewMode === "before" ? filteredSourceEntries.length : filteredItems.length;
+  const totalCount = viewMode === "before" ? sourceTreeEntries.length : allItems.length;
+  const hasAfterPlanData = allItems.length > 0 || mkdirPreview.length > 0;
+
+  useEffect(() => {
+    const currentRunKey = isPlanningRun ? plannerRunKey || "__planning__" : null;
+    if (currentRunKey && currentRunKey !== previousPlannerRunKeyRef.current) {
+      setViewMode("before");
+      previousPlannerRunKeyRef.current = currentRunKey;
+      return;
+    }
+    if (!currentRunKey) {
+      previousPlannerRunKeyRef.current = null;
+    }
+  }, [isPlanningRun, plannerRunKey]);
 
   return (
     <div className="flex h-full w-full min-w-0 flex-col bg-transparent @container overflow-hidden">
@@ -409,14 +649,15 @@ export function PreviewPanel(props: PreviewPanelProps) {
                 </div>
 
                 <div className="hidden shrink-0 items-center px-1 text-[10px] font-bold text-ui-muted/60 @5xl:flex">
-                  {filteredItems.length} / {allItems.length}
+                  {visibleCount} / {totalCount}
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="flex-1 flex flex-col gap-4 p-4 min-w-0 min-h-0 @4xl:flex-row overflow-hidden">
-              <section className="flex-1 min-w-0 flex flex-col rounded-[10px] border border-on-surface/8 bg-surface p-3 overflow-hidden">
+          <div data-testid="preview-scroll-region" className="flex-1 min-h-0 overflow-y-auto">
+            <div className="flex min-w-0 flex-col gap-4 p-4">
+              <section className="min-w-0 min-h-[280px] @4xl:min-h-[340px] rounded-[10px] border border-on-surface/8 bg-surface p-3">
                 <div className="mb-3 shrink-0 flex items-center justify-between">
                   <div>
                     <h3 className="text-[13px] font-bold text-on-surface">结构预览</h3>
@@ -465,7 +706,7 @@ export function PreviewPanel(props: PreviewPanelProps) {
                     </button>
                   </div>
                 </div>
-                <div className="flex-1 overflow-y-auto space-y-1 scrollbar-thin pr-3">
+                <div className="min-h-[220px] space-y-1 pr-1">
                   {currentTree.length > 0 ? currentTree.map((node) => (
                     <TreeBranch
                       key={node.path}
@@ -481,20 +722,46 @@ export function PreviewPanel(props: PreviewPanelProps) {
                     <div className="flex h-[360px] flex-col items-center justify-center gap-3 rounded-[10px] border border-dashed border-on-surface/10 bg-on-surface/[0.02] text-center">
                       <Sparkles className="h-8 w-8 text-primary/40" />
                       <div>
-                        <p className="text-[14px] font-semibold text-on-surface">当前筛选下没有条目</p>
-                        <p className="text-[12px] text-ui-muted">可以切换筛选条件，或先处理右侧待处理队列。</p>
+                        <p className="text-[14px] font-semibold text-on-surface">
+                          {viewMode === "before"
+                            ? sourceTreeEntries.length > 0
+                              ? "当前筛选下没有整理前条目"
+                              : "当前筛选下没有条目"
+                            : !hasAfterPlanData && isPlanningRun
+                              ? "整理后结构尚在生成"
+                              : "当前筛选下没有整理后条目"}
+                        </p>
+                        <p className="text-[12px] text-ui-muted">
+                          {viewMode === "before"
+                            ? sourceTreeEntries.length > 0
+                              ? "可以切换筛选条件，或先查看完整的整理前目录树。"
+                              : "扫描完成后，这里会展示真实的整理前目录结构。"
+                            : !hasAfterPlanData && isPlanningRun
+                              ? "先切回“前”查看原始目录，方案稳定后这里会自动出现整理后结构。"
+                              : "可以切换筛选条件，或先处理下方待处理队列。"}
+                        </p>
                       </div>
                     </div>
                   )}
                 </div>
               </section>
 
-              <aside className="w-full shrink-0 flex flex-col space-y-3 min-w-0 @4xl:w-[320px] @4xl:flex-none overflow-y-auto scrollbar-thin pr-3">
-                <QueueCard title="需重新确认" items={invalidatedItems} selectedItemId={editingItemId || selectedItemId} onSelectItem={(id) => { setSelectedItemId(id); setEditingItemId(id); }} onShowAll={() => setFilter("invalidated")} tone="border-error/12 bg-error-container/20" />
-                <QueueCard title="待决策" items={unresolvedItems} selectedItemId={editingItemId || selectedItemId} onSelectItem={(id) => { setSelectedItemId(id); setEditingItemId(id); }} onShowAll={() => setFilter("unresolved")} tone="border-warning/12 bg-warning-container/25" />
-                <QueueCard title="待核对" items={reviewItems} selectedItemId={editingItemId || selectedItemId} onSelectItem={(id) => { setSelectedItemId(id); setEditingItemId(id); }} onShowAll={() => setFilter("review")} tone="border-primary/12 bg-primary/5" />
-              </aside>
+              <QueuePanel
+                collapsed={queueCollapsed}
+                queueCount={queueCount}
+                unresolvedCount={unresolvedItems.length}
+                reviewCount={reviewItems.length}
+                invalidatedCount={invalidatedItems.length}
+                onToggle={() => setQueueCollapsed((current) => !current)}
+              >
+                <div className="space-y-3">
+                  <QueueCard title="需重新确认" items={invalidatedItems} selectedItemId={editingItemId || selectedItemId} onSelectItem={(id) => { setSelectedItemId(id); setEditingItemId(id); }} onShowAll={() => setFilter("invalidated")} tone="border-error/12 bg-error-container/20" />
+                  <QueueCard title="待决策" items={unresolvedItems} selectedItemId={editingItemId || selectedItemId} onSelectItem={(id) => { setSelectedItemId(id); setEditingItemId(id); }} onShowAll={() => setFilter("unresolved")} tone="border-warning/12 bg-warning-container/25" />
+                  <QueueCard title="待核对" items={reviewItems} selectedItemId={editingItemId || selectedItemId} onSelectItem={(id) => { setSelectedItemId(id); setEditingItemId(id); }} onShowAll={() => setFilter("review")} tone="border-primary/12 bg-primary/5" />
+                </div>
+              </QueuePanel>
             </div>
+          </div>
           </section>
         </div>
 
@@ -590,11 +857,48 @@ export function PreviewPanel(props: PreviewPanelProps) {
                       {showManualInput ? "- 收起手动路径输入" : "+ 手动输入特殊路径"}
                     </button>
                     {showManualInput ? (
-                      <div className="flex gap-2 min-w-0 items-center">
-                        <input value={manualTarget} onChange={(event) => setManualTarget(event.target.value)} placeholder="如: 项目/归档" className="h-10 min-w-0 flex-1 rounded-[8px] border border-on-surface/15 bg-surface px-3 text-[13px] font-medium text-on-surface outline-none focus:border-primary/50" />
-                        <button type="button" onClick={() => { void applyItemTarget(editingItem.item_id, { target_dir: manualTarget.trim() }); setEditingItemId(null); }} className="shrink-0 h-10 rounded-[8px] bg-on-surface px-5 text-[13px] font-bold text-surface transition-transform active:scale-95 hover:bg-on-surface/90">
-                          应用
-                        </button>
+                      <div className="relative">
+                        <div className="flex gap-2 min-w-0 items-center">
+                          <div className="relative flex-1">
+                            <input
+                              value={manualTarget}
+                              onChange={(event) => setManualTarget(event.target.value)}
+                              placeholder="如: 项目/归档"
+                              className="h-10 w-full rounded-[8px] border border-on-surface/15 bg-surface px-3 text-[13px] font-medium text-on-surface outline-none focus:border-primary/50"
+                            />
+                            {/* 路径建议下拉面板 */}
+                            {manualTarget.trim() && availableDirectories.filter(d => d.toLowerCase().includes(manualTarget.toLowerCase().trim()) && d !== manualTarget.trim()).length > 0 && (
+                              <div className="absolute bottom-full left-0 right-0 z-50 mb-2 max-h-48 overflow-y-auto rounded-[10px] border border-on-surface/10 bg-surface shadow-xl py-1 scrollbar-thin animate-in fade-in slide-in-from-bottom-2">
+                                <div className="px-3 py-1.5 text-[10px] font-bold text-ui-muted uppercase tracking-wider bg-on-surface/[0.02]">建议路径</div>
+                                {availableDirectories
+                                  .filter(d => d.toLowerCase().includes(manualTarget.toLowerCase().trim()) && d !== manualTarget.trim())
+                                  .slice(0, 8)
+                                  .map((dir) => (
+                                    <button
+                                      key={`suggest-${dir}`}
+                                      type="button"
+                                      onClick={() => setManualTarget(dir)}
+                                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-on-surface hover:bg-primary/5 hover:text-primary transition-colors"
+                                    >
+                                      <Folder className="w-3.5 h-3.5 opacity-40" />
+                                      <span className="truncate">{dir}</span>
+                                    </button>
+                                  ))}
+                              </div>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void applyItemTarget(editingItem.item_id, { target_dir: manualTarget.trim() });
+                              setEditingItemId(null);
+                            }}
+                            className="shrink-0 h-10 rounded-[8px] bg-on-surface px-5 text-[13px] font-bold text-surface transition-transform active:scale-95 hover:bg-on-surface/90"
+                          >
+                            应用
+                          </button>
+                        </div>
+                        <p className="mt-1.5 text-[11px] text-ui-muted px-1">输入路径层级使用斜杠 / 分隔，例如：`Work/Docs`</p>
                       </div>
                     ) : null}
                   </div>
@@ -606,7 +910,7 @@ export function PreviewPanel(props: PreviewPanelProps) {
       </Dialog>
 
       {!readOnly ? (
-        <div className="shrink-0 border-t border-on-surface/8 bg-surface-container-low px-4 py-3 lg:px-6">
+        <div data-testid="preview-footer" className="sticky bottom-0 z-10 shrink-0 border-t border-on-surface/8 bg-surface-container-low px-4 py-3 lg:px-6">
           <div className="mb-2 flex items-center gap-2 text-[13px] text-on-surface">
             {canRunPrecheck ? <CheckCircle2 className="h-4 w-4 text-success-dim" /> : <AlertTriangle className="h-4 w-4 text-warning" />}
             <span>{precheckNotice}</span>

@@ -73,6 +73,13 @@ def _coerce_analysis_items(items: list[AnalysisItem] | list[dict] | None) -> lis
     return [item if isinstance(item, AnalysisItem) else AnalysisItem.from_dict(item) for item in (items or [])]
 
 
+def _infer_entry_type(entry_name: str, directory: Path) -> str:
+    candidate = (directory / entry_name).resolve()
+    if candidate.exists():
+        return "dir" if candidate.is_dir() else "file"
+    return ""
+
+
 def _normalize_analysis_items(items: list[AnalysisItem] | list[dict] | None, directory: Path) -> tuple[list[AnalysisItem], list[str]]:
     normalized_items: list[AnalysisItem] = []
     invalid_lines: list[str] = []
@@ -87,6 +94,7 @@ def _normalize_analysis_items(items: list[AnalysisItem] | list[dict] | None, dir
             continue
         item_data = dict(item.__dict__)
         item_data["entry_name"] = normalized_name
+        item_data["entry_type"] = str(item_data.get("entry_type") or "").strip().lower() or _infer_entry_type(normalized_name, directory)
         normalized_items.append(AnalysisItem.from_dict(item_data))
     return normalized_items, invalid_lines
 
@@ -207,7 +215,7 @@ def _parse_rendered_analysis_items(content: str, directory: Path) -> tuple[list[
             invalid_lines.append(line)
             continue
 
-        parts = [part.strip() for part in line.split("|", 2)]
+        parts = [part.strip() for part in line.split("|", 3)]
         if len(parts) < 3:
             invalid_lines.append(line)
             continue
@@ -216,11 +224,20 @@ def _parse_rendered_analysis_items(content: str, directory: Path) -> tuple[list[
         if not name:
             invalid_lines.append(line)
             continue
+        if len(parts) >= 4:
+            entry_type = parts[1].lower()
+            suggested_purpose = parts[2] or "待判断"
+            summary = parts[3]
+        else:
+            entry_type = _infer_entry_type(name, directory)
+            suggested_purpose = parts[1] or "待判断"
+            summary = parts[2]
         parsed_items.append(
             AnalysisItem(
                 entry_name=name,
-                suggested_purpose=parts[1] or "待判断",
-                summary=parts[2],
+                entry_type=entry_type,
+                suggested_purpose=suggested_purpose,
+                summary=summary,
             )
         )
     return parsed_items, invalid_lines

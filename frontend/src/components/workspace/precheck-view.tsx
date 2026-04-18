@@ -254,7 +254,7 @@ export function PrecheckView({ summary, isBusy, readOnly = false, onRequestExecu
                                 className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[4px] bg-primary px-5 text-[12px] font-bold text-white transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
                             >
                                 <ArrowRight className="h-3.5 w-3.5" />
-                                立即执行
+                                确认影响范围
                             </button>
                         </div>
                     ) : null}

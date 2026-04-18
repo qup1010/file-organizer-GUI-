@@ -778,30 +778,34 @@ class SettingsService:
         secret_payload: dict[str, Any] | None = None,
     ) -> str:
         preset_id = str(uuid.uuid4())[:8]
+        explicit_name = str(name or "").strip()
         if family == TEXT_FAMILY:
             base = self._get_active_text_preset() if copy_from_active else copy.deepcopy(DEFAULT_TEXT_PRESET)
-            base["name"] = str(name or "").strip() or DEFAULT_TEXT_PRESET["name"]
+            base["name"] = explicit_name or DEFAULT_TEXT_PRESET["name"]
             if preset_patch:
                 base.update({key: value for key, value in dict(preset_patch).items() if key != TEXT_SECRET_KEY})
             base = self._sanitize_text_preset(base)
+            base["name"] = explicit_name or base["name"]
             base[TEXT_SECRET_KEY] = self._apply_secret_action(base.get(TEXT_SECRET_KEY, ""), secret_payload)
             self._text_presets[preset_id] = base
             self._active_text_preset_id = preset_id
         elif family == VISION_FAMILY:
             base = self._get_active_vision_preset() if copy_from_active else copy.deepcopy(DEFAULT_VISION_PRESET)
-            base["name"] = str(name or "").strip() or DEFAULT_VISION_PRESET["name"]
+            base["name"] = explicit_name or DEFAULT_VISION_PRESET["name"]
             base["IMAGE_ANALYSIS_NAME"] = base["name"]
             if preset_patch:
                 for key, value in dict(preset_patch).items():
                     if key != VISION_SECRET_KEY:
                         base[key] = value
             base = self._sanitize_vision_preset(base)
+            base["name"] = explicit_name or base["name"]
+            base["IMAGE_ANALYSIS_NAME"] = explicit_name or base["IMAGE_ANALYSIS_NAME"]
             base[VISION_SECRET_KEY] = self._apply_secret_action(base.get(VISION_SECRET_KEY, ""), secret_payload)
             self._vision_presets[preset_id] = base
             self._active_vision_preset_id = preset_id
         elif family == ICON_IMAGE_FAMILY:
             base = self._get_active_icon_image_preset() if copy_from_active else copy.deepcopy(DEFAULT_ICON_IMAGE_PRESET)
-            base["name"] = str(name or "").strip() or DEFAULT_ICON_IMAGE_PRESET["name"]
+            base["name"] = explicit_name or DEFAULT_ICON_IMAGE_PRESET["name"]
             if preset_patch:
                 merged_image_model = {
                     **dict(base.get("image_model") or {}),
@@ -813,6 +817,7 @@ class SettingsService:
                     "image_model": merged_image_model,
                 }
             base = self._sanitize_icon_image_preset(base)
+            base["name"] = explicit_name or base["name"]
             image_model = dict(base.get("image_model") or {})
             image_model["api_key"] = self._apply_secret_action(str(image_model.get("api_key", "") or ""), secret_payload)
             base["image_model"] = image_model

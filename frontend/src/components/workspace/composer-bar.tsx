@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { AlertTriangle, Loader2, Send, Sparkles } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils";
 import { AssistantRuntimeStatus, ComposerMode, SessionStage } from "@/types/session";
 

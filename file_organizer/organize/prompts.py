@@ -60,6 +60,11 @@ submit_plan_diff：只提交本轮变更字段（directory_renames, move_updates
 ================
 当前扫描结果
 ================
+说明：
+- 每一行格式为 `item_id | entry_type | suggested_purpose | summary`
+- 第二列 `entry_type` 才是条目真实类型，只可能是 `file` 或 `dir`
+- 如果摘要里附带 `[ext: xxx]`，那只是扩展名提示，不能把它当作条目类别
+
 <<<SCAN_LINES>>>
 """
 

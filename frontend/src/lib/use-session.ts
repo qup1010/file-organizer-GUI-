@@ -136,7 +136,7 @@ function composerModeForStage(stage: SessionStage): ComposerMode {
   if (stage === "planning" || stage === "ready_for_precheck") {
     return "editable";
   }
-  if (stage === "scanning") {
+  if (stage === "scanning" || stage === "idle" || stage === "draft") {
     return "readonly";
   }
   return "hidden";

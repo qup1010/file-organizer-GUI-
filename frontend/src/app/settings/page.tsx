@@ -426,7 +426,6 @@ export default function SettingsPage() {
           name: presetName.trim(),
           copy_from_active: true,
           preset: {
-            IMAGE_ANALYSIS_NAME: draft.vision.IMAGE_ANALYSIS_NAME,
             IMAGE_ANALYSIS_BASE_URL: draft.vision.IMAGE_ANALYSIS_BASE_URL,
             IMAGE_ANALYSIS_MODEL: draft.vision.IMAGE_ANALYSIS_MODEL,
           },

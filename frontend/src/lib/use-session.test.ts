@@ -1,0 +1,204 @@
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import type { ApiClient } from "@/lib/api";
+import type { SessionEvent, SessionSnapshot } from "@/types/session";
+
+import { useSession } from "./use-session";
+
+const getSession = vi.fn();
+const streamClose = vi.fn();
+let latestStreamOptions:
+  | {
+      onEvent: (event: SessionEvent) => void;
+      onError?: (error: Event) => void;
+    }
+  | null = null;
+
+vi.mock("@/lib/runtime", () => ({
+  getApiBaseUrl: () => "http://127.0.0.1:8765",
+  getApiToken: () => "",
+  isTauriDesktop: () => false,
+  waitForRuntimeConfig: vi.fn().mockResolvedValue({ base_url: "http://127.0.0.1:8765", api_token: "" }),
+}));
+
+vi.mock("@/lib/api", () => ({
+  createApiClient: () =>
+    ({
+      getSession,
+      resumeSession: vi.fn(),
+      abandonSession: vi.fn(),
+      scanSession: vi.fn(),
+      refreshSession: vi.fn(),
+      sendMessage: vi.fn(),
+      resolveUnresolvedChoices: vi.fn(),
+      updateItem: vi.fn(),
+      runPrecheck: vi.fn(),
+      returnToPlanning: vi.fn(),
+      execute: vi.fn(),
+      cleanupEmptyDirs: vi.fn(),
+      rollback: vi.fn(),
+      getJournal: vi.fn(),
+      openDir: vi.fn(),
+    }) satisfies Partial<ApiClient>,
+}));
+
+vi.mock("@/lib/sse", () => ({
+  createSessionEventStream: (options: {
+    onEvent: (event: SessionEvent) => void;
+    onError?: (error: Event) => void;
+  }) => {
+    latestStreamOptions = options;
+    return {
+      close: streamClose,
+    };
+  },
+}));
+
+function createSnapshot(overrides: Partial<SessionSnapshot> = {}): SessionSnapshot {
+  return {
+    session_id: "session-1",
+    target_dir: "C:/demo",
+    stage: "planning",
+    summary: "",
+    strategy: {
+      template_id: "general_downloads",
+      template_label: "默认",
+      template_description: "",
+      language: "zh",
+      language_label: "中文",
+      density: "normal",
+      density_label: "标准",
+      prefix_style: "none",
+      prefix_style_label: "无前缀",
+      caution_level: "balanced",
+      caution_level_label: "平衡",
+      note: "",
+      preview_directories: [],
+    },
+    assistant_message: null,
+    scanner_progress: {},
+    planner_progress: {},
+    plan_snapshot: {
+      summary: "",
+      items: [],
+      groups: [],
+      unresolved_items: [],
+      review_items: [],
+      invalidated_items: [],
+      change_highlights: [],
+      stats: {
+        directory_count: 0,
+        move_count: 0,
+        unresolved_count: 0,
+      },
+      readiness: {
+        can_precheck: false,
+      },
+    },
+    precheck_summary: null,
+    execution_report: null,
+    rollback_report: null,
+    last_journal_id: null,
+    integrity_flags: {},
+    available_actions: [],
+    messages: [],
+    updated_at: "2026-04-18T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function createEvent(event_type: string, overrides: Partial<SessionEvent> = {}): SessionEvent {
+  return {
+    event_type,
+    session_id: "session-1",
+    stage: "planning",
+    ...overrides,
+  };
+}
+
+describe("useSession assistant draft", () => {
+  beforeEach(() => {
+    getSession.mockReset();
+    streamClose.mockReset();
+    latestStreamOptions = null;
+    getSession.mockResolvedValue({
+      session_id: "session-1",
+      session_snapshot: createSnapshot(),
+    });
+  });
+
+  it("keeps assistantDraft when a normal snapshot event arrives during plan streaming", async () => {
+    const { result } = renderHook(() => useSession("session-1"));
+
+    await waitFor(() => {
+      expect(getSession).toHaveBeenCalledWith("session-1");
+      expect(latestStreamOptions).not.toBeNull();
+    });
+
+    act(() => {
+      latestStreamOptions?.onEvent(
+        createEvent("plan.ai_typing", {
+          content: "第一段草稿",
+          session_snapshot: createSnapshot(),
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(result.current.assistantDraft).toBe("第一段草稿");
+    });
+
+    act(() => {
+      latestStreamOptions?.onEvent(
+        createEvent("scan.progress", {
+          session_snapshot: createSnapshot({
+            planner_progress: {
+              status: "running",
+              phase: "streaming_reply",
+              message: "仍在整理",
+            },
+          }),
+        }),
+      );
+    });
+
+    expect(result.current.assistantDraft).toBe("第一段草稿");
+  });
+
+  it("clears assistantDraft when plan.updated arrives with the final snapshot", async () => {
+    const { result } = renderHook(() => useSession("session-1"));
+
+    await waitFor(() => {
+      expect(getSession).toHaveBeenCalledWith("session-1");
+      expect(latestStreamOptions).not.toBeNull();
+    });
+
+    act(() => {
+      latestStreamOptions?.onEvent(
+        createEvent("plan.ai_typing", {
+          content: "即将完成",
+          session_snapshot: createSnapshot(),
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(result.current.assistantDraft).toBe("即将完成");
+    });
+
+    act(() => {
+      latestStreamOptions?.onEvent(
+        createEvent("plan.updated", {
+          session_snapshot: createSnapshot({
+            messages: [{ id: "assistant-1", role: "assistant", content: "最终答复" }],
+          }),
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(result.current.assistantDraft).toBe("");
+    });
+  });
+});

@@ -34,4 +34,4 @@ class AnalysisItem:
         }
 
     def to_scan_line(self) -> str:
-        return f"{self.entry_name} | {self.suggested_purpose} | {self.summary}"
+        return f"{self.entry_name} | {self.entry_type} | {self.suggested_purpose} | {self.summary}"

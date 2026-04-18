@@ -63,6 +63,7 @@ export interface RecentAnalysisItem {
   item_id: string;
   display_name: string;
   source_relpath: string;
+  entry_type?: string;
   suggested_purpose: string;
   summary: string;
 }
@@ -108,11 +109,18 @@ export interface PlanItem {
   display_name: string;
   source_relpath: string;
   target_relpath: string | null;
+  entry_type?: string;
   suggested_purpose?: string;
   content_summary?: string;
   reason?: string;
   confidence?: number | null;
   status: "planned" | "unresolved" | "review" | "invalidated" | string;
+}
+
+export interface SourceTreeEntry {
+  source_relpath: string;
+  display_name: string;
+  entry_type: "file" | "directory" | string;
 }
 
 export interface PlanGroup {
@@ -245,6 +253,7 @@ export interface SessionSnapshot {
   scanner_progress: ScannerProgress;
   planner_progress: PlannerProgress;
   plan_snapshot: PlanSnapshot;
+  source_tree_entries?: SourceTreeEntry[];
   precheck_summary: PrecheckSummary | null;
   execution_report: ExecutionReport | null;
   rollback_report: RollbackReport | null;

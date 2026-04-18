@@ -132,7 +132,7 @@ export function ConversationPanel({
   const handleScroll = () => {
     const container = scrollContainerRef.current;
     if (!container) return;
-    const threshold = 32;
+    const threshold = 120;
     const pinned = container.scrollHeight - container.scrollTop - container.clientHeight <= threshold;
     setIsPinnedToBottom(pinned);
   };
@@ -325,7 +325,8 @@ export function ConversationPanel({
           {messages.map((message, idx) => {
             const isAssistant = message.role === "assistant";
             const prevMessage = messages[idx - 1];
-            const isGrouped = prevMessage && prevMessage.role === message.role;
+            const isPrevSystemLog = prevMessage?.role === "assistant" && !prevMessage.content?.trim() && (prevMessage.blocks || []).length === 0;
+            const isGrouped = prevMessage && prevMessage.role === message.role && !isPrevSystemLog;
             const isSystemLog = isAssistant && !message.content?.trim() && (message.blocks || []).length === 0;
 
             if (isSystemLog) {

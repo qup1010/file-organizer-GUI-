@@ -49,6 +49,13 @@ class OrganizerSessionService:
         suffix = Path(entry_path or "").suffix.lower().lstrip(".")
         return suffix or "item"
 
+    @staticmethod
+    def _detect_entry_type(target_dir: Path, entry_name: str) -> str:
+        candidate = (target_dir / str(entry_name or "")).resolve()
+        if candidate.exists():
+            return "dir" if candidate.is_dir() else "file"
+        return ""
+
     def _build_planner_items(self, scan_lines: str, existing_items: list[dict] | None = None) -> list[dict]:
         entries = self._scan_entries(scan_lines)
         existing_by_source = {
@@ -140,6 +147,142 @@ class OrganizerSessionService:
             return ""
         return normalized.rsplit("/", 1)[0]
 
+    @staticmethod
+    def _normalize_relpath(value: str | None) -> str:
+        return str(value or "").replace("\\", "/").strip().strip("/")
+
+    @staticmethod
+    def _manual_sync_message_tag() -> str:
+        return "[用户手动调整记录]"
+
+    def _local_pending_summary(self, plan: PendingPlan) -> str:
+        total_moves = len(plan.moves or [])
+        unresolved_count = len(plan.unresolved_items or [])
+        classified_count = max(0, total_moves - unresolved_count)
+        return f"已分类 {classified_count} 项，调整 {total_moves} 项，仍剩 {unresolved_count} 项待定"
+
+    def _sync_pending_summary(
+        self,
+        session: OrganizerSession,
+        pending: PendingPlan,
+        *,
+        prefer_local: bool = False,
+    ) -> str:
+        summary = str(pending.summary or "").strip()
+        if prefer_local or not summary:
+            summary = self._local_pending_summary(pending)
+        pending.summary = summary
+        session.summary = summary
+        return summary
+
+    def _clear_manual_sync_messages(self, session: OrganizerSession) -> bool:
+        sync_tag = self._manual_sync_message_tag()
+        next_messages = [
+            message
+            for message in session.messages
+            if not (
+                message.get("role") == "user"
+                and message.get("visibility") == "internal"
+                and sync_tag in str(message.get("content") or "")
+            )
+        ]
+        changed = next_messages != session.messages
+        if changed:
+            session.messages = next_messages
+        return changed
+
+    def _sync_manual_diff_from_last_ai(self, session: OrganizerSession, pending: PendingPlan) -> None:
+        sync_tag = self._manual_sync_message_tag()
+        baseline_dict = session.last_ai_pending_plan
+        if not baseline_dict:
+            session.last_ai_pending_plan = self._pending_plan_to_dict(pending)
+            self._clear_manual_sync_messages(session)
+            return
+
+        baseline_plan = self._pending_plan_from_dict(baseline_dict, session)
+        diff_lines = organize_service._build_plan_change_summary(baseline_plan, pending)
+        if not diff_lines or diff_lines == ["计划未发生结构性变化"]:
+            self._clear_manual_sync_messages(session)
+            return
+
+        diff_content = (
+            f"{sync_tag}\n"
+            "用户在预览区域对方案进行了如下手动调整：\n"
+            + "\n".join(f"- {line}" for line in diff_lines)
+        )
+        existing_sync_index = -1
+        for i in range(len(session.messages) - 1, -1, -1):
+            message = session.messages[i]
+            if (
+                message.get("role") == "user"
+                and message.get("visibility") == "internal"
+                and sync_tag in str(message.get("content") or "")
+            ):
+                existing_sync_index = i
+                break
+
+        if existing_sync_index >= 0:
+            session.messages[existing_sync_index]["content"] = diff_content
+            session.messages[existing_sync_index]["visibility"] = "internal"
+            self._ensure_message_id(session.messages[existing_sync_index])
+            return
+
+        sync_message = self._ensure_message_id(
+            {
+                "role": "user",
+                "content": diff_content,
+                "visibility": "internal",
+            }
+        )
+        session.messages.append(sync_message)
+
+    def _apply_pending_plan_state(
+        self,
+        session: OrganizerSession,
+        pending: PendingPlan,
+        cycle_result: dict | None,
+        *,
+        prefer_local_summary: bool = False,
+    ) -> None:
+        self._sync_pending_summary(session, pending, prefer_local=prefer_local_summary)
+        session.pending_plan = self._pending_plan_to_dict(pending)
+        session.plan_snapshot = self._plan_snapshot(
+            pending,
+            cycle_result or {},
+            scan_lines=session.scan_lines,
+            planner_items=session.planner_items,
+        )
+        session.stage = self._planning_stage_for(pending, session.scan_lines)
+        session.precheck_summary = None
+
+    def _resolve_request_item_source(
+        self,
+        session: OrganizerSession,
+        pending: PendingPlan,
+        item_id: str,
+    ) -> str | None:
+        source_relpath = self._planner_source_for_item_id(session, item_id)
+        if source_relpath:
+            return self._normalize_relpath(source_relpath)
+
+        normalized_item_id = self._normalize_relpath(item_id)
+        if not normalized_item_id:
+            return None
+
+        pending_sources = {
+            self._normalize_relpath(move.source)
+            for move in pending.moves
+            if self._normalize_relpath(move.source)
+        }
+        unresolved_sources = {
+            self._normalize_relpath(unresolved_item)
+            for unresolved_item in pending.unresolved_items
+            if self._normalize_relpath(unresolved_item)
+        }
+        if normalized_item_id in pending_sources or normalized_item_id in unresolved_sources:
+            return normalized_item_id
+        return None
+
     def _related_item_ids_for_message(
         self,
         message: str,
@@ -209,10 +352,19 @@ class OrganizerSessionService:
     def _ensure_planner_items(self, session: OrganizerSession, scan_lines: str | None = None) -> bool:
         source_scan_lines = scan_lines if scan_lines is not None else session.scan_lines
         next_items = self._build_planner_items(source_scan_lines or "", existing_items=session.planner_items)
+        changed = False
         if next_items != (session.planner_items or []):
             session.planner_items = next_items
-            return True
-        return False
+            changed = True
+        next_source_tree = self._build_source_tree_entries(
+            Path(session.target_dir),
+            source_scan_lines or "",
+            planner_items=next_items,
+        )
+        if next_source_tree != (session.source_tree_entries or []):
+            session.source_tree_entries = next_source_tree
+            changed = True
+        return changed
 
     @staticmethod
     def _normalize_move_target_for_source(source_relpath: str, target: str) -> str:
@@ -822,20 +974,11 @@ class OrganizerSessionService:
             self.store.save(session)
             raise
         updated_pending = cycle_result.get("pending_plan", pending_plan) if cycle_result else pending_plan
-        session.pending_plan = self._pending_plan_to_dict(updated_pending)
-        session.plan_snapshot = self._plan_snapshot(
-            updated_pending,
-            cycle_result or {},
-            scan_lines=session.scan_lines,
-            planner_items=session.planner_items,
-        )
+        self._apply_pending_plan_state(session, updated_pending, cycle_result, prefer_local_summary=False)
         session.assistant_message, assistant_context_messages = self._assistant_messages_from_cycle(assistant_message, cycle_result)
+        self._clear_manual_sync_messages(session)
         session.messages.extend(assistant_context_messages)
-        session.summary = updated_pending.summary
         session.user_constraints = list(updated_pending.user_constraints or session.user_constraints)
-        session.stage = self._planning_stage_for(updated_pending, session.scan_lines)
-        
-        # 记录基准方案，用于后续手动操作的 Diff 计算
         session.last_ai_pending_plan = self._pending_plan_to_dict(updated_pending)
 
         self._complete_planner_progress(session)
@@ -887,14 +1030,26 @@ class OrganizerSessionService:
             raise ValueError("UNRESOLVED_REQUEST_INVALID")
 
         pending = self._pending_plan_from_session(session)
-        move_map = {move.source: move for move in pending.moves}
+        move_map = {
+            self._normalize_relpath(move.source): move
+            for move in pending.moves
+            if self._normalize_relpath(move.source)
+        }
+        unresolved_set = {
+            self._normalize_relpath(item)
+            for item in pending.unresolved_items
+            if self._normalize_relpath(item)
+        }
 
         submitted_map: dict[str, dict] = {}
+        request_item_sources: dict[str, str] = {}
         for resolution in resolutions or []:
             item_id = str(resolution.get("item_id") or "").strip()
             if not item_id or item_id not in item_map:
                 raise RuntimeError("UNRESOLVED_ITEM_CONFLICT")
-            real_item_id = self._planner_source_for_item_id(session, item_id) or item_id
+            real_item_id = self._resolve_request_item_source(session, pending, item_id)
+            if not real_item_id:
+                raise RuntimeError("UNRESOLVED_ITEM_CONFLICT")
 
             selected_folder = str(resolution.get("selected_folder") or "").strip()
             note = str(resolution.get("note") or "").strip()
@@ -910,32 +1065,27 @@ class OrganizerSessionService:
                 "selected_folder": selected_folder,
                 "note": note,
             }
+            request_item_sources[item_id] = real_item_id
 
         if len(submitted_map) != len(item_map):
             raise ValueError("UNRESOLVED_RESOLUTION_INCOMPLETE")
 
         for mid in submitted_map:
-            # 补丁：容错处理。如果由于 AI 不一致导致该项在 pending_plan 中未被标记为 unresolved，
-            # 但既然它存在于我们刚刚找到的 request_block 中，说明 UI 确实发起了这个请求，
-            # 因此我们在此处自动将其视为有效的 unresolved 项。
-            is_unresolved = False
-            for u_item in pending.unresolved_items:
-                if mid in u_item:
-                    is_unresolved = True
-                    break
-            
-            # 如果依然没找，但该 ID 在当前请求的项目列表中，则强制视为 unresolved
-            if not is_unresolved and mid in item_map:
-                is_unresolved = True
-                if mid not in pending.unresolved_items:
+            is_unresolved = mid in unresolved_set
+            request_block_item_id = submitted_map[mid]["item_id"]
+            request_source = request_item_sources.get(request_block_item_id)
+            if not is_unresolved and request_source == mid:
+                if mid not in [self._normalize_relpath(value) for value in pending.unresolved_items]:
                     pending.unresolved_items.append(mid)
+                unresolved_set.add(mid)
+                is_unresolved = True
 
-            if mid not in move_map:
-                # 最后的补救：如果在 moves 中也没找到，则临时补一个
-                new_move = PlanMove(source=mid, target="Review", raw="")
+            if mid not in move_map and request_source == mid:
+                filename = Path(mid).name
+                new_move = PlanMove(source=mid, target=f"Review/{filename}" if filename else "Review", raw="")
                 pending.moves.append(new_move)
                 move_map[mid] = new_move
-            
+
             if not is_unresolved:
                 raise RuntimeError("UNRESOLVED_ITEM_CONFLICT")
 
@@ -987,31 +1137,21 @@ class OrganizerSessionService:
                 self.store.save(session)
                 raise
             updated_pending = cycle_result.get("pending_plan", pending) if cycle_result else pending
-            session.pending_plan = self._pending_plan_to_dict(updated_pending)
-            session.plan_snapshot = self._plan_snapshot(
-                updated_pending,
-                cycle_result or {},
-                scan_lines=session.scan_lines,
-                planner_items=session.planner_items,
-            )
+            self._apply_pending_plan_state(session, updated_pending, cycle_result, prefer_local_summary=False)
             session.assistant_message, assistant_context_messages = self._assistant_messages_from_cycle(assistant_message, cycle_result)
+            self._clear_manual_sync_messages(session)
             session.messages.extend(assistant_context_messages)
-            session.summary = updated_pending.summary
             session.user_constraints = list(updated_pending.user_constraints or session.user_constraints)
-            session.stage = self._planning_stage_for(updated_pending, session.scan_lines)
-            session.precheck_summary = None
+            session.last_ai_pending_plan = self._pending_plan_to_dict(updated_pending)
             self._complete_planner_progress(session)
         else:
-            session.pending_plan = self._pending_plan_to_dict(pending)
-            session.plan_snapshot = self._plan_snapshot(
+            self._apply_pending_plan_state(
+                session,
                 pending,
                 {"diff_summary": ["resolve_unresolved_choices"]},
-                scan_lines=session.scan_lines,
-                planner_items=session.planner_items,
+                prefer_local_summary=True,
             )
-            session.summary = pending.summary
-            session.stage = self._planning_stage_for(pending, session.scan_lines)
-            session.precheck_summary = None
+            self._sync_manual_diff_from_last_ai(session, pending)
 
         self.store.save(session)
         self._log_runtime_event("plan.updated", session, source="resolve_unresolved_choices")
@@ -1121,52 +1261,13 @@ class OrganizerSessionService:
             pending.unresolved_items = [value for value in pending.unresolved_items if value != source_relpath]
 
         pending.directories = self._directories_from_moves(pending.moves)
-        session.pending_plan = self._pending_plan_to_dict(pending)
-        session.plan_snapshot = self._plan_snapshot(
+        self._apply_pending_plan_state(
+            session,
             pending,
             {"diff_summary": ["update_item"]},
-            scan_lines=session.scan_lines,
-            planner_items=session.planner_items,
+            prefer_local_summary=True,
         )
-        session.summary = pending.summary
-        session.precheck_summary = None
-        session.stage = self._planning_stage_for(pending, session.scan_lines)
-
-        # 查找或创建一个用于同步手动操作的消息
-        # 我们希望 AI 看到的是从它上次给出建议到目前为止，用户所做的“全量差异汇总”
-        sync_tag = "[用户手动调整记录]"
-        baseline = session.last_ai_pending_plan
-        if not baseline:
-             # 如果没有基准（理论上不应发生），则使用当前方案作为基准（此时 Diff 为空）
-             baseline = self._pending_plan_to_dict(pending)
-             session.last_ai_pending_plan = baseline
-
-        # 计算从 AI 基准到当前手动修改后的全量 Diff
-        diff_lines = organize_service._build_plan_change_summary(
-            self._pending_plan_from_dict(baseline, session),
-            pending
-        )
-        
-        diff_content = f"{sync_tag}\n用户在预览区域对方案进行了如下手动调整：\n" + "\n".join(f"- {line}" for line in diff_lines)
-        
-        # 尝试寻找并覆盖现有的同步消息，避免对话历史堆积
-        existing_sync_index = -1
-        for i in range(len(session.messages) - 1, -1, -1):
-            msg = session.messages[i]
-            if msg.get("role") == "user" and sync_tag in (msg.get("content") or ""):
-                existing_sync_index = i
-                break
-        
-        if existing_sync_index >= 0:
-            session.messages[existing_sync_index]["content"] = diff_content
-            session.messages[existing_sync_index]["visibility"] = "internal"
-        else:
-            sync_message = self._ensure_message_id({
-                "role": "user",
-                "content": diff_content,
-                "visibility": "internal",
-            })
-            session.messages.append(sync_message)
+        self._sync_manual_diff_from_last_ai(session, pending)
 
         self.store.save(session)
         self._record_event("plan.updated", session)
@@ -1514,6 +1615,7 @@ class OrganizerSessionService:
                 "item_id": entry,
                 "display_name": entry,
                 "source_relpath": entry,
+                "entry_type": self._detect_entry_type(target_dir, entry),
                 "suggested_purpose": "准备分析",
                 "summary": "等待分配并进行文件内容分析...",
             }
@@ -1614,6 +1716,7 @@ class OrganizerSessionService:
                             "item_id": target_name,
                             "display_name": target_name,
                             "source_relpath": target_name,
+                            "entry_type": self._detect_entry_type(target_dir, target_name),
                             "suggested_purpose": "分析中",
                             "summary": "正在读取内容"
                         })
@@ -1648,6 +1751,7 @@ class OrganizerSessionService:
                         "item_id": item.get("entry_name"),
                         "display_name": item.get("entry_name"),
                         "source_relpath": item.get("entry_name"),
+                        "entry_type": item.get("entry_type", ""),
                         "suggested_purpose": item.get("suggested_purpose", "待判断"),
                         "summary": item.get("summary", ""),
                     })
@@ -1707,6 +1811,7 @@ class OrganizerSessionService:
     def _handle_empty_scan_result(self, session: OrganizerSession, *, total_count: int, mode: str) -> str:
         if total_count == 0:
             session.scan_lines = ""
+            session.source_tree_entries = []
             session.summary = "当前目录为空，无需整理"
             session.pending_plan = {}
             session.plan_snapshot = {}
@@ -1734,6 +1839,7 @@ class OrganizerSessionService:
 
         session.stage = "interrupted"
         session.scan_lines = ""
+        session.source_tree_entries = []
         session.last_error = "scan_empty_result"
         session.scanner_progress = {
             **dict(session.scanner_progress or {}),
@@ -1939,16 +2045,8 @@ class OrganizerSessionService:
                 if cycle_result:
                     updated_pending = cycle_result.get("pending_plan")
                     if updated_pending:
-                        session.pending_plan = self._pending_plan_to_dict(updated_pending)
-                        session.plan_snapshot = self._plan_snapshot(
-                            updated_pending,
-                            cycle_result,
-                            scan_lines=session.scan_lines,
-                            planner_items=session.planner_items,
-                        )
-                        session.summary = updated_pending.summary
-                        session.stage = self._planning_stage_for(updated_pending, session.scan_lines)
-                        # 记录基准方案
+                        self._apply_pending_plan_state(session, updated_pending, cycle_result, prefer_local_summary=False)
+                        self._clear_manual_sync_messages(session)
                         session.last_ai_pending_plan = self._pending_plan_to_dict(updated_pending)
 
                 self._complete_planner_progress(session)
@@ -2077,6 +2175,14 @@ class OrganizerSessionService:
         self._normalize_pending_plan_identifiers(session)
         self._normalize_unresolved_request_blocks(session)
         self._ensure_plan_snapshot_consistency(session)
+        source_tree_entries = copy.deepcopy(
+            session.source_tree_entries
+            or self._build_source_tree_entries(
+                Path(session.target_dir),
+                session.scan_lines,
+                planner_items=session.planner_items,
+            )
+        )
         strategy_summary = normalize_strategy_selection(self._strategy_selection(session))
         return {
             "session_id": session.session_id,
@@ -2092,6 +2198,7 @@ class OrganizerSessionService:
             "assistant_message": copy.deepcopy(session.assistant_message),
             "messages": copy.deepcopy(session.messages),
             "user_constraints": list(session.user_constraints),
+            "source_tree_entries": source_tree_entries,
             "integrity_flags": copy.deepcopy(session.integrity_flags),
             "stale_reason": session.stale_reason,
             "last_journal_id": session.last_journal_id,
@@ -2313,7 +2420,9 @@ class OrganizerSessionService:
     def _ensure_plan_snapshot_consistency(self, session: OrganizerSession) -> bool:
         existing = session.plan_snapshot or {}
         pending = self._pending_plan_from_session(session)
-        pending.summary = pending.summary or session.summary or existing.get("summary", "")
+        pending.summary = str(pending.summary or session.summary or existing.get("summary", "")).strip()
+        if not pending.summary and (pending.moves or pending.unresolved_items):
+            pending.summary = self._local_pending_summary(pending)
 
         if not pending.moves and not existing:
             return False
@@ -2400,6 +2509,7 @@ class OrganizerSessionService:
                 "display_name": planner_meta.get("display_name", Path(move.source).name),
                 "source_relpath": move.source,
                 "target_relpath": move.target,
+                "entry_type": scan_meta.get("entry_type") or planner_meta.get("entry_type", ""),
                 "suggested_purpose": scan_meta.get("suggested_purpose") or planner_meta.get("suggested_purpose", ""),
                 "content_summary": scan_meta.get("summary") or planner_meta.get("summary", ""),
                 "is_unresolved": move.source in plan.unresolved_items,
@@ -2522,6 +2632,74 @@ class OrganizerSessionService:
             return "ready_for_precheck"
         return "planning"
 
+    def _build_source_tree_entries(
+        self,
+        target_dir: Path,
+        scan_lines: str,
+        planner_items: list[dict] | None = None,
+    ) -> list[dict]:
+        scan_entries = self._scan_entries(scan_lines)
+        if not scan_entries:
+            return []
+
+        planner_by_source = {
+            str(item.get("source_relpath") or "").replace("\\", "/").strip(): dict(item)
+            for item in (planner_items or [])
+            if str(item.get("source_relpath") or "").strip()
+        }
+        entries_by_path: dict[str, dict] = {}
+
+        def normalize_entry_type(source_relpath: str, raw_entry_type: str | None) -> str:
+            normalized = str(raw_entry_type or "").strip().lower()
+            if normalized in {"dir", "directory", "folder"}:
+                return "directory"
+            if normalized == "file":
+                return "file"
+            source_prefix = f"{source_relpath}/"
+            if any(
+                str(entry.get("source_relpath") or "").replace("\\", "/").strip().startswith(source_prefix)
+                for entry in scan_entries
+            ):
+                return "directory"
+            detected = self._detect_entry_type(target_dir, source_relpath)
+            if detected == "dir":
+                return "directory"
+            return "file"
+
+        def remember_entry(source_relpath: str, display_name: str, entry_type: str) -> None:
+            if not source_relpath:
+                return
+            entries_by_path[source_relpath] = {
+                "source_relpath": source_relpath,
+                "display_name": display_name or Path(source_relpath).name,
+                "entry_type": entry_type,
+            }
+
+        for entry in scan_entries:
+            source_relpath = str(entry.get("source_relpath") or "").replace("\\", "/").strip()
+            if not source_relpath:
+                continue
+            planner_meta = planner_by_source.get(source_relpath, {})
+            normalized_type = normalize_entry_type(
+                source_relpath,
+                entry.get("entry_type") or planner_meta.get("entry_type"),
+            )
+            parts = [part for part in source_relpath.split("/") if part]
+            parent_path = ""
+            for parent in parts[:-1]:
+                parent_path = f"{parent_path}/{parent}" if parent_path else parent
+                remember_entry(parent_path, parent, "directory")
+            remember_entry(
+                source_relpath,
+                str(entry.get("display_name") or Path(source_relpath).name),
+                normalized_type,
+            )
+
+        return sorted(
+            entries_by_path.values(),
+            key=lambda item: (str(item.get("source_relpath") or "").count("/"), str(item.get("source_relpath") or "").lower()),
+        )
+
     def _directory_changed(self, session: OrganizerSession) -> bool:
         target_dir = Path(session.target_dir)
         try:
@@ -2553,19 +2731,20 @@ class OrganizerSessionService:
             if not line.strip():
                 continue
             entry_path = ""
+            entry_type = ""
             suggested_purpose = ""
             summary = ""
             confidence = None
             if "|" in line:
-                parts = [part.strip() for part in line.split("|")]
+                parts = [part.strip() for part in line.split("|", 3)]
                 entry_path = parts[0] if parts else ""
-                suggested_purpose = parts[1] if len(parts) > 1 else ""
-                summary = parts[2] if len(parts) > 2 else ""
-                if len(parts) > 3:
-                    try:
-                        confidence = float(parts[3])
-                    except (TypeError, ValueError):
-                        confidence = None
+                if len(parts) >= 4:
+                    entry_type = parts[1].lower()
+                    suggested_purpose = parts[2]
+                    summary = parts[3]
+                else:
+                    suggested_purpose = parts[1] if len(parts) > 1 else ""
+                    summary = parts[2] if len(parts) > 2 else ""
             else:
                 parts = line.split(":", 1)
                 if len(parts) >= 2:
@@ -2579,7 +2758,7 @@ class OrganizerSessionService:
                 "suggested_purpose": suggested_purpose,
                 "summary": summary,
                 "confidence": confidence,
-                "entry_type": "file" if Path(entry_path).suffix else "",
+                "entry_type": entry_type,
                 "ext": self._entry_extension(entry_path),
             })
         return entries

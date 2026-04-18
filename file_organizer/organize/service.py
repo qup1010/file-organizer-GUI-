@@ -57,13 +57,15 @@ def render_planner_scan_lines(planner_items: list[dict] | None) -> str:
         item_id = str(item.get("planner_id") or "").strip()
         if not item_id:
             continue
+        entry_type = str(item.get("entry_type") or "").strip().lower() or "item"
         ext = str(item.get("ext") or "item").strip()
         purpose = str(item.get("suggested_purpose") or "").strip() or "待判断"
         summary = str(item.get("summary") or "").strip()
         parent_hint = str(item.get("parent_hint") or "").strip()
         if parent_hint:
             purpose = f"{purpose}（{parent_hint}）"
-        lines.append(f"{item_id} | {ext} | {purpose} | {summary}".rstrip())
+        summary_suffix = f" [ext: {ext}]" if ext and ext != "item" else ""
+        lines.append(f"{item_id} | {entry_type} | {purpose} | {(summary + summary_suffix).strip()}".rstrip())
     return "\n".join(lines)
 
 
@@ -1031,7 +1033,7 @@ def apply_plan_diff(current_plan: PendingPlan | None, patch_diff: PlanDiff | dic
         moves=updated_moves,
         user_constraints=list(previous.user_constraints),
         unresolved_items=updated_unresolved,
-        summary=diff.summary or previous.summary,
+        summary=str(diff.summary or "").strip(),
     )
     return updated, _build_plan_change_summary(previous, updated), errors
 

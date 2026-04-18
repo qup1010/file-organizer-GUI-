@@ -39,6 +39,7 @@ class OrganizerSession:
     messages: list[dict] = field(default_factory=list)
     scan_lines: str = ""
     planner_items: list[dict] = field(default_factory=list)
+    source_tree_entries: list[dict] = field(default_factory=list)
     pending_plan: dict = field(default_factory=dict)
     plan_snapshot: dict = field(default_factory=dict)
     user_constraints: list[str] = field(default_factory=list)
@@ -80,6 +81,7 @@ class OrganizerSession:
             messages=list(data.get("messages", [])),
             scan_lines=data.get("scan_lines", ""),
             planner_items=list(data.get("planner_items", [])),
+            source_tree_entries=list(data.get("source_tree_entries", [])),
             pending_plan=dict(data.get("pending_plan", {})),
             plan_snapshot=dict(data.get("plan_snapshot", {})),
             user_constraints=list(data.get("user_constraints", [])),

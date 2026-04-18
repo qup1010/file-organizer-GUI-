@@ -16,6 +16,7 @@ import {
   FileType,
   Image as ImageIcon,
   Film,
+  Folder,
   Music,
   FileJson,
   FileCode,
@@ -33,7 +34,7 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-type PipelineStepState = "active" | "done" | "pending";
+type PipelineStepState = "active" | "done" | "pending" | "aborted";
 
 interface PipelineStep {
   id: string;
@@ -58,7 +59,10 @@ function isSpecificScanItem(value: string | null | undefined): boolean {
   return !text.startsWith("已启动 ") && !text.startsWith("第 ");
 }
 
-function getFileIcon(filename: string) {
+function getFileIcon(filename: string, entryType?: string) {
+  if (entryType === "dir") {
+    return { icon: Folder, color: "text-amber-600", bg: "bg-amber-500/10" };
+  }
   const ext = filename.split(".").pop()?.toLowerCase() || "";
   if (["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp"].includes(ext)) {
     return { icon: ImageIcon, color: "text-purple-500", bg: "bg-purple-500/10" };
@@ -108,6 +112,7 @@ function derivePipelineSteps(scanner: ScannerProgress): PipelineStep[] {
   
   const hasSpecificItem = isSpecificScanItem(currentItem);
   const isCompleted = status === "completed";
+  const isAborted = status === "failed" || status === "interrupted" || status === "cancelled";
 
   // Step 1: Prepare
   const isPrepareDone = totalCount > 0 || isCompleted;
@@ -116,7 +121,7 @@ function derivePipelineSteps(scanner: ScannerProgress): PipelineStep[] {
   const isReadStructureDone = totalCount > 0 || isCompleted;
   
   // Step 3: Analyze
-  const isAnalyzeActive = !isCompleted && isReadStructureDone;
+  const isAnalyzeActive = !isCompleted && !isAborted && isReadStructureDone;
   const isAnalyzeDone = isCompleted;
 
   const analysisTitle = batchCount > 0 ? "并行内容分析" : "读取与分析";
@@ -135,28 +140,28 @@ function derivePipelineSteps(scanner: ScannerProgress): PipelineStep[] {
 
   // Step 4: Summarize
   const isSummarizeDone = isCompleted && !isRetrying;
-  const isSummarizeActive = isRetrying || (!isCompleted && message.includes("结果需要修正"));
+  const isSummarizeActive = !isAborted && (isRetrying || (!isCompleted && message.includes("结果需要修正")));
 
   return [
     {
       id: "prepare",
       title: "建立扫描任务",
       detail: totalCount > 0 ? `发现 ${totalCount} 个待分析项` : "正在确认目录范围",
-      state: isPrepareDone ? "done" : "active",
+      state: isPrepareDone ? "done" : isAborted ? "aborted" : "active",
       icon: Search,
     },
     {
       id: "read-structure",
       title: "读取目录索引",
       detail: isReadStructureDone ? "已提取文件列表" : "正在梳理文件关联",
-      state: isReadStructureDone ? "done" : isPrepareDone ? "active" : "pending",
+      state: isReadStructureDone ? "done" : isAborted && isPrepareDone ? "aborted" : isPrepareDone ? "active" : "pending",
       icon: Layers,
     },
     {
       id: "analyze",
       title: analysisTitle,
       detail: analysisDetail,
-      state: isAnalyzeDone ? "done" : isAnalyzeActive ? "active" : "pending",
+      state: isAnalyzeDone ? "done" : isAborted && isReadStructureDone ? "aborted" : isAnalyzeActive ? "active" : "pending",
       icon: FileText,
     },
     {
@@ -167,7 +172,7 @@ function derivePipelineSteps(scanner: ScannerProgress): PipelineStep[] {
         : isSummarizeDone
           ? "已生成最终报告"
           : "等待汇总整体结果",
-      state: isSummarizeDone ? "done" : isSummarizeActive ? "active" : "pending",
+      state: isSummarizeDone ? "done" : isAborted && isAnalyzeDone ? "aborted" : isSummarizeActive ? "active" : "pending",
       icon: isRetrying ? RefreshCw : Sparkles,
     },
   ];
@@ -365,6 +370,7 @@ export function MinimalScanningView({
                       const isActiveStep = step.state === "active";
                       const isDoneStep = step.state === "done";
                       const isPending = step.state === "pending";
+                      const isAbortedStep = step.state === "aborted";
 
                       return (
                         <motion.div
@@ -378,6 +384,7 @@ export function MinimalScanningView({
                             isActiveStep && "border-primary/15 bg-surface shadow-sm ring-1 ring-primary/5",
                             isDoneStep && "bg-success/[0.02] border-success/5",
                             isPending && "opacity-40 grayscale-[0.2]",
+                            isAbortedStep && "border-danger/10 bg-danger/5 grayscale-[0.5] opacity-80"
                           )}
                         >
                           <div className={cn(
@@ -385,6 +392,7 @@ export function MinimalScanningView({
                             isActiveStep && "border-primary/15 bg-primary/10 text-primary scale-[1.02]",
                             isDoneStep && "border-success/15 bg-success/5 text-success",
                             isPending && "border-on-surface/6 bg-surface text-on-surface-variant/30",
+                            isAbortedStep && "border-danger/15 bg-danger/10 text-danger",
                           )}>
                             <Icon className={cn("h-4.5 w-4.5", isActiveStep && "animate-pulse")} />
                           </div>
@@ -396,8 +404,9 @@ export function MinimalScanningView({
                                 isActiveStep && "bg-primary border-primary text-white",
                                 isDoneStep && "bg-success/5 border-success/15 text-success",
                                 isPending && "bg-on-surface/[0.03] border-on-surface/[0.06] text-on-surface-variant/30",
+                                isAbortedStep && "bg-danger/10 border-danger/20 text-danger",
                               )}>
-                                {isDoneStep ? "DONE" : isActiveStep ? "RUNNING" : "WAITING"}
+                                {isDoneStep ? "DONE" : isActiveStep ? "RUNNING" : isAbortedStep ? "ABORTED" : "WAITING"}
                               </div>
                             </div>
                             <p className="mt-0.5 text-[11px] font-medium text-ui-muted line-clamp-1 opacity-60">
@@ -449,7 +458,7 @@ export function MinimalScanningView({
                         )}
 
                         {recentItems.map((item, idx) => {
-                          const fileMeta = getFileIcon(item.source_relpath || item.display_name);
+                          const fileMeta = getFileIcon(item.source_relpath || item.display_name, item.entry_type);
                           const CustomIcon = fileMeta.icon;
                           
                           return (

@@ -217,4 +217,37 @@ describe("SettingsPage preset flow", () => {
       );
     });
   });
+
+  it("creates a vision preset without reusing the stale internal image name", async () => {
+    const user = userEvent.setup();
+
+    createSettingsPreset.mockResolvedValue(undefined);
+    getSettings.mockResolvedValue(createSnapshot());
+
+    render(<SettingsPage />);
+
+    const visionLabel = (await screen.findAllByText("图片理解")).find((node) => node.closest("button")) ?? null;
+    const visionTab = visionLabel?.closest("button") ?? null;
+    expect(visionTab).not.toBeNull();
+    await user.click(visionTab!);
+    const createButtons = await screen.findAllByRole("button", { name: /新建图片理解预设|新建预设/i });
+    await user.click(createButtons[0]);
+    const presetNameInput = screen.getByRole("textbox");
+    await user.clear(presetNameInput);
+    await user.type(presetNameInput, "我的图片预设");
+    await user.click(screen.getByRole("button", { name: /创建并切换|确认/i }));
+
+    await waitFor(() => {
+      expect(createSettingsPreset).toHaveBeenCalled();
+    });
+
+    const [family, payload] = createSettingsPreset.mock.calls[0];
+    expect(family).toBe("vision");
+    expect(payload.name).toBe("我的图片预设");
+    expect(payload.preset).toEqual({
+      IMAGE_ANALYSIS_BASE_URL: "https://host.example/v1",
+      IMAGE_ANALYSIS_MODEL: "gpt-4o-mini",
+    });
+    expect(payload.preset).not.toHaveProperty("IMAGE_ANALYSIS_NAME");
+  });
 });

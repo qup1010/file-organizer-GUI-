@@ -125,8 +125,8 @@ export function CompletionView({
                     {isPartial ? "部分条目整理未完成" : "本次整理已顺利执行"}
                   </h2>
                 </div>
-                <div className="text-[12px] leading-relaxed text-ui-muted pl-8 max-w-[600px] truncate">
-                  {summary ? <span>{summary}</span> : "文件已按方案完成移动。"}
+                <div className="text-[12px] leading-relaxed text-ui-muted pl-8 max-w-[600px] line-clamp-2 hover:line-clamp-none transition-all cursor-default">
+                  {summary ? <MarkdownProse content={summary} /> : "文件已按方案完成移动。"}
                 </div>
               </div>
 
@@ -301,9 +301,9 @@ export function CompletionView({
         cancelLabel="先不回退"
         tone="danger"
         loading={isBusy}
-        onConfirm={() => {
+        onConfirm={async () => {
+          await onRollback();
           setRollbackConfirmOpen(false);
-          onRollback();
         }}
         onCancel={() => setRollbackConfirmOpen(false)}
       />

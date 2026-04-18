@@ -85,7 +85,6 @@ export default function WorkspaceClient() {
   const [layoutReady, setLayoutReady] = useState(false);
   const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
   const [executeConfirmOpen, setExecuteConfirmOpen] = useState(false);
-  const [executeConfirmText, setExecuteConfirmText] = useState("");
   const [scanAbortConfirmOpen, setScanAbortConfirmOpen] = useState(false);
   const [showExitMenu, setShowExitMenu] = useState(false);
   const [dividerLeft, setDividerLeft] = useState<number | null>(null);
@@ -202,10 +201,6 @@ export default function WorkspaceClient() {
     [precheck],
   );
   const isRootTarget = useMemo(() => /^[a-zA-Z]:[\\/]?$/.test((snapshot?.target_dir || "").trim()), [snapshot?.target_dir]);
-  const requiresTypedExecuteConfirm = useMemo(
-    () => (precheck?.move_preview.length ?? 0) >= 50 || reviewMoveCount >= 10 || isRootTarget,
-    [isRootTarget, precheck?.move_preview.length, reviewMoveCount],
-  );
   const beginScanPreviewHold = React.useCallback(() => {
     if (typeof window === "undefined") {
       return;
@@ -570,7 +565,6 @@ export default function WorkspaceClient() {
                   readOnly={isReadOnly}
                   onRequestExecute={() => {
                     if (!isReadOnly) {
-                      setExecuteConfirmText("");
                       setExecuteConfirmOpen(true);
                     }
                   }}
@@ -639,8 +633,10 @@ export default function WorkspaceClient() {
                     isBusy={isBusy}
                     isPlanSyncing={isPlanSyncing}
                     plannerStatus={plannerStatus}
+                    plannerRunKey={snapshot?.planner_progress?.started_at || null}
                     readOnly={isReadOnly}
                     focusRequest={previewFocusRequest}
+                    sourceTreeEntries={snapshot?.source_tree_entries || []}
                     precheckSummary={snapshot?.precheck_summary}
                     onRunPrecheck={() => {
                       if (!isReadOnly) void runPrecheck();
@@ -845,16 +841,13 @@ export default function WorkspaceClient() {
       />
       <ConfirmDialog
         open={executeConfirmOpen}
-        title={requiresTypedExecuteConfirm ? "高风险整理，确认执行？" : "确认执行这次整理？"}
-        description={requiresTypedExecuteConfirm
-          ? "这次整理涉及较多移动、较多 Review 条目，或目标目录处于根路径。请输入大写 YES 后再执行。"
-          : "执行后会真实移动本地文件。请在最后确认一次影响范围，避免误触发落盘。"}
-        confirmLabel={requiresTypedExecuteConfirm ? "输入 YES 后执行" : "开始执行"}
+        title="确认执行这次整理？"
+        description="执行后会真实移动本地文件。请在最后确认一次影响范围，避免误触发落盘。"
+        confirmLabel="开始执行"
         cancelLabel="再看看"
         tone="primary"
         loading={loading}
         onConfirm={async () => {
-          if (requiresTypedExecuteConfirm && executeConfirmText.trim() !== "YES") return;
           const success = await execute();
           if (success) setExecuteConfirmOpen(false);
         }}
@@ -873,17 +866,6 @@ export default function WorkspaceClient() {
             <span className="text-ui-muted">将进入 Review</span>
             <span className="font-semibold text-on-surface">{reviewMoveCount} 项</span>
           </div>
-          {requiresTypedExecuteConfirm && (
-            <label className="grid gap-2 pt-2">
-              <span className="text-ui-muted">请输入大写 YES 以确认高风险执行</span>
-              <input
-                value={executeConfirmText}
-                onChange={(event) => setExecuteConfirmText(event.target.value)}
-                className="h-11 rounded-[10px] border border-on-surface/8 bg-surface-container-low px-3 text-[13px] font-semibold text-on-surface outline-none"
-                placeholder="YES"
-              />
-            </label>
-          )}
         </div>
       </ConfirmDialog>
     </div>

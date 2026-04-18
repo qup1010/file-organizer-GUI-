@@ -312,6 +312,7 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
                     "planner_id": "F001",
                     "source_relpath": "very_long_real_filename_contract_v12_final_really_final.pdf",
                     "display_name": "very_long_real_filename_contract_v12_final_really_final.pdf",
+                    "entry_type": "file",
                     "suggested_purpose": "财务合同",
                     "summary": "付款协议",
                     "ext": "pdf",
@@ -320,11 +321,38 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
             ],
         )
 
-        self.assertIn("F001 | pdf | 财务合同 | 付款协议", messages[0]["content"])
+        self.assertIn("F001 | file | 财务合同 | 付款协议 [ext: pdf]", messages[0]["content"])
         self.assertNotIn(
             "very_long_real_filename_contract_v12_final_really_final.pdf | 财务合同 | 付款协议",
             messages[0]["content"],
         )
+
+    def test_render_planner_scan_lines_preserves_entry_type_for_dir_and_suffixless_file(self):
+        rendered = organizer_service.render_planner_scan_lines(
+            [
+                {
+                    "planner_id": "F001",
+                    "source_relpath": "project.v1",
+                    "display_name": "project.v1",
+                    "entry_type": "dir",
+                    "suggested_purpose": "项目目录",
+                    "summary": "目录入口",
+                    "ext": "item",
+                },
+                {
+                    "planner_id": "F002",
+                    "source_relpath": "README",
+                    "display_name": "README",
+                    "entry_type": "file",
+                    "suggested_purpose": "说明文件",
+                    "summary": "无后缀文本",
+                    "ext": "item",
+                },
+            ]
+        )
+
+        self.assertIn("F001 | dir | 项目目录 | 目录入口", rendered)
+        self.assertIn("F002 | file | 说明文件 | 无后缀文本", rendered)
 
     def test_run_organizer_cycle_translates_planner_ids_back_to_real_sources(self):
         diff_call = SimpleNamespace(

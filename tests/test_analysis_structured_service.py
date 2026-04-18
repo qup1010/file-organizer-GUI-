@@ -21,7 +21,7 @@ class StructuredAnalysisServiceTests(unittest.TestCase):
         if self.base_dir.exists():
             shutil.rmtree(self.base_dir)
 
-    def test_render_analysis_items_preserves_compatible_scan_format(self):
+    def test_render_analysis_items_includes_entry_type_in_scan_format(self):
         items = [
             AnalysisItem(
                 entry_name="合同.pdf",
@@ -35,7 +35,7 @@ class StructuredAnalysisServiceTests(unittest.TestCase):
 
         rendered = analysis_service.render_analysis_items(items)
 
-        self.assertIn("合同.pdf | 财务/合同 | 付款协议", rendered)
+        self.assertIn("合同.pdf | file | 财务/合同 | 付款协议", rendered)
         self.assertNotIn("confidence", rendered)
 
     def test_validate_analysis_items_accepts_current_level_entries(self):
@@ -97,7 +97,7 @@ class StructuredAnalysisServiceTests(unittest.TestCase):
             saved_path = analysis_service.append_output_result(items)
 
         self.assertEqual(saved_path, result_file)
-        self.assertIn("合同.pdf | 财务/合同 | 付款协议", result_file.read_text(encoding="utf-8"))
+        self.assertIn("合同.pdf | file | 财务/合同 | 付款协议", result_file.read_text(encoding="utf-8"))
 
     def test_run_analysis_cycle_emits_wait_events_around_model_request(self):
         submitted_items = [
@@ -187,7 +187,7 @@ class StructuredAnalysisServiceTests(unittest.TestCase):
         ), mock.patch.object(analysis_service, "_dispatch_tool_call", return_value="目录列表"):
             rendered = analysis_service.run_analysis_cycle(self.base_dir)
 
-        self.assertIn("合同.pdf | 财务/合同 | 付款协议", rendered)
+        self.assertIn("合同.pdf | file | 财务/合同 | 付款协议", rendered)
         self.assertEqual(create_mock.call_count, 2)
         second_messages = create_mock.call_args_list[1].kwargs["messages"]
         analysis_service.json.dumps(second_messages, ensure_ascii=False)
@@ -241,7 +241,7 @@ class StructuredAnalysisServiceTests(unittest.TestCase):
         ), mock.patch.object(analysis_service, "_dispatch_tool_call", return_value="目录列表"):
             rendered = analysis_service.run_analysis_cycle(self.base_dir)
 
-        self.assertIn("合同.pdf | 财务/合同 | 付款协议", rendered)
+        self.assertIn("合同.pdf | file | 财务/合同 | 付款协议", rendered)
         second_messages = create_mock.call_args_list[1].kwargs["messages"]
         synthesized_id = second_messages[2]["tool_calls"][0]["id"]
         self.assertTrue(synthesized_id)
@@ -261,8 +261,8 @@ class StructuredAnalysisServiceTests(unittest.TestCase):
         ):
             rendered = analysis_service.run_analysis_cycle(self.base_dir)
 
-        self.assertIn("合同.pdf | 财务/合同 | 付款协议", rendered)
-        self.assertIn("Screenshots | 截图记录 | 软件报错截图", rendered)
+        self.assertIn("合同.pdf | file | 财务/合同 | 付款协议", rendered)
+        self.assertIn("Screenshots | dir | 截图记录 | 软件报错截图", rendered)
 
     def test_run_analysis_cycle_accepts_json_string_response(self):
         response = (
@@ -278,8 +278,8 @@ class StructuredAnalysisServiceTests(unittest.TestCase):
         ):
             rendered = analysis_service.run_analysis_cycle(self.base_dir)
 
-        self.assertIn("合同.pdf | 财务/合同 | 付款协议", rendered)
-        self.assertIn("Screenshots | 截图记录 | 软件报错截图", rendered)
+        self.assertIn("合同.pdf | file | 财务/合同 | 付款协议", rendered)
+        self.assertIn("Screenshots | dir | 截图记录 | 软件报错截图", rendered)
 
     def test_run_analysis_cycle_falls_back_to_stream_when_non_stream_message_is_empty(self):
         empty_response = SimpleNamespace(
@@ -316,7 +316,7 @@ class StructuredAnalysisServiceTests(unittest.TestCase):
         ):
             rendered = analysis_service.run_analysis_cycle(self.base_dir)
 
-        self.assertIn("合同.pdf | finance/contract | payment agreement", rendered)
+        self.assertIn("合同.pdf | file | finance/contract | payment agreement", rendered)
         self.assertEqual(create_mock.call_count, 2)
         self.assertNotIn("stream", create_mock.call_args_list[0].kwargs)
         self.assertTrue(create_mock.call_args_list[1].kwargs["stream"])

@@ -289,6 +289,30 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         self.assertEqual(scanned.scan_lines, "a.txt | 文档 | A")
         self.assertEqual(scanned.scanner_progress["status"], "completed")
 
+    def test_start_scan_snapshot_includes_complete_source_tree_entries(self):
+        created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
+        session = created.session
+        assert session is not None
+        (self.target_dir / "docs").mkdir()
+        (self.target_dir / "docs" / "a.txt").write_text("hello", encoding="utf-8")
+        (self.target_dir / "notes.txt").write_text("note", encoding="utf-8")
+
+        self.service.start_scan(
+            session.session_id,
+            scan_runner=lambda path: "docs | dir | 项目目录 | 原始目录\ndocs/a.txt | file | 文档 | A\nnotes.txt | file | 记录 | B",
+        )
+
+        snapshot = self.service.get_snapshot(session.session_id)
+
+        self.assertEqual(
+            snapshot["source_tree_entries"],
+            [
+                {"source_relpath": "docs", "display_name": "docs", "entry_type": "directory"},
+                {"source_relpath": "notes.txt", "display_name": "notes.txt", "entry_type": "file"},
+                {"source_relpath": "docs/a.txt", "display_name": "a.txt", "entry_type": "file"},
+            ],
+        )
+
     def test_start_scan_marks_session_interrupted_when_async_scan_returns_empty_for_nonempty_directory(self):
         service = OrganizerSessionService(self.store, scanner=ImmediateScanner())
         (self.target_dir / "a.txt").write_text("hello", encoding="utf-8")
@@ -856,6 +880,8 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         self.assertEqual(snapshot["messages"][1]["role"], "user")
         self.assertEqual(snapshot["messages"][1]["visibility"], "internal")
         self.assertIn("md -> 学习资料", snapshot["messages"][1]["content"])
+        self.assertEqual(snapshot["summary"], "已分类 2 项，调整 2 项，仍剩 0 项待定")
+        self.assertEqual(snapshot["plan_snapshot"]["summary"], "已分类 2 项，调整 2 项，仍剩 0 项待定")
 
     def test_resolve_unresolved_choices_with_note_triggers_followup_cycle(self):
         created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
@@ -994,6 +1020,75 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         }
         self.assertEqual(targets["archive/new_summary_232.bak"], "项目资料/new_summary_232.bak")
         self.assertEqual(targets["drafts/new_summary_232.bak"], "Review/new_summary_232.bak")
+        self.assertEqual(result.session_snapshot["plan_snapshot"]["unresolved_items"], [])
+
+    def test_resolve_unresolved_choices_matches_real_source_relpath_exactly(self):
+        created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
+        session = created.session
+        assert session is not None
+        session.stage = "planning"
+        session.scan_lines = (
+            "a.txt | file | 文档 | 根目录文档\n"
+            "archive/a.txt | file | 归档文档 | 子目录文档"
+        )
+        session.planner_items = self.service._build_planner_items(session.scan_lines)
+        root_id = session.planner_items[0]["planner_id"]
+        archive_id = session.planner_items[1]["planner_id"]
+        session.pending_plan = {
+            "directories": ["Review"],
+            "moves": [
+                {"source": "a.txt", "target": "Review/a.txt"},
+                {"source": "archive/a.txt", "target": "Review/a.txt"},
+            ],
+            "unresolved_items": ["a.txt", "archive/a.txt"],
+            "summary": "needs choices",
+        }
+        session.messages = [
+            {
+                "role": "assistant",
+                "content": "",
+                "blocks": [
+                    {
+                        "type": "unresolved_choices",
+                        "request_id": "req_exact",
+                        "summary": "请确认 2 个同名路径",
+                        "status": "pending",
+                        "items": [
+                            {
+                                "item_id": root_id,
+                                "display_name": "a.txt",
+                                "question": "根目录这个文件放哪里？",
+                                "suggested_folders": ["学习资料", "文档资料"],
+                            },
+                            {
+                                "item_id": archive_id,
+                                "display_name": "a.txt",
+                                "question": "archive 里的文件放哪里？",
+                                "suggested_folders": ["归档资料", "文档资料"],
+                            },
+                        ],
+                    }
+                ],
+            }
+        ]
+        session.assistant_message = dict(session.messages[0])
+        self.store.save(session)
+
+        result = self.service.resolve_unresolved_choices(
+            session.session_id,
+            "req_exact",
+            [
+                {"item_id": root_id, "selected_folder": "学习资料", "note": ""},
+                {"item_id": archive_id, "selected_folder": "归档资料", "note": ""},
+            ],
+        )
+
+        targets = {
+            item["source_relpath"]: item["target_relpath"]
+            for item in result.session_snapshot["plan_snapshot"]["items"]
+        }
+        self.assertEqual(targets["a.txt"], "学习资料/a.txt")
+        self.assertEqual(targets["archive/a.txt"], "归档资料/a.txt")
         self.assertEqual(result.session_snapshot["plan_snapshot"]["unresolved_items"], [])
 
     def test_get_snapshot_repairs_planner_id_unresolved_duplicates_after_review_submission(self):
@@ -1318,6 +1413,13 @@ class OrganizerSessionServiceTests(unittest.TestCase):
             "unresolved_items": ["md"],
             "summary": "needs review",
         }
+        session.last_ai_pending_plan = {
+            "directories": ["Review"],
+            "moves": [{"source": "md", "target": "Review/md", "raw": ""}],
+            "user_constraints": [],
+            "unresolved_items": ["md"],
+            "summary": "",
+        }
         self.store.save(session)
 
         result = self.service.update_item_target(
@@ -1334,6 +1436,9 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         self.assertEqual(result.session_snapshot["plan_snapshot"]["unresolved_items"], [])
         self.assertEqual(result.session_snapshot["plan_snapshot"]["stats"]["unresolved_count"], 0)
         self.assertEqual(result.session_snapshot["messages"][-1]["visibility"], "internal")
+        self.assertIn("[用户手动调整记录]", result.session_snapshot["messages"][-1]["content"])
+        self.assertEqual(result.session_snapshot["summary"], "已分类 1 项，调整 1 项，仍剩 0 项待定")
+        self.assertEqual(result.session_snapshot["plan_snapshot"]["summary"], "已分类 1 项，调整 1 项，仍剩 0 项待定")
 
     def test_update_item_target_move_to_review_removes_unresolved_item_immediately(self):
         created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
@@ -1345,6 +1450,13 @@ class OrganizerSessionServiceTests(unittest.TestCase):
             "moves": [{"source": "md", "target": "Docs/md"}],
             "unresolved_items": ["md"],
             "summary": "needs confirmation",
+        }
+        session.last_ai_pending_plan = {
+            "directories": ["Docs"],
+            "moves": [{"source": "md", "target": "Docs/md", "raw": ""}],
+            "user_constraints": [],
+            "unresolved_items": ["md"],
+            "summary": "",
         }
         self.store.save(session)
 
@@ -1361,6 +1473,65 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         self.assertEqual(updated_item["target_relpath"], "Review/md")
         self.assertEqual(updated_item["status"], "review")
         self.assertEqual(result.session_snapshot["plan_snapshot"]["unresolved_items"], [])
+        self.assertEqual(result.session_snapshot["summary"], "已分类 1 项，调整 1 项，仍剩 0 项待定")
+        self.assertEqual(result.session_snapshot["plan_snapshot"]["summary"], "已分类 1 项，调整 1 项，仍剩 0 项待定")
+
+    def test_submit_user_intent_clears_previous_manual_sync_message_after_ai_plan(self):
+        created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
+        session = created.session
+        assert session is not None
+        session.stage = "planning"
+        session.scan_lines = "md | file | 学习资料 | 笔记"
+        session.pending_plan = {
+            "directories": ["Study"],
+            "moves": [{"source": "md", "target": "Study/md"}],
+            "unresolved_items": [],
+            "summary": "已分类 1 项，调整 1 项，仍剩 0 项待定",
+        }
+        session.messages = [
+            {"role": "system", "content": "prompt"},
+            {
+                "role": "user",
+                "content": "[用户手动调整记录]\n用户在预览区域对方案进行了如下手动调整：\n- 调整移动：md -> Study/md",
+                "visibility": "internal",
+            },
+        ]
+        session.last_ai_pending_plan = {
+            "directories": [""],
+            "moves": [{"source": "md", "target": "md", "raw": ""}],
+            "user_constraints": [],
+            "unresolved_items": [],
+            "summary": "",
+        }
+        self.store.save(session)
+
+        updated_pending = PendingPlan(
+            directories=["Docs"],
+            moves=[PlanMove(source="md", target="Docs/md")],
+            unresolved_items=[],
+            summary="",
+        )
+
+        with mock.patch(
+            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            return_value=(
+                "已改为 Docs",
+                {
+                    "pending_plan": updated_pending,
+                    "is_valid": False,
+                    "diff_summary": ["调整移动：md -> Docs/md"],
+                    "assistant_message": {"role": "assistant", "content": "已改为 Docs"},
+                },
+            ),
+        ):
+            result = self.service.submit_user_intent(session.session_id, "改到 Docs")
+
+        internal_sync_messages = [
+            message for message in result.session_snapshot["messages"]
+            if message.get("visibility") == "internal" and "[用户手动调整记录]" in message.get("content", "")
+        ]
+        self.assertEqual(internal_sync_messages, [])
+        self.assertEqual(result.session_snapshot["summary"], "已分类 1 项，调整 1 项，仍剩 0 项待定")
 
     def test_refresh_session_rebuilds_plan_and_marks_invalidated_items(self):
         created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
@@ -1483,7 +1654,9 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
         session = created.session
         assert session is not None
-        session.scan_lines = "md | 工具报告 | 含一次 Organizer 扫描报告\nnotes.txt | 学习笔记 | 课程随手记录"
+        (self.target_dir / "md").mkdir()
+        (self.target_dir / "notes.txt").write_text("note", encoding="utf-8")
+        session.scan_lines = "md | dir | 工具报告 | 含一次 Organizer 扫描报告\nnotes.txt | file | 学习笔记 | 课程随手记录"
         session.pending_plan = {
             "directories": ["历史归档", "学习资料"],
             "moves": [
@@ -1501,8 +1674,17 @@ class OrganizerSessionServiceTests(unittest.TestCase):
 
         self.assertEqual(md_item["suggested_purpose"], "工具报告")
         self.assertEqual(md_item["content_summary"], "含一次 Organizer 扫描报告")
+        self.assertEqual(md_item["entry_type"], "dir")
         self.assertEqual(notes_item["suggested_purpose"], "学习笔记")
         self.assertEqual(notes_item["content_summary"], "课程随手记录")
+        self.assertEqual(notes_item["entry_type"], "file")
+
+    def test_scan_entries_preserves_explicit_directory_type_for_dotted_directory(self):
+        entries = self.service._scan_entries("project.v1 | dir | 项目目录 | 多版本资料")
+
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["source_relpath"], "project.v1")
+        self.assertEqual(entries[0]["entry_type"], "dir")
 
     def test_get_snapshot_uses_planner_ids_for_plan_items_when_scan_lines_exist(self):
         created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
@@ -1544,6 +1726,38 @@ class OrganizerSessionServiceTests(unittest.TestCase):
 
         self.assertEqual(snapshot["stage"], "stale")
         self.assertEqual(snapshot["stale_reason"], "planning_schema_incompatible")
+
+    def test_get_snapshot_preserves_source_tree_entries_across_stage_changes_and_legacy_fallback(self):
+        created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
+        session = created.session
+        assert session is not None
+        (self.target_dir / "assets").mkdir()
+        (self.target_dir / "assets" / "cover.png").write_text("img", encoding="utf-8")
+        session.scan_lines = "assets | dir | 图片目录 | 原始目录\nassets/cover.png | file | 图片素材 | 封面"
+        session.planner_items = self.service._build_planner_items(session.scan_lines)
+        session.stage = "ready_for_precheck"
+        session.source_tree_entries = []
+        self.store.save(session)
+
+        ready_snapshot = self.service.get_snapshot(session.session_id)
+        expected_entries = [
+            {"source_relpath": "assets", "display_name": "assets", "entry_type": "directory"},
+            {"source_relpath": "assets/cover.png", "display_name": "cover.png", "entry_type": "file"},
+        ]
+
+        self.assertEqual(ready_snapshot["source_tree_entries"], expected_entries)
+
+        session = self.store.load(session.session_id)
+        assert session is not None
+        session.planning_schema_version = 1
+        session.stage = "planning"
+        session.source_tree_entries = []
+        self.store.save(session)
+
+        stale_snapshot = self.service.get_snapshot(session.session_id)
+
+        self.assertEqual(stale_snapshot["stage"], "stale")
+        self.assertEqual(stale_snapshot["source_tree_entries"], expected_entries)
 
     def test_refresh_session_rejects_locked_stage(self):
         created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
