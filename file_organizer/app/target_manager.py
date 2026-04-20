@@ -36,7 +36,10 @@ class TargetManager:
             return []
 
         def build_node(current: Path, depth: int) -> dict:
-            relpath = self.helpers._normalize_relpath(current.relative_to(target_dir).as_posix())
+            try:
+                relpath = self.helpers._normalize_relpath(current.relative_to(target_dir).as_posix())
+            except ValueError:
+                relpath = str(current.resolve())
             children: list[dict] = []
             if depth < max_depth:
                 try:
@@ -56,11 +59,7 @@ class TargetManager:
 
         tree: list[dict] = []
         for relpath in normalized_selected:
-            candidate = (target_dir / relpath).resolve()
-            try:
-                candidate.relative_to(target_dir.resolve())
-            except ValueError:
-                continue
+            candidate = Path(relpath).resolve() if Path(relpath).is_absolute() else (target_dir / relpath).resolve()
             if not candidate.exists() or not candidate.is_dir():
                 continue
             tree.append(build_node(candidate, 1))
@@ -100,10 +99,15 @@ class TargetManager:
             if self.helpers._normalize_relpath(path)
         }
 
-        top_level = normalized.split("/", 1)[0]
-        if top_level in selected_roots:
+        def is_within(candidate: str, roots: set[str]) -> bool:
+            for root in roots:
+                if candidate == root or candidate.startswith(f"{root}/"):
+                    return True
+            return False
+
+        if is_within(normalized, selected_roots):
             return True
-        if top_level in existing_roots:
+        if is_within(normalized, existing_roots):
             return False
         return True
 
@@ -111,12 +115,13 @@ class TargetManager:
         if self.helpers._normalize_organize_mode(session.organize_mode) != "incremental":
             session.incremental_selection = self.helpers._incremental_selection_defaults(session)
             return
+        selected_target_directories = self.helpers._normalize_target_directories(session.selected_target_directories)
         session.incremental_selection = {
             "required": True,
-            "status": "pending",
+            "status": "ready" if selected_target_directories else "pending",
             "destination_index_depth": self.helpers._normalize_destination_index_depth(session.destination_index_depth),
             "root_directory_options": self.root_directory_options_from_scan(scan_lines),
-            "target_directories": [],
+            "target_directories": selected_target_directories,
             "target_directory_tree": [],
             "pending_items_count": 0,
             "source_scan_completed": False,

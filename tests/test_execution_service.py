@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest import mock
 
 from file_organizer.execution import service as execution_service
+from file_organizer.execution.models import MappedExecutionAction, MappedExecutionPlan
 from file_organizer.organize import service as organizer_service
 
 
@@ -37,6 +38,37 @@ class ExecutionServiceTests(unittest.TestCase):
         self.assertEqual(plan.move_actions[0].source, self.base_dir.resolve() / "demo.txt")
         self.assertEqual(plan.move_actions[0].target, self.base_dir.resolve() / "Projects" / "demo.txt")
 
+    def test_build_execution_plan_from_mapped_preserves_id_metadata(self):
+        mapped_plan = MappedExecutionPlan(
+            base_dir=self.base_dir.resolve(),
+            mkdir_actions=[
+                MappedExecutionAction(
+                    type="MKDIR",
+                    target_path=self.base_dir.resolve() / "Projects",
+                    target_slot_id="D001",
+                    display_name="Projects",
+                )
+            ],
+            move_actions=[
+                MappedExecutionAction(
+                    type="MOVE",
+                    source_path=self.base_dir.resolve() / "demo.txt",
+                    target_path=self.base_dir.resolve() / "Projects" / "demo.txt",
+                    item_id="F001",
+                    source_ref_id="F001",
+                    target_slot_id="D001",
+                    display_name="demo.txt",
+                )
+            ],
+        )
+
+        plan = execution_service.build_execution_plan_from_mapped(mapped_plan)
+
+        self.assertEqual(plan.mkdir_actions[0].target_slot_id, "D001")
+        self.assertEqual(plan.move_actions[0].item_id, "F001")
+        self.assertEqual(plan.move_actions[0].source_ref_id, "F001")
+        self.assertEqual(plan.move_actions[0].display_name, "demo.txt")
+
     def test_validate_execution_preconditions_blocks_existing_target(self):
         (self.base_dir / "demo.txt").write_text("demo", encoding="utf-8")
         (self.base_dir / "Projects").mkdir()
@@ -64,6 +96,27 @@ class ExecutionServiceTests(unittest.TestCase):
         self.assertIn("创建目录", preview)
         self.assertIn("移动项目", preview)
         self.assertIn("Projects/demo.txt", preview)
+
+    def test_render_execution_preview_shows_display_name_when_present(self):
+        plan = execution_service.build_execution_plan_from_mapped(
+            MappedExecutionPlan(
+                base_dir=self.base_dir.resolve(),
+                move_actions=[
+                    MappedExecutionAction(
+                        type="MOVE",
+                        source_path=self.base_dir.resolve() / "demo.txt",
+                        target_path=self.base_dir.resolve() / "Projects" / "demo.txt",
+                        item_id="F001",
+                        display_name="demo.txt",
+                    )
+                ],
+            )
+        )
+        precheck = execution_service.PrecheckResult(can_execute=True)
+
+        preview = execution_service.render_execution_preview(plan, precheck)
+
+        self.assertIn("[demo.txt]", preview)
 
     def test_execute_plan_moves_directory_tree(self):
         source_dir = self.base_dir / "demo-folder"
@@ -109,10 +162,29 @@ class ExecutionServiceTests(unittest.TestCase):
 
     def test_execute_plan_persists_latest_execution_journal(self):
         (self.base_dir / "demo.txt").write_text("demo", encoding="utf-8")
-        parsed = organizer_service.parse_commands_block(
-            '<COMMANDS>\nMKDIR "Projects"\nMOVE "demo.txt" "Projects/demo.txt"\n</COMMANDS>'
+        mapped_plan = MappedExecutionPlan(
+            base_dir=self.base_dir.resolve(),
+            mkdir_actions=[
+                MappedExecutionAction(
+                    type="MKDIR",
+                    target_path=self.base_dir.resolve() / "Projects",
+                    target_slot_id="D001",
+                    display_name="Projects",
+                )
+            ],
+            move_actions=[
+                MappedExecutionAction(
+                    type="MOVE",
+                    source_path=self.base_dir.resolve() / "demo.txt",
+                    target_path=self.base_dir.resolve() / "Projects" / "demo.txt",
+                    item_id="F001",
+                    source_ref_id="F001",
+                    target_slot_id="D001",
+                    display_name="demo.txt",
+                )
+            ],
         )
-        plan = execution_service.build_execution_plan(parsed, self.base_dir)
+        plan = execution_service.build_execution_plan_from_mapped(mapped_plan)
         executions_dir = self.history_root / "executions"
         latest_path = self.history_root / "latest_by_directory.json"
 
@@ -130,6 +202,10 @@ class ExecutionServiceTests(unittest.TestCase):
         self.assertEqual(journal["target_dir"], str(self.base_dir.resolve()))
         self.assertEqual(len(journal["items"]), 2)
         self.assertEqual(journal["items"][1]["status"], "success")
+        self.assertEqual(journal["items"][1]["item_id"], "F001")
+        self.assertEqual(journal["items"][1]["source_ref_id"], "F001")
+        self.assertEqual(journal["items"][1]["target_slot_id"], "D001")
+        self.assertEqual(journal["items"][1]["display_name"], "demo.txt")
 
     def test_latest_execution_pointer_is_overwritten_for_same_directory(self):
         (self.base_dir / "first.txt").write_text("first", encoding="utf-8")

@@ -66,6 +66,8 @@ class SourceManager:
             if basename:
                 basename_counts[basename] = basename_counts.get(basename, 0) + 1
 
+        duplicate_seen: dict[str, int] = {}
+
         planner_items: list[dict] = []
         for entry in entries:
             source_relpath = str(entry.get("source_relpath") or "").replace("\\", "/").strip()
@@ -78,15 +80,20 @@ class SourceManager:
                 next_id += 1
                 planner_id = f"F{next_id:03d}"
             parent_hint = ""
-            if basename_counts.get(str(entry.get("display_name") or "").strip().lower(), 0) > 1:
+            base_display_name = str(entry.get("display_name") or Path(source_relpath).name)
+            display_name = base_display_name
+            duplicate_key = base_display_name.strip().lower()
+            if basename_counts.get(duplicate_key, 0) > 1:
                 parent_hint = str(Path(source_relpath).parent).replace("\\", "/")
                 if parent_hint == ".":
                     parent_hint = ""
+                duplicate_seen[duplicate_key] = duplicate_seen.get(duplicate_key, 0) + 1
+                display_name = f"{base_display_name} ({duplicate_seen[duplicate_key]})"
             planner_items.append(
                 {
                     "planner_id": planner_id,
                     "source_relpath": source_relpath,
-                    "display_name": entry.get("display_name") or Path(source_relpath).name,
+                    "display_name": display_name,
                     "suggested_purpose": entry.get("suggested_purpose", ""),
                     "summary": entry.get("summary", ""),
                     "confidence": entry.get("confidence", existing.get("confidence") if existing else None),

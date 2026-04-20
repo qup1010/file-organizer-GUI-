@@ -1,9 +1,57 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createSessionAndStartScan, startFreshSession } from "./session-launcher-actions";
+import { createSessionAndStartScan, firstSourcePath, startFreshSession } from "./session-launcher-actions";
+
+const fullLaunchPayload = {
+  sources: [
+    { source_type: "directory" as const, path: "D:/inbox" },
+    { source_type: "file" as const, path: "D:/loose/readme.txt" },
+  ],
+  resume_if_exists: false,
+  organize_method: "categorize_into_new_structure" as const,
+  output_dir: "D:/sorted",
+  strategy: {
+    template_id: "general_downloads" as const,
+    organize_mode: "initial" as const,
+    task_type: "organize_full_directory" as const,
+    organize_method: "categorize_into_new_structure" as const,
+    destination_index_depth: 2 as const,
+    language: "zh" as const,
+    density: "normal" as const,
+    prefix_style: "none" as const,
+    caution_level: "balanced" as const,
+    output_dir: "D:/sorted",
+    note: "",
+  },
+};
 
 describe("session-launcher-actions", () => {
-  it("does not abandon a completed session before restarting", async () => {
+  it("returns the first valid source path", () => {
+    expect(
+      firstSourcePath([
+        { source_type: "directory", path: "   " },
+        { source_type: "file", path: "D:/a.txt" },
+        { source_type: "directory", path: "D:/folder" },
+      ]),
+    ).toBe("D:/a.txt");
+  });
+
+  it("creates a session with the new full-session payload", async () => {
+    const api = {
+      createSession: vi.fn().mockResolvedValue({
+        mode: "created",
+        session_id: "session-2",
+        restorable_session: null,
+        session_snapshot: null,
+      }),
+    };
+
+    await createSessionAndStartScan(api, fullLaunchPayload);
+
+    expect(api.createSession).toHaveBeenCalledWith(fullLaunchPayload);
+  });
+
+  it("restarts from a completed session without abandoning it", async () => {
     const api = {
       abandonSession: vi.fn(),
       createSession: vi.fn().mockResolvedValue({
@@ -12,68 +60,18 @@ describe("session-launcher-actions", () => {
         restorable_session: null,
         session_snapshot: null,
       }),
-      scanSession: vi.fn().mockResolvedValue({}),
     };
 
-    await startFreshSession(
-      api,
-      "session-1",
-      "D:/data",
-      {
-        template_id: "general_downloads",
-        organize_mode: "initial",
-        task_type: "organize_full_directory",
-        destination_index_depth: 2,
-        language: "zh",
-        density: "normal",
-        prefix_style: "none",
-        caution_level: "balanced",
-        note: "",
-      },
-      "completed",
-    );
+    await startFreshSession(api, "session-1", "completed", fullLaunchPayload);
 
     expect(api.abandonSession).not.toHaveBeenCalled();
-    expect(api.createSession).toHaveBeenCalledTimes(1);
-    expect(api.scanSession).toHaveBeenCalledWith("session-2");
+    expect(api.createSession).toHaveBeenCalledWith({
+      ...fullLaunchPayload,
+      resume_if_exists: false,
+    });
   });
 
-  it("abandons a non-completed session before restarting", async () => {
-    const api = {
-      abandonSession: vi.fn().mockResolvedValue({}),
-      createSession: vi.fn().mockResolvedValue({
-        mode: "created",
-        session_id: "session-2",
-        restorable_session: null,
-        session_snapshot: null,
-      }),
-      scanSession: vi.fn().mockResolvedValue({}),
-    };
-
-    await startFreshSession(
-      api,
-      "session-1",
-      "D:/data",
-      {
-        template_id: "general_downloads",
-        organize_mode: "initial",
-        task_type: "organize_full_directory",
-        destination_index_depth: 2,
-        language: "zh",
-        density: "normal",
-        prefix_style: "none",
-        caution_level: "balanced",
-        note: "",
-      },
-      "planning",
-    );
-
-    expect(api.abandonSession).toHaveBeenCalledWith("session-1");
-    expect(api.createSession).toHaveBeenCalledTimes(1);
-    expect(api.scanSession).toHaveBeenCalledWith("session-2");
-  });
-
-  it("passes task_type through when creating a new session", async () => {
+  it("submits target profile and manual target directories for existing-category sessions", async () => {
     const api = {
       createSession: vi.fn().mockResolvedValue({
         mode: "created",
@@ -81,33 +79,31 @@ describe("session-launcher-actions", () => {
         restorable_session: null,
         session_snapshot: null,
       }),
-      scanSession: vi.fn().mockResolvedValue({}),
     };
 
-    await createSessionAndStartScan(
-      api,
-      "D:/data",
-      false,
-      {
-        template_id: "general_downloads",
-        organize_mode: "incremental",
-        task_type: "organize_into_existing",
-        destination_index_depth: 2,
-        language: "zh",
-        density: "normal",
-        prefix_style: "none",
-        caution_level: "balanced",
+    const payload = {
+      sources: [{ source_type: "directory" as const, path: "D:/downloads" }],
+      resume_if_exists: true,
+      organize_method: "assign_into_existing_categories" as const,
+      target_profile_id: "profile-1",
+      target_directories: ["D:/archive/docs", "D:/archive/media"],
+      strategy: {
+        template_id: "general_downloads" as const,
+        organize_mode: "incremental" as const,
+        task_type: "organize_into_existing" as const,
+        organize_method: "assign_into_existing_categories" as const,
+        destination_index_depth: 2 as const,
+        language: "zh" as const,
+        density: "normal" as const,
+        prefix_style: "none" as const,
+        caution_level: "balanced" as const,
+        target_profile_id: "profile-1",
         note: "",
       },
-    );
+    };
 
-    expect(api.createSession).toHaveBeenCalledWith(
-      "D:/data",
-      false,
-      expect.objectContaining({
-        task_type: "organize_into_existing",
-        organize_mode: "incremental",
-      }),
-    );
+    await createSessionAndStartScan(api, payload);
+
+    expect(api.createSession).toHaveBeenCalledWith(payload);
   });
 });

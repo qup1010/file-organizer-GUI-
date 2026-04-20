@@ -1,18 +1,28 @@
 "use client";
 
 import { AlertCircle, ArrowRight, CheckCircle2, FolderPlus, ListChecks, ShieldAlert } from "lucide-react";
-import { PrecheckSummary } from "@/types/session";
+import { PlanItem, PlanTargetSlot, PrecheckSummary } from "@/types/session";
 import { cn } from "@/lib/utils";
 import { DirectoryTreeDiff, type DirectoryTreeLeafEntry, type DirectoryTreeFilter } from "./directory-tree-diff";
 import { useState } from "react";
 
 interface PrecheckViewProps {
     summary: PrecheckSummary | null;
+    planItems?: PlanItem[];
+    targetSlots?: PlanTargetSlot[];
     isBusy: boolean;
     readOnly?: boolean;
     onRequestExecute: () => void;
     onBack: () => void;
     onLocateIssue?: (itemIds: string[], filter?: "unresolved" | "review" | "invalidated" | "changed") => void;
+}
+
+interface EnrichedMovePreview {
+    item_id: string;
+    display_name: string;
+    target_slot_id: string;
+    source: string;
+    target: string;
 }
 
 function reviewMoveCount(summary: PrecheckSummary) {
@@ -21,7 +31,16 @@ function reviewMoveCount(summary: PrecheckSummary) {
     ).length;
 }
 
-export function PrecheckView({ summary, isBusy, readOnly = false, onRequestExecute, onBack, onLocateIssue }: PrecheckViewProps) {
+export function PrecheckView({
+    summary,
+    planItems = [],
+    targetSlots = [],
+    isBusy,
+    readOnly = false,
+    onRequestExecute,
+    onBack,
+    onLocateIssue,
+}: PrecheckViewProps) {
     const [filter, setFilter] = useState<DirectoryTreeFilter>("all");
 
     if (!summary) {
@@ -39,6 +58,18 @@ export function PrecheckView({ summary, isBusy, readOnly = false, onRequestExecu
     const hasWarnings = (summary.warnings || []).length > 0;
     const reviewCount = reviewMoveCount(summary);
     const summaryTone = hasErrors ? "danger" : hasWarnings ? "warning" : "success";
+    const planItemById = new Map(planItems.map((item) => [item.item_id, item] as const));
+    const targetSlotById = new Map(targetSlots.map((slot) => [slot.slot_id, slot] as const));
+    const enrichedMoves: EnrichedMovePreview[] = (summary.move_preview || []).map((move) => {
+        const planItem = planItemById.get(move.item_id);
+        return {
+            item_id: move.item_id,
+            display_name: planItem?.display_name || move.item_id,
+            target_slot_id: planItem?.target_slot_id || "",
+            source: move.source,
+            target: move.target,
+        };
+    });
 
     const statusTitle = hasErrors
         ? "当前不能执行"
@@ -54,14 +85,14 @@ export function PrecheckView({ summary, isBusy, readOnly = false, onRequestExecu
     const beforeTree = {
         title: "整理前目录树",
         subtitle: "这里是这次会参与整理的原始位置。",
-        leafEntries: (summary.move_preview || []).map((move) => ({ path: move.source })),
+        leafEntries: enrichedMoves.map((move) => ({ path: move.source })),
         emptyLabel: "当前没有可预检的原始路径。",
     };
 
     const afterTree = {
         title: "整理后目录树",
         subtitle: "这里是预检完成后即将形成的目标结构。",
-        leafEntries: (summary.move_preview || []).map<DirectoryTreeLeafEntry>((move) => ({
+        leafEntries: enrichedMoves.map<DirectoryTreeLeafEntry>((move) => ({
             path: move.target,
             status: (move.target || "").split(/[\\/]/).some((part) => part.toLowerCase() === "review") ? "review" : "pending",
         })),
@@ -179,6 +210,50 @@ export function PrecheckView({ summary, isBusy, readOnly = false, onRequestExecu
                   <DirectoryTreeDiff before={beforeTree} after={afterTree} filter={filter} />
                 </div>
             </section>
+
+            {enrichedMoves.length ? (
+                <section className="shrink-0 overflow-hidden rounded-[8px] border border-on-surface/8 bg-surface-container-lowest shadow-[0_4px_16px_rgba(0,0,0,0.02)]">
+                    <div className="border-b border-on-surface/6 bg-on-surface/[0.01] px-4 py-2">
+                        <h3 className="text-[12.5px] font-bold font-headline text-on-surface">预检条目明细</h3>
+                    </div>
+                    <div className="max-h-[240px] overflow-y-auto px-3 py-3 scrollbar-thin">
+                        <div className="grid gap-2 @4xl:grid-cols-2">
+                            {enrichedMoves.map((move) => {
+                                const slot = move.target_slot_id ? targetSlotById.get(move.target_slot_id) : null;
+                                const slotLabel = move.target_slot_id === "Review"
+                                    ? "Review"
+                                    : slot?.display_name || move.target_slot_id;
+                                return (
+                                    <div key={`${move.item_id}-${move.target}`} className="rounded-[6px] border border-on-surface/8 bg-surface px-3 py-3">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <p className="truncate text-[13px] font-semibold text-on-surface" title={move.display_name}>
+                                                    {move.display_name}
+                                                </p>
+                                                <div className="mt-1 flex flex-wrap gap-1.5">
+                                                    <span className="rounded-[4px] bg-on-surface/[0.05] px-2 py-0.5 text-[10px] font-bold text-ui-muted">
+                                                        {move.item_id}
+                                                    </span>
+                                                    {slotLabel ? (
+                                                        <span className="rounded-[4px] bg-primary/8 px-2 py-0.5 text-[10px] font-bold text-primary">
+                                                            {slotLabel}
+                                                        </span>
+                                                    ) : null}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="mt-2.5 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 text-[11px]">
+                                            <span className="truncate text-right font-mono text-ui-muted" title={move.source}>{move.source}</span>
+                                            <ArrowRight className="h-3.5 w-3.5 text-primary/55" />
+                                            <span className="truncate font-mono font-semibold text-primary" title={move.target}>{move.target}</span>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </section>
+            ) : null}
 
             {(hasErrors || hasWarnings || reviewCount > 0) ? (
                 <section className="shrink-0 max-h-[35%] overflow-y-auto space-y-3 rounded-[6px] border border-on-surface/8 bg-surface px-5 py-4 shadow-[0_4px_12px_rgba(0,0,0,0.02)] scrollbar-thin">

@@ -103,6 +103,60 @@ def render_analysis_items(items: list[AnalysisItem] | list[dict]) -> str:
     return "\n".join(item.to_scan_line() for item in _coerce_analysis_items(items))
 
 
+def _dedupe_display_names(entry_names: list[str]) -> dict[str, str]:
+    counts = Counter(entry_names)
+    seen: dict[str, int] = {}
+    labels: dict[str, str] = {}
+    for entry_name in entry_names:
+        seen[entry_name] = seen.get(entry_name, 0) + 1
+        if counts[entry_name] <= 1:
+            labels[entry_name] = entry_name
+        else:
+            labels[entry_name] = f"{entry_name} ({seen[entry_name]})"
+    return labels
+
+
+def _build_entry_context(
+    target_dir: Path,
+    entry_names: list[str],
+    *,
+    entry_ids: list[str] | None = None,
+) -> dict[str, dict[str, str]]:
+    normalized_entries = [
+        entry
+        for entry in (
+            normalize_entry_name(str(entry_name or "").strip(), target_dir)
+            for entry_name in entry_names
+        )
+        if entry
+    ]
+    display_names = _dedupe_display_names(normalized_entries)
+    context: dict[str, dict[str, str]] = {}
+    for index, entry_name in enumerate(normalized_entries, start=1):
+        raw_entry_id = ""
+        if entry_ids is not None and index - 1 < len(entry_ids):
+            raw_entry_id = str(entry_ids[index - 1] or "").strip()
+        entry_id = raw_entry_id or f"F{index:03d}"
+        absolute_path = (target_dir / entry_name).resolve()
+        context[entry_id] = {
+            "entry_id": entry_id,
+            "entry_name": entry_name,
+            "display_name": display_names.get(entry_name, entry_name),
+            "entry_type": _infer_entry_type(entry_name, target_dir) or "file",
+            "absolute_path": str(absolute_path),
+        }
+    return context
+
+
+def _render_entry_catalog(entry_context: dict[str, dict[str, str]]) -> str:
+    lines = ["entry_id | display_name | entry_type"]
+    for item in entry_context.values():
+        lines.append(
+            f"{item['entry_id']} | {item['display_name']} | {item['entry_type']}"
+        )
+    return "\n".join(lines)
+
+
 def append_output_result(content: str | list[AnalysisItem] | list[dict]):
     """将结构化分析结果或兼容文本追加到标准结果文件中。"""
     if isinstance(content, list):
@@ -279,16 +333,64 @@ def _resolve_readable_file(target_dir: Path, raw_filename: str | None) -> Path |
     return candidate
 
 
-def _dispatch_tool_call(target_dir: Path, name: str, args: dict):
+def _describe_directory_for_model(entry_id: str, display_name: str, directory: Path) -> str:
+    lines = [f"--- 条目 [{entry_id} | {display_name}] 结构开始 ---"]
+    children = sorted(
+        [child for child in directory.iterdir() if not child.name.startswith(".")],
+        key=lambda item: item.name.lower(),
+    )
+    lines.append(f"{display_name} | dir | 包含 {len(children)} 个条目")
+    for child in children:
+        if child.is_dir():
+            lines.append(f"{child.name} | dir | 子目录")
+        else:
+            suffix = child.suffix.lower() or "无扩展名"
+            lines.append(f"{child.name} | file | {suffix}")
+    lines.append(f"--- 条目 [{entry_id} | {display_name}] 结构结束 ---")
+    return "\n".join(lines)
+
+
+def _sanitize_file_preview(preview: str, *, entry_id: str, display_name: str) -> str:
+    content = str(preview or "")
+    content = re.sub(r"^--- 文件 \[.*?\] 内容开始 ---\n?", "", content, count=1, flags=re.S)
+    content = re.sub(r"\n?--- 内容结束 ---\s*$", "", content, count=1, flags=re.S)
+    return f"--- 条目 [{entry_id} | {display_name}] 内容开始 ---\n{content.strip()}\n--- 内容结束 ---"
+
+
+def _dispatch_tool_call(target_dir: Path, name: str, args: dict, entry_context: dict[str, dict[str, str]] | None = None):
     if name == "read_local_file":
         filename = _resolve_readable_file(target_dir, args.get("filename"))
         if filename is None:
             return "错误：仅读取目标目录内的文件，不允许访问目录外路径。"
         return read_local_file(str(filename), allowed_base_dir=str(target_dir.resolve()))
     if name == BATCH_READ_TOOL_NAME:
+        raw_entry_ids = [str(item).strip() for item in (args.get("entry_ids") or []) if str(item).strip()]
+        if entry_context and raw_entry_ids:
+            results: list[str] = []
+            for entry_id in raw_entry_ids:
+                context_item = entry_context.get(entry_id)
+                if context_item is None:
+                    results.append(f"--- 条目 [{entry_id}] ---\n错误：未找到对应条目。\n--- 结束 ---")
+                    continue
+                absolute_path = Path(context_item["absolute_path"])
+                if absolute_path.is_dir():
+                    results.append(
+                        _describe_directory_for_model(entry_id, context_item["display_name"], absolute_path)
+                    )
+                else:
+                    preview = read_local_file(str(absolute_path), allowed_base_dir=str(target_dir.resolve()))
+                    results.append(
+                        _sanitize_file_preview(
+                            preview,
+                            entry_id=entry_id,
+                            display_name=context_item["display_name"],
+                        )
+                    )
+            return "\n\n".join(results)
+
         raw_filenames = args.get("filenames") or []
         if not raw_filenames:
-            return "错误：未提供文件名列表。"
+            return "错误：未提供条目标识列表。"
         resolved: list[str] = []
         for raw in raw_filenames:
             resolved_path = _resolve_readable_file(target_dir, raw)
@@ -296,7 +398,6 @@ def _dispatch_tool_call(target_dir: Path, name: str, args: dict):
                 resolved.append(f"--- 文件 [{raw}] ---\n错误：仅读取目标目录内的文件，不允许访问目录外路径。\n--- 结束 ---")
             else:
                 resolved.append(str(resolved_path))
-        # 过滤出有效路径进行批量读取，保留错误信息
         valid_paths = [p for p in resolved if not p.startswith("--- 文件")]
         error_messages = [p for p in resolved if p.startswith("--- 文件")]
         result = read_local_files_batch(valid_paths, allowed_base_dir=str(target_dir.resolve())) if valid_paths else ""
@@ -313,7 +414,7 @@ def _dispatch_tool_call(target_dir: Path, name: str, args: dict):
     return "Unknown tool"
 
 
-def _extract_submitted_analysis(tool_calls) -> list[AnalysisItem] | None:
+def _extract_submitted_analysis(tool_calls, entry_context: dict[str, dict[str, str]] | None = None) -> list[AnalysisItem] | None:
     for tool_call in tool_calls or []:
         if tool_call.function.name != SUBMIT_ANALYSIS_TOOL_NAME:
             continue
@@ -322,7 +423,19 @@ def _extract_submitted_analysis(tool_calls) -> list[AnalysisItem] | None:
         except (json.JSONDecodeError, TypeError):
             logger.warning("submit_analysis_result 工具调用参数 JSON 解析失败，跳过")
             continue
-        return _coerce_analysis_items(args.get("items", []))
+        normalized_items: list[AnalysisItem] = []
+        for raw_item in args.get("items", []):
+            if not isinstance(raw_item, dict):
+                continue
+            item_data = dict(raw_item)
+            entry_id = str(item_data.get("entry_id") or "").strip()
+            context_item = (entry_context or {}).get(entry_id)
+            if context_item is not None:
+                item_data.setdefault("entry_name", context_item["entry_name"])
+                item_data.setdefault("display_name", context_item["display_name"])
+                item_data.setdefault("entry_type", context_item["entry_type"])
+            normalized_items.append(AnalysisItem.from_dict(item_data))
+        return normalized_items
     return None
 
 
@@ -601,6 +714,7 @@ def _run_analysis_worker(
     max_retries: int = MAX_ANALYSIS_RETRIES,
     retry_scope: str = "当前层条目",
     wait_message: str = "正在分析目录内容",
+    entry_context: dict[str, dict[str, str]] | None = None,
 ) -> list[AnalysisItem] | None:
     client = get_client()
     messages = [{"role": "system", "content": build_system_prompt(files_info, target_dir=target_dir)}]
@@ -677,7 +791,7 @@ def _run_analysis_worker(
                 )
             finally:
                 emit(event_handler, "model_wait_end")
-            submitted_items = _extract_submitted_analysis(getattr(msg, "tool_calls", None))
+            submitted_items = _extract_submitted_analysis(getattr(msg, "tool_calls", None), entry_context=entry_context)
             if submitted_items is not None:
                 normalized_items, invalid_lines = _normalize_analysis_items(submitted_items, target_dir)
                 check = validate_analysis_items(normalized_items, target_dir, expected_entries=expected_entries)
@@ -716,7 +830,7 @@ def _run_analysis_worker(
                     })
                     continue
                 emit(event_handler, "tool_start", {"name": name, "args": args})
-                result = _dispatch_tool_call(target_dir, name, args)
+                result = _dispatch_tool_call(target_dir, name, args, entry_context=entry_context)
                 curr_messages.append({
                     "role": "tool",
                     "tool_call_id": tool_call.id,
@@ -777,6 +891,7 @@ def _run_analysis_worker(
 
 def _run_single_analysis(target_dir: Path, files_info: str, model: str, event_handler=None, session_id: str | None = None) -> str | None:
     entries = _list_current_entries(target_dir)
+    entry_context = _build_entry_context(target_dir, entries)
     items = _run_analysis_worker(
         target_dir=target_dir,
         files_info=files_info,
@@ -788,6 +903,34 @@ def _run_single_analysis(target_dir: Path, files_info: str, model: str, event_ha
         max_retries=MAX_ANALYSIS_RETRIES,
         retry_scope="当前层条目",
         wait_message="正在分析目录内容",
+        entry_context=entry_context,
+    )
+    if items is None:
+        return None
+    return render_analysis_items(items)
+
+
+def _run_selected_entries_analysis(
+    target_dir: Path,
+    entry_names: list[str],
+    files_info: str,
+    model: str,
+    event_handler=None,
+    session_id: str | None = None,
+) -> str | None:
+    entry_context = _build_entry_context(target_dir, entry_names)
+    items = _run_analysis_worker(
+        target_dir=target_dir,
+        files_info=files_info,
+        user_message="请分析以上选中的条目及其用途。",
+        expected_entries=entry_names,
+        model=model,
+        session_id=session_id,
+        event_handler=event_handler,
+        max_retries=MAX_ANALYSIS_RETRIES,
+        retry_scope="以上选中条目",
+        wait_message="正在分析所选条目",
+        entry_context=entry_context,
     )
     if items is None:
         return None
@@ -804,7 +947,8 @@ def _analyze_batch(
     session_id: str | None = None,
     event_handler=None,
 ) -> list[AnalysisItem]:
-    batch_files_info = _slice_files_info_for_batch(files_info, batch_entries, target_dir)
+    entry_context = _build_entry_context(target_dir, batch_entries)
+    batch_files_info = _render_entry_catalog(entry_context)
     items = _run_analysis_worker(
         target_dir=target_dir,
         files_info=batch_files_info,
@@ -816,6 +960,7 @@ def _analyze_batch(
         max_retries=BATCH_ANALYSIS_RETRIES,
         retry_scope="以上条目",
         wait_message=f"正在分析批次 {batch_index + 1}/{total_batches}",
+        entry_context=entry_context,
     )
     if items is None:
         raise RuntimeError(f"batch_{batch_index}_analysis_failed")
@@ -846,6 +991,23 @@ def _merge_batch_results(batch_results: list[list[AnalysisItem]], target_dir: Pa
     return ordered_items
 
 
+def _merge_selected_batch_results(
+    batch_results: list[list[AnalysisItem]],
+    target_dir: Path,
+    selected_entries: list[str],
+) -> list[AnalysisItem]:
+    merged_by_name: dict[str, AnalysisItem] = {}
+    selected_set = set(selected_entries)
+    for batch_items in batch_results:
+        normalized_items, _ = _normalize_analysis_items(batch_items, target_dir)
+        for item in normalized_items:
+            if item.entry_name not in selected_set:
+                continue
+            merged_by_name.setdefault(item.entry_name, item)
+
+    return [merged_by_name.get(entry_name) or _placeholder_analysis_item(entry_name) for entry_name in selected_entries]
+
+
 def run_analysis_cycle(target_dir: Path, event_handler=None, model: str | None = None, session_id: str | None = None):
     global WORKDIR_PATH
     """一个完整的分析循环：扫描 -> 工具调用/结构化提交 -> 校验 -> 重试。"""
@@ -853,7 +1015,7 @@ def run_analysis_cycle(target_dir: Path, event_handler=None, model: str | None =
     WORKDIR_PATH = target_dir
     model = model or get_analysis_model_name()
     entries = _list_current_entries(target_dir)
-    files_info = list_local_files(str(target_dir), max_depth=0)
+    files_info = _render_entry_catalog(_build_entry_context(target_dir, entries))
     _write_analysis_debug_event(
         target_dir,
         "analysis.started",
@@ -881,7 +1043,6 @@ def run_analysis_cycle(target_dir: Path, event_handler=None, model: str | None =
         )
         return result
 
-    detailed_files_info = list_local_files(str(target_dir), max_depth=1, char_limit=0)
     batches = _split_batches(entries)
     worker_count = min(MAX_SCAN_WORKERS, len(batches))
     emit(event_handler, "batch_split", {
@@ -903,7 +1064,7 @@ def run_analysis_cycle(target_dir: Path, event_handler=None, model: str | None =
                 batch_entries,
                 batch_index,
                 len(batches),
-                detailed_files_info,
+                files_info,
                 model,
                 session_id,
                 event_handler,
@@ -951,7 +1112,7 @@ def run_analysis_cycle(target_dir: Path, event_handler=None, model: str | None =
                     failed_entries,
                     retry_batch_index,
                     retry_batch_index + 1,
-                    detailed_files_info,
+                    files_info,
                     model,
                     session_id,
                     event_handler,
@@ -1000,6 +1161,84 @@ def run_analysis_cycle(target_dir: Path, event_handler=None, model: str | None =
     return rendered_result
 
 
+def run_analysis_cycle_for_entries(
+    target_dir: Path,
+    entry_names: list[str],
+    event_handler=None,
+    model: str | None = None,
+    session_id: str | None = None,
+):
+    target_dir = Path(target_dir).resolve()
+    model = model or get_analysis_model_name()
+    available_entries = set(_list_current_entries(target_dir))
+    selected_entries = [
+        entry
+        for entry in (
+            normalize_entry_name(str(entry_name or "").strip(), target_dir)
+            for entry_name in entry_names or []
+        )
+        if entry and entry in available_entries
+    ]
+    selected_entries = list(dict.fromkeys(selected_entries))
+    if not selected_entries:
+        return ""
+
+    files_info = _render_entry_catalog(_build_entry_context(target_dir, selected_entries))
+    _write_analysis_debug_event(
+        target_dir,
+        "analysis.started",
+        session_id=session_id,
+        payload={
+            "model": model,
+            "entry_count": len(selected_entries),
+            "mode": "selection" if len(selected_entries) <= BATCH_THRESHOLD else "selection_batch",
+            "selected_entries": selected_entries,
+        },
+    )
+
+    if len(selected_entries) <= BATCH_THRESHOLD:
+        result = _run_selected_entries_analysis(
+            target_dir,
+            selected_entries,
+            files_info,
+            model,
+            event_handler=event_handler,
+            session_id=session_id,
+        )
+        _write_analysis_debug_event(
+            target_dir,
+            "analysis.completed" if result else "analysis.empty_result",
+            session_id=session_id,
+            level="INFO" if result else "ERROR",
+            payload={
+                "model": model,
+                "entry_count": len(selected_entries),
+                "result_count": len((result or "").splitlines()),
+                "mode": "selection",
+            },
+        )
+        return result
+
+    batch_results: list[list[AnalysisItem]] = []
+    batches = _split_batches(selected_entries)
+    for batch_index, batch_entries in enumerate(batches):
+        batch_results.append(
+            _analyze_batch(
+                target_dir,
+                batch_entries,
+                batch_index,
+                len(batches),
+                files_info,
+                model,
+                session_id,
+                event_handler,
+            )
+        )
+
+    merged_items = _merge_selected_batch_results(batch_results, target_dir, selected_entries)
+    return render_analysis_items(merged_items)
+
+
 tools = [
     {
         "type": "function",
@@ -1007,20 +1246,20 @@ tools = [
             "name": BATCH_READ_TOOL_NAME,
             "description": (
                 "批量探查多个条目。"
-                "传入文件名则返回内容摘要（支持文本、PDF、Word、Excel、图片描述、zip 索引）；"
-                "传入文件夹名则返回其目录结构（最多两层）。"
+                "传入 entry_id 则返回对应条目的内容摘要（支持文本、PDF、Word、Excel、图片描述、zip 索引）；"
+                "如果条目是文件夹，则返回其目录结构（最多两层）。"
                 "仅在条目名称完全无法推断用途时才使用，且应一次性传入所有需要探查的条目。"
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "filenames": {
+                    "entry_ids": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "要探查的条目路径列表（文件或文件夹，相对于目标目录或绝对路径）",
+                        "description": "要探查的条目标识列表，必须来自当前分析范围中的 entry_id",
                     }
                 },
-                "required": ["filenames"],
+                "required": ["entry_ids"],
             },
         },
     },
@@ -1029,8 +1268,8 @@ tools = [
         "function": {
             "name": SUBMIT_ANALYSIS_TOOL_NAME,
             "description": (
-                "提交当前层条目的结构化分析结果。"
-                "items 必须与当前目录当前层真实条目一一对应，entry_name 必须与文件名完全一致。"
+                "提交当前分析范围条目的结构化分析结果。"
+                "items 必须与当前分析范围中的条目一一对应，并使用 entry_id 作为唯一标识。"
             ),
             "parameters": {
                 "type": "object",
@@ -1040,9 +1279,14 @@ tools = [
                         "items": {
                             "type": "object",
                             "properties": {
-                                "entry_name": {
+                                "entry_id": {
                                     "type": "string",
-                                    "description": "条目名称，必须与文件系统完全一致",
+                                    "description": "条目标识，必须来自当前分析范围中的 entry_id",
+                                },
+                                "entry_type": {
+                                    "type": "string",
+                                    "enum": ["file", "dir"],
+                                    "description": "条目类型",
                                 },
                                 "suggested_purpose": {
                                     "type": "string",
@@ -1054,7 +1298,8 @@ tools = [
                                 },
                             },
                             "required": [
-                                "entry_name",
+                                "entry_id",
+                                "entry_type",
                                 "suggested_purpose",
                                 "summary",
                             ],

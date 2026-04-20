@@ -2,6 +2,7 @@ import strategyCatalog from "./strategy-catalog.json";
 
 import type {
   LaunchStrategyConfig,
+  OrganizeMethod,
   SessionStrategySelection,
   SessionStrategySummary,
   StrategyCautionLevel,
@@ -63,6 +64,14 @@ export function taskTypeForOrganizeMode(organizeMode: SessionStrategySelection["
   return organizeMode === "incremental" ? "organize_into_existing" : "organize_full_directory";
 }
 
+export function organizeMethodForOrganizeMode(
+  organizeMode: SessionStrategySelection["organize_mode"] | null | undefined,
+): OrganizeMethod {
+  return organizeMode === "incremental"
+    ? "assign_into_existing_categories"
+    : "categorize_into_new_structure";
+}
+
 export function taskTypeLabel(taskType: TaskType): string {
   return taskType === "organize_into_existing" ? "归入已有目录" : "整理整个目录";
 }
@@ -71,6 +80,7 @@ export const DEFAULT_STRATEGY_SELECTION: SessionStrategySelection = {
   template_id: catalog.defaults.templateId,
   organize_mode: "initial",
   task_type: "organize_full_directory",
+  organize_method: "categorize_into_new_structure",
   destination_index_depth: 2,
   language: catalog.defaults.language,
   density: catalog.defaults.density,
@@ -153,6 +163,7 @@ export function getLaunchStrategyFromConfig(config?: LaunchStrategyConfig | null
     template_id: templateId,
     organize_mode: "initial",
     task_type: "organize_full_directory",
+    organize_method: "categorize_into_new_structure",
     destination_index_depth: 2,
     language: isValidLanguage(config?.LAUNCH_DEFAULT_LANGUAGE)
       ? config.LAUNCH_DEFAULT_LANGUAGE
@@ -177,6 +188,7 @@ export function shouldSkipLaunchStrategyPrompt(config?: LaunchStrategyConfig | n
 export function buildStrategySummary(strategy: SessionStrategySelection): SessionStrategySummary {
   const template = getTemplateMeta(strategy.template_id);
   const taskType = strategy.task_type || taskTypeForOrganizeMode(strategy.organize_mode);
+  const organizeMethod = strategy.organize_method || organizeMethodForOrganizeMode(strategy.organize_mode);
   const languageLabel = LANGUAGE_OPTIONS.find((item) => item.id === strategy.language)?.label || "中文目录";
   const densityLabel = DENSITY_OPTIONS.find((item) => item.id === strategy.density)?.label || "常规分类";
   const prefixStyleLabel = PREFIX_STYLE_OPTIONS.find((item) => item.id === strategy.prefix_style)?.label || "无前缀";
@@ -185,6 +197,7 @@ export function buildStrategySummary(strategy: SessionStrategySelection): Sessio
   return {
     ...strategy,
     task_type: taskType,
+    organize_method: organizeMethod,
     task_type_label: taskTypeLabel(taskType),
     template_label: template.label,
     template_description: template.description,

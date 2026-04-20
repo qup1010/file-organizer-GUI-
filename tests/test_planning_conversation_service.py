@@ -61,55 +61,6 @@ class PlanningConversationServiceTests(unittest.TestCase):
         self.assertEqual(result.session_snapshot["stage"], "planning")
         self.assertTrue(any(message["role"] == "user" for message in result.session_snapshot["messages"]))
 
-    def test_resolve_unresolved_choices_via_planning_conversation_marks_block_submitted(self):
-        created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
-        session = created.session
-        assert session is not None
-        session.stage = "planning"
-        session.scan_lines = "a.txt | 文档 | A"
-        session.pending_plan = {
-            "directories": ["Docs"],
-            "moves": [{"source": "a.txt", "target": "Review/a.txt"}],
-            "unresolved_items": ["a.txt"],
-            "summary": "pending",
-        }
-        session.messages = [
-            {
-                "role": "assistant",
-                "content": "",
-                "blocks": [
-                    {
-                        "type": "unresolved_choices",
-                        "request_id": "req-1",
-                        "status": "pending",
-                        "items": [
-                            {
-                                "item_id": "F001",
-                                "display_name": "a.txt",
-                                "suggested_folders": ["Docs", "Review"],
-                            }
-                        ],
-                    }
-                ],
-            }
-        ]
-        session.planner_items = [
-            {"planner_id": "F001", "source_relpath": "a.txt", "display_name": "a.txt", "entry_type": "file"}
-        ]
-        self.store.save(session)
-
-        result = self.service.planning_conversation.resolve_unresolved_choices(
-            session.session_id,
-            "req-1",
-            [{"item_id": "F001", "selected_folder": "Docs", "note": ""}],
-        )
-
-        self.assertEqual(result.session_snapshot["plan_snapshot"]["items"][0]["mapping_status"], "assigned")
-        reloaded = self.store.load(session.session_id)
-        assert reloaded is not None
-        self.assertIsInstance(reloaded.task_state, TaskState)
-        self.assertEqual(reloaded.task_state.mappings[0].target_slot_id, "D001")
-
     def test_update_item_target_via_planning_conversation_accepts_target_slot(self):
         created = self.service.create_session(
             str(self.target_dir),

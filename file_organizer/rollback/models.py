@@ -10,6 +10,10 @@ class RollbackAction:
     source: Path
     target: Path
     raw: str = ""
+    item_id: str = ""
+    source_ref_id: str = ""
+    target_slot_id: str = ""
+    display_name: str = ""
 
 
 @dataclass

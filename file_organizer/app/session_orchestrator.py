@@ -68,8 +68,13 @@ class SessionOrchestrator:
         )
 
     def maybe_run_auto_plan_after_scan(self, session) -> None:
+        is_incremental_with_targets = (
+            self.helpers._normalize_organize_mode(session.organize_mode) == "incremental"
+            and bool(session.selected_target_directories)
+        )
         if (
             self.helpers._normalize_organize_mode(session.organize_mode) != "initial"
+            and not is_incremental_with_targets
             or session.assistant_message
             or self.helpers._plan_snapshot_has_moves(session.plan_snapshot)
         ):
@@ -113,8 +118,71 @@ class SessionOrchestrator:
             )
             self.helpers._record_event("plan.updated", session)
 
-    def create_session(self, target_dir: str, resume_if_exists: bool, strategy: dict | None = None) -> CreateSessionResult:
-        path = Path(target_dir)
+    def create_session(
+        self,
+        sources: list[dict],
+        resume_if_exists: bool,
+        organize_method: str,
+        strategy: dict | None = None,
+        *,
+        output_dir: str = "",
+        target_profile_id: str = "",
+        target_directories: list[str] | None = None,
+        new_directory_root: str = "",
+        review_root: str = "",
+    ) -> CreateSessionResult:
+        normalized_strategy = normalize_strategy_selection(
+            {
+                **(strategy or {}),
+                "organize_method": organize_method,
+                "output_dir": output_dir,
+                "target_profile_id": target_profile_id,
+                "target_directories": list(target_directories or []),
+                "new_directory_root": new_directory_root,
+                "review_root": review_root,
+            }
+        )
+        normalized_sources = self.helpers._normalize_source_collection(sources)
+        if not normalized_sources:
+            raise ValueError("SOURCES_REQUIRED")
+        selected_target_directories = self.helpers._normalize_target_directories(target_directories)
+        default_workspace_root = self.helpers._derive_session_root_dir(
+            normalized_sources,
+            normalized_strategy["organize_method"],
+            output_dir=str(normalized_strategy.get("output_dir") or ""),
+            target_directories=selected_target_directories,
+        )
+        if normalized_strategy["organize_method"] == "categorize_into_new_structure":
+            if not str(normalized_strategy.get("output_dir") or "").strip():
+                raise ValueError("OUTPUT_DIR_REQUIRED")
+            normalized_strategy["new_directory_root"] = (
+                str(normalized_strategy.get("new_directory_root") or "").strip()
+                or str(normalized_strategy.get("output_dir") or "").strip()
+            )
+            normalized_strategy["review_root"] = (
+                str(normalized_strategy.get("review_root") or "").strip()
+                or self.helpers._default_review_root(str(normalized_strategy.get("new_directory_root") or "").strip())
+            )
+        else:
+            if target_profile_id and not selected_target_directories:
+                profile = self.helpers.target_profiles.get(target_profile_id)
+                if profile is None:
+                    raise ValueError("TARGET_PROFILE_NOT_FOUND")
+                selected_target_directories = self.helpers._normalize_target_directories(
+                    [item.path for item in profile.directories]
+                )
+            if not selected_target_directories:
+                raise ValueError("TARGET_DIRECTORIES_REQUIRED")
+            normalized_strategy["new_directory_root"] = (
+                str(normalized_strategy.get("new_directory_root") or "").strip()
+                or str(default_workspace_root)
+            )
+            normalized_strategy["review_root"] = (
+                str(normalized_strategy.get("review_root") or "").strip()
+                or self.helpers._default_review_root(str(normalized_strategy.get("new_directory_root") or "").strip())
+            )
+
+        path = default_workspace_root
         latest = self.helpers.store.find_latest_by_directory(path)
         if latest is not None and latest.stage not in self.helpers._TERMINAL_STAGES:
             if resume_if_exists:
@@ -127,7 +195,15 @@ class SessionOrchestrator:
             raise RuntimeError("SESSION_LOCKED")
 
         session = self.helpers.store.create(path)
-        normalized_strategy = normalize_strategy_selection(strategy)
+        session.source_collection = normalized_sources
+        session.placement = self.helpers._placement_payload(
+            new_directory_root=str(normalized_strategy.get("new_directory_root") or ""),
+            review_root=str(normalized_strategy.get("review_root") or ""),
+        )
+        session.organize_method = self.helpers._normalize_organize_method(normalized_strategy.get("organize_method"))
+        session.output_dir = str(normalized_strategy.get("output_dir") or "").strip()
+        session.target_profile_id = str(target_profile_id or normalized_strategy.get("target_profile_id") or "").strip()
+        session.selected_target_directories = list(selected_target_directories)
         session.strategy_template_id = normalized_strategy["template_id"]
         session.strategy_template_label = normalized_strategy["template_label"]
         session.organize_mode = self.helpers._normalize_organize_mode(normalized_strategy.get("organize_mode"))
@@ -141,6 +217,9 @@ class SessionOrchestrator:
         session.strategy_note = normalized_strategy["note"]
         session.user_constraints = [normalized_strategy["note"]] if normalized_strategy["note"] else []
         session.incremental_selection = self.helpers._incremental_selection_defaults(session)
+        if session.selected_target_directories:
+            session.incremental_selection["target_directories"] = list(session.selected_target_directories)
+            session.incremental_selection["status"] = "ready"
         self.helpers._sync_session_views(session)
         lock_result = self.helpers.store.acquire_directory_lock(path, session.session_id)
         if not lock_result.acquired:

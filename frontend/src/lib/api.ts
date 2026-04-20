@@ -3,6 +3,7 @@ import type {
   CleanupResponse,
   ConfirmTargetsRequest,
   ConfirmTargetsResponse,
+  CreateSessionRequest,
   CreateSessionResponse,
   ExecuteResponse,
   GetSessionResponse,
@@ -10,13 +11,11 @@ import type {
   JournalSummary,
   MessageResponse,
   PrecheckResponse,
-  ResolveUnresolvedChoicesRequest,
-  ResolveUnresolvedChoicesResponse,
   ResumeSessionResponse,
   RollbackResponse,
   ScanAcceptedResponse,
   SessionSnapshot,
-  SessionStrategySelection,
+  TargetProfile,
   UpdateItemRequest,
 } from "@/types/session";
 import type {
@@ -67,7 +66,7 @@ async function requestJson<T>(
 }
 
 export interface ApiClient {
-  createSession(target_dir: string, resume_if_exists?: boolean, strategy?: SessionStrategySelection): Promise<CreateSessionResponse>;
+  createSession(payload: CreateSessionRequest): Promise<CreateSessionResponse>;
   getSession(session_id: string): Promise<GetSessionResponse>;
   resumeSession(session_id: string): Promise<ResumeSessionResponse>;
   abandonSession(session_id: string): Promise<{ session_id: string; session_snapshot: SessionSnapshot }>;
@@ -75,7 +74,6 @@ export interface ApiClient {
   refreshSession(session_id: string): Promise<ScanAcceptedResponse>;
   confirmTargetDirectories(session_id: string, payload: ConfirmTargetsRequest): Promise<ConfirmTargetsResponse>;
   sendMessage(session_id: string, content: string): Promise<MessageResponse>;
-  resolveUnresolvedChoices(session_id: string, payload: ResolveUnresolvedChoicesRequest): Promise<ResolveUnresolvedChoicesResponse>;
   updateItem(session_id: string, payload: UpdateItemRequest): Promise<{ session_id: string; session_snapshot: SessionSnapshot }>;
   runPrecheck(session_id: string): Promise<PrecheckResponse>;
   returnToPlanning(session_id: string): Promise<{ session_id: string; session_snapshot: SessionSnapshot }>;
@@ -88,6 +86,10 @@ export interface ApiClient {
   getCommonDirs(): Promise<{ label: string; path: string }[]>;
   getHistory(): Promise<HistoryItem[]>;
   deleteHistoryEntry(entry_id: string): Promise<{ status: string; entry_id: string; entry_type: string }>;
+  getTargetProfiles(): Promise<TargetProfile[]>;
+  createTargetProfile(payload: { name: string; directories: Array<{ path: string; label?: string }> }): Promise<TargetProfile>;
+  updateTargetProfile(profile_id: string, payload: { name?: string; directories?: Array<{ path: string; label?: string }> }): Promise<TargetProfile>;
+  deleteTargetProfile(profile_id: string): Promise<{ status: string; profile_id: string }>;
   getSettings(): Promise<SettingsSnapshot>;
   getSettingsRuntime<T = Record<string, unknown>>(family: string): Promise<T>;
   updateSettings(payload: SettingsUpdatePayload): Promise<SettingsSnapshot>;
@@ -99,14 +101,14 @@ export interface ApiClient {
 
 export function createApiClient(baseUrl: string, apiToken?: string): ApiClient {
   return {
-    async createSession(target_dir, resume_if_exists = true, strategy) {
+    async createSession(payload) {
       return requestJson<CreateSessionResponse>(
         baseUrl,
         "/api/sessions",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ target_dir, resume_if_exists, strategy }),
+          body: JSON.stringify(payload),
         },
         apiToken,
       );
@@ -166,18 +168,6 @@ export function createApiClient(baseUrl: string, apiToken?: string): ApiClient {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ content }),
-        },
-        apiToken,
-      );
-    },
-    async resolveUnresolvedChoices(session_id, payload) {
-      return requestJson<ResolveUnresolvedChoicesResponse>(
-        baseUrl,
-        `/api/sessions/${session_id}/unresolved-resolutions`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
         },
         apiToken,
       );
@@ -275,6 +265,44 @@ export function createApiClient(baseUrl: string, apiToken?: string): ApiClient {
       return requestJson<{ status: string; entry_id: string; entry_type: string }>(
         baseUrl,
         `/api/history/${entry_id}`,
+        { method: "DELETE" },
+        apiToken,
+      );
+    },
+    async getTargetProfiles() {
+      const response = await requestJson<{ items: TargetProfile[] }>(baseUrl, "/api/target-profiles", {}, apiToken);
+      return response.items || [];
+    },
+    async createTargetProfile(payload) {
+      const response = await requestJson<{ item: TargetProfile }>(
+        baseUrl,
+        "/api/target-profiles",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+        apiToken,
+      );
+      return response.item;
+    },
+    async updateTargetProfile(profile_id, payload) {
+      const response = await requestJson<{ item: TargetProfile }>(
+        baseUrl,
+        `/api/target-profiles/${profile_id}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+        apiToken,
+      );
+      return response.item;
+    },
+    async deleteTargetProfile(profile_id) {
+      return requestJson<{ status: string; profile_id: string }>(
+        baseUrl,
+        `/api/target-profiles/${profile_id}`,
         { method: "DELETE" },
         apiToken,
       );

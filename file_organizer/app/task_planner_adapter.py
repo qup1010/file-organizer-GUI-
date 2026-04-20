@@ -22,6 +22,14 @@ class TaskPlannerAdapter:
     def _normalize_relpath(value: str | None) -> str:
         return str(value or "").replace("\\", "/").strip().strip("/")
 
+    def _real_path_for_target_dir(self, target_dir: str) -> Path:
+        raw = str(target_dir or "").strip()
+        candidate = Path(raw)
+        if candidate.is_absolute():
+            return candidate.resolve()
+        normalized = self._normalize_relpath(raw)
+        return (self.base_dir / normalized).resolve()
+
     @staticmethod
     def _target_dir_for_move(target_relpath: str) -> str:
         normalized = str(target_relpath or "").replace("\\", "/").strip("/")
@@ -48,7 +56,7 @@ class TaskPlannerAdapter:
             try:
                 return self._normalize_relpath(Path(target.real_path).resolve().relative_to(self.base_dir).as_posix())
             except ValueError:
-                return ""
+                return self._normalize_relpath(Path(target.real_path).resolve().as_posix())
         return ""
 
     def _ensure_target_slot(self, task: OrganizeTask, target_dir: str) -> str:
@@ -57,21 +65,22 @@ class TaskPlannerAdapter:
             return ""
         if normalized_target_dir == "Review":
             return "Review"
+        desired_real_path = self._real_path_for_target_dir(target_dir)
         for target in task.targets:
-            try:
-                existing_relpath = self._normalize_relpath(Path(target.real_path).resolve().relative_to(self.base_dir).as_posix())
-            except ValueError:
-                existing_relpath = ""
-            if existing_relpath == normalized_target_dir:
+            if Path(target.real_path).resolve() == desired_real_path:
                 return str(target.slot_id or "")
         next_number = max((self._target_slot_number(target.slot_id) for target in task.targets), default=0) + 1
         slot_id = f"D{next_number:03d}"
+        try:
+            relative_target_dir = self._normalize_relpath(desired_real_path.relative_to(self.base_dir).as_posix())
+        except ValueError:
+            relative_target_dir = normalized_target_dir
         task.targets.append(
             TargetSlot(
                 slot_id=slot_id,
-                display_name=Path(normalized_target_dir).name or normalized_target_dir,
-                real_path=str((self.base_dir / normalized_target_dir).resolve()),
-                depth=max(0, len([part for part in normalized_target_dir.split("/") if part]) - 1),
+                display_name=Path(relative_target_dir or normalized_target_dir).name or normalized_target_dir,
+                real_path=str(desired_real_path),
+                depth=max(0, len([part for part in relative_target_dir.split("/") if part]) - 1),
                 is_new=True,
             )
         )
@@ -109,8 +118,10 @@ class TaskPlannerAdapter:
 
     def apply_pending_plan(self, task: OrganizeTask, pending_plan: PendingPlan) -> OrganizeTask:
         updated_task = copy.deepcopy(task)
-        sources_by_relpath = {source.relpath: source for source in updated_task.sources}
+        sources_by_id = {source.ref_id: source for source in updated_task.sources}
+        source_id_by_relpath = {source.relpath: source.ref_id for source in updated_task.sources}
         existing_by_source_id = {mapping.source_ref_id: mapping for mapping in updated_task.mappings}
+        ordered_source_ids = [source.ref_id for source in updated_task.sources]
         mappings: list[MappingEntry] = []
         unresolved_set = {
             self._normalize_relpath(item)
@@ -119,12 +130,13 @@ class TaskPlannerAdapter:
         }
         for move in pending_plan.moves or []:
             source_relpath = self._normalize_relpath(move.source)
-            source = sources_by_relpath.get(source_relpath)
+            source_ref_id = source_id_by_relpath.get(source_relpath, "")
+            source = sources_by_id.get(source_ref_id)
             if source is None:
                 continue
             target_dir = self._target_dir_for_move(move.target)
             if source_relpath in unresolved_set:
-                target_slot_id = self._ensure_target_slot(updated_task, target_dir) if target_dir and target_dir != "Review" else ("Review" if target_dir == "Review" else "")
+                target_slot_id = self._ensure_target_slot(updated_task, target_dir) if target_dir and target_dir != "Review" else "Review"
                 status = "unresolved"
             elif target_dir == "Review":
                 target_slot_id = "Review"
@@ -146,6 +158,24 @@ class TaskPlannerAdapter:
                     user_overridden=bool(existing.user_overridden) if existing is not None else False,
                 )
             )
+        mapped_source_ids = {mapping.source_ref_id for mapping in mappings}
+        for source_relpath in unresolved_set:
+            source_ref_id = source_id_by_relpath.get(source_relpath, "")
+            source = sources_by_id.get(source_ref_id)
+            if source is None or source_ref_id in mapped_source_ids:
+                continue
+            existing = existing_by_source_id.get(source_ref_id)
+            mappings.append(
+                MappingEntry(
+                    source_ref_id=source_ref_id,
+                    target_slot_id="Review",
+                    status="unresolved",
+                    reason=str(existing.reason if existing is not None else source.suggested_purpose),
+                    confidence=existing.confidence if existing is not None else source.confidence,
+                    user_overridden=bool(existing.user_overridden) if existing is not None else False,
+                )
+            )
+        mappings.sort(key=lambda item: ordered_source_ids.index(item.source_ref_id) if item.source_ref_id in ordered_source_ids else len(ordered_source_ids))
         updated_task.mappings = mappings
         return updated_task
 

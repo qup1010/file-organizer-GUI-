@@ -24,6 +24,14 @@ import { PreviewFilter, PreviewFocusRequest, PreviewPanel } from "./workspace/pr
 const DEFAULT_LEFT_WIDTH = 50;
 const SCAN_PREVIEW_GRACE_MS = 1200;
 
+function summarizeItemNames(names: string[], limit = 3): string {
+  const visible = names.filter(Boolean).slice(0, limit);
+  if (!visible.length) {
+    return "";
+  }
+  return visible.join("、") + (names.length > limit ? ` 等 ${names.length} 项` : "");
+}
+
 export default function WorkspaceClient() {
   const APP_CONTEXT_EVENT = "file-organizer-context-change";
   const WORKSPACE_CONTEXT_KEY = "workspace_header_context";
@@ -33,6 +41,7 @@ export default function WorkspaceClient() {
   const sessionIdParam = searchParams.get("session_id");
   const dirParam = searchParams.get("dir");
   const isReadOnly = searchParams.get("readonly") === "1";
+  const autoStartScan = searchParams.get("auto_scan") === "1";
 
   const {
     snapshot,
@@ -51,7 +60,6 @@ export default function WorkspaceClient() {
     isComposerLocked,
     retryStream,
     sendMessage,
-    resolveUnresolvedChoices,
     scan,
     refreshPlan,
     confirmTargetDirectories,
@@ -101,6 +109,11 @@ export default function WorkspaceClient() {
   const [isResizingState, setIsResizingState] = useState(false);
   const isResizing = React.useRef(false);
   const scanPreviewTimerRef = React.useRef<number | null>(null);
+  const autoScanRequestedRef = React.useRef(false);
+
+  React.useEffect(() => {
+    autoScanRequestedRef.current = false;
+  }, [sessionIdParam]);
 
   React.useEffect(() => {
     try {
@@ -115,6 +128,15 @@ export default function WorkspaceClient() {
       setLayoutReady(true);
     }
   }, []);
+
+  React.useEffect(() => {
+    if (chatError?.includes("SESSION_NOT_FOUND")) {
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(ACTIVE_WORKSPACE_ROUTE_KEY);
+      }
+      router.push("/");
+    }
+  }, [chatError, router]);
 
   const saveWidth = React.useCallback((width: number) => {
     localStorage.setItem("workspace_sidebar_width", width.toString());
@@ -139,6 +161,7 @@ export default function WorkspaceClient() {
   const plan = useMemo(
     () => ({
       summary: snapshot?.plan_snapshot?.summary || "",
+      placement: snapshot?.plan_snapshot?.placement || { new_directory_root: "", review_root: "" },
       items: snapshot?.plan_snapshot?.items || [],
       groups: snapshot?.plan_snapshot?.groups || [],
       target_slots: snapshot?.plan_snapshot?.target_slots || [],
@@ -171,6 +194,15 @@ export default function WorkspaceClient() {
     () => targetPath.replace(/[\\/]$/, "").split(/[\\/]/).pop() || "当前任务",
     [targetPath],
   );
+  const reviewMoveCount = useMemo(
+    () => precheck?.move_preview.filter((move) => move.target.split(/[\\/]/).some((part) => part.toLowerCase() === "review")).length ?? 0,
+    [precheck],
+  );
+  const precheckItemNames = useMemo(() => {
+    const itemNameById = new Map((snapshot?.plan_snapshot?.items || []).map((item) => [item.item_id, item.display_name] as const));
+    return (precheck?.move_preview || []).map((move) => itemNameById.get(move.item_id) || move.item_id);
+  }, [precheck?.move_preview, snapshot?.plan_snapshot?.items]);
+  const precheckItemsSummary = useMemo(() => summarizeItemNames(precheckItemNames), [precheckItemNames]);
   const nextStepHint = useMemo(() => {
     if (isReadOnly && !stageView.isCompleted) {
       return "当前为只读查看模式。如需继续整理，请返回首页重新启动或恢复任务。";
@@ -193,7 +225,7 @@ export default function WorkspaceClient() {
       return canRunPrecheck ? "方案已就绪，建议开始运行预检。" : "方案同步中，完成后即可预检。";
     }
     if (stageView.isReadyToExecute) {
-      return "预检完成，请在右侧确认影响范围并执行。";
+      return `预检完成，待执行 ${precheck?.move_preview.length ?? 0} 项${reviewMoveCount > 0 ? `，其中 ${reviewMoveCount} 项进入 Review` : ""}。`;
     }
     if (stageView.isExecuting) {
       return "正在执行文件变更，请稍后...";
@@ -205,11 +237,7 @@ export default function WorkspaceClient() {
       return "建议先重新扫描，确认目录状态后再继续整理。";
     }
     return "当前任务正在继续推进。";
-  }, [canRunPrecheck, isReadOnly, stageView]);
-  const reviewMoveCount = useMemo(
-    () => precheck?.move_preview.filter((move) => move.target.split(/[\\/]/).some((part) => part.toLowerCase() === "review")).length ?? 0,
-    [precheck],
-  );
+  }, [canRunPrecheck, isReadOnly, precheck?.move_preview.length, reviewMoveCount, stageView]);
   const isRootTarget = useMemo(() => /^[a-zA-Z]:[\\/]?$/.test((snapshot?.target_dir || "").trim()), [snapshot?.target_dir]);
   const beginScanPreviewHold = React.useCallback(() => {
     if (typeof window === "undefined") {
@@ -326,6 +354,20 @@ export default function WorkspaceClient() {
     void scan();
   }, [beginScanPreviewHold, scan]);
 
+  React.useEffect(() => {
+    if (!autoStartScan || isReadOnly || !sessionIdParam || !snapshot || loading) {
+      return;
+    }
+    if (autoScanRequestedRef.current) {
+      return;
+    }
+    if (!stageView.isDraftLike) {
+      return;
+    }
+    autoScanRequestedRef.current = true;
+    handleStartScan();
+  }, [autoStartScan, handleStartScan, isReadOnly, loading, sessionIdParam, snapshot, stageView.isDraftLike]);
+
   const statusNotice = useMemo<ConversationNotice | null>(() => {
     if (streamStatus === "offline") {
       return {
@@ -359,7 +401,7 @@ export default function WorkspaceClient() {
       return {
         tone: "info",
         title: "预检已完成",
-        description: "系统已经检查过真实文件系统。请结合右侧影响范围，决定是否执行或返回修改。",
+        description: `系统已经检查过真实文件系统。本次待执行 ${precheck?.move_preview.length ?? 0} 项${reviewMoveCount > 0 ? `，其中 ${reviewMoveCount} 项进入 Review` : ""}${precheckItemsSummary ? `。涉及条目：${precheckItemsSummary}` : ""}。`,
         primaryAction: isReadOnly ? undefined : {
           label: "返回继续修改",
           onClick: () => {
@@ -412,7 +454,7 @@ export default function WorkspaceClient() {
     }
 
     return null;
-  }, [canRunPrecheck, isReadOnly, refreshPlan, returnToPlanning, retryStream, snapshot?.last_error, stageView, streamStatus]);
+  }, [canRunPrecheck, isReadOnly, precheck?.move_preview.length, precheckItemsSummary, refreshPlan, returnToPlanning, retryStream, reviewMoveCount, snapshot?.last_error, stageView, streamStatus]);
 
   React.useEffect(() => {
     if (stageView.isScanning) {
@@ -571,6 +613,8 @@ export default function WorkspaceClient() {
               return (
                 <PrecheckView
                   summary={snapshot?.precheck_summary || null}
+                  planItems={snapshot?.plan_snapshot?.items || []}
+                  targetSlots={snapshot?.plan_snapshot?.target_slots || []}
                   isBusy={isBusy}
                   readOnly={isReadOnly}
                   onRequestExecute={() => {
@@ -728,9 +772,6 @@ export default function WorkspaceClient() {
       setMessageInput={setMessageInput}
       onSendMessage={handleSendMessage}
       onStartScan={handleStartScan}
-      onResolveUnresolved={(payload) => {
-        if (!isReadOnly) void resolveUnresolvedChoices(payload);
-      }}
       unresolvedCount={plan.unresolved_items.length}
       notice={statusNotice}
       scanner={scanner}
@@ -869,7 +910,7 @@ export default function WorkspaceClient() {
       <ConfirmDialog
         open={executeConfirmOpen}
         title="确认执行这次整理？"
-        description="执行后会真实移动本地文件。请在最后确认一次影响范围，避免误触发落盘。"
+        description={`执行后会真实移动本地文件。本次将处理 ${precheck?.move_preview.length ?? 0} 项${reviewMoveCount > 0 ? `，其中 ${reviewMoveCount} 项进入 Review` : ""}${precheckItemsSummary ? `。涉及条目：${precheckItemsSummary}` : ""}。`}
         confirmLabel="开始执行"
         cancelLabel="再看看"
         tone="primary"

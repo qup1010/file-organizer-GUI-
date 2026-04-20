@@ -9,8 +9,11 @@ from file_organizer.organize.strategy_templates import (
     DEFAULT_CAUTION_LEVEL,
     DEFAULT_DENSITY,
     DEFAULT_LANGUAGE,
+    DEFAULT_ORGANIZE_METHOD,
     DEFAULT_PREFIX_STYLE,
     DEFAULT_TEMPLATE_ID,
+    _normalize_organize_method,
+    organize_method_for_organize_mode,
     task_type_for_organize_mode,
 )
 
@@ -115,6 +118,90 @@ class TaskState:
             ],
             strategy=dict(data.get("strategy", {})),
             phase=str(data.get("phase", "setup") or "setup"),
+        )
+
+
+@dataclass
+class SourceCollectionItem:
+    source_type: str
+    path: str
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict | "SourceCollectionItem" | None) -> "SourceCollectionItem" | None:
+        if data is None:
+            return None
+        if isinstance(data, cls):
+            return data
+        if not isinstance(data, dict):
+            return None
+        source_type = str(data.get("source_type") or "").strip().lower()
+        path = str(data.get("path") or "").strip()
+        if source_type not in {"file", "directory"} or not path:
+            return None
+        return cls(source_type=source_type, path=path)
+
+
+@dataclass
+class TargetProfileDirectory:
+    path: str
+    label: str = ""
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict | "TargetProfileDirectory" | None) -> "TargetProfileDirectory" | None:
+        if data is None:
+            return None
+        if isinstance(data, cls):
+            return data
+        if not isinstance(data, dict):
+            return None
+        path = str(data.get("path") or "").strip()
+        if not path:
+            return None
+        return cls(path=path, label=str(data.get("label") or "").strip())
+
+
+@dataclass
+class TargetProfile:
+    profile_id: str
+    name: str
+    directories: list[TargetProfileDirectory] = field(default_factory=list)
+    created_at: str = field(default_factory=utc_now_iso)
+    updated_at: str = field(default_factory=utc_now_iso)
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict | "TargetProfile" | None) -> "TargetProfile" | None:
+        if data is None:
+            return None
+        if isinstance(data, cls):
+            return data
+        if not isinstance(data, dict):
+            return None
+        profile_id = str(data.get("profile_id") or "").strip()
+        name = str(data.get("name") or "").strip()
+        if not profile_id or not name:
+            return None
+        return cls(
+            profile_id=profile_id,
+            name=name,
+            directories=[
+                item
+                for item in (
+                    TargetProfileDirectory.from_dict(entry)
+                    for entry in data.get("directories", [])
+                )
+                if item is not None
+            ],
+            created_at=str(data.get("created_at") or utc_now_iso()),
+            updated_at=str(data.get("updated_at") or utc_now_iso()),
         )
 
 
@@ -250,6 +337,24 @@ class PlanTargetSlotPayload:
     relpath: str
     depth: int
     is_new: bool
+    real_path: str = ""
+
+
+@dataclass
+class PlacementPayload:
+    new_directory_root: str = ""
+    review_root: str = ""
+
+    @classmethod
+    def from_dict(cls, data: dict | "PlacementPayload" | None) -> "PlacementPayload":
+        if isinstance(data, cls):
+            return data
+        if not isinstance(data, dict):
+            return cls()
+        return cls(
+            new_directory_root=str(data.get("new_directory_root") or "").strip(),
+            review_root=str(data.get("review_root") or "").strip(),
+        )
 
 
 @dataclass
@@ -289,6 +394,7 @@ class PlanGroupPayload:
 class PlanSnapshotPayload:
     summary: str
     stats: dict
+    placement: PlacementPayload = field(default_factory=PlacementPayload)
     groups: list[PlanGroupPayload] = field(default_factory=list)
     items: list[PlanSnapshotItem] = field(default_factory=list)
     unresolved_items: list[str] = field(default_factory=list)
@@ -359,6 +465,7 @@ class PlanSnapshotPayload:
         return cls(
             summary=str(data.get("summary", "") or ""),
             stats=dict(data.get("stats", {})),
+            placement=PlacementPayload.from_dict(data.get("placement")),
             groups=[
                 PlanGroupPayload(
                     directory=str(item.get("directory", "") or ""),
@@ -384,6 +491,12 @@ class PlanSnapshotPayload:
 class OrganizerSession:
     session_id: str
     target_dir: str
+    placement: PlacementPayload = field(default_factory=PlacementPayload)
+    source_collection: list[SourceCollectionItem] = field(default_factory=list)
+    organize_method: str = DEFAULT_ORGANIZE_METHOD
+    output_dir: str = ""
+    target_profile_id: str = ""
+    selected_target_directories: list[str] = field(default_factory=list)
     planning_schema_version: int = 5
     stage: str = "draft"
     strategy_template_id: str = DEFAULT_TEMPLATE_ID
@@ -448,7 +561,15 @@ class OrganizerSession:
             TargetSlot(
                 slot_id=str(item.slot_id or ""),
                 display_name=str(item.display_name or ""),
-                real_path=str((Path(self.target_dir).resolve() / str(item.relpath or "")).resolve()) if str(item.relpath or "") else str(Path(self.target_dir).resolve()),
+                real_path=(
+                    str(Path(item.real_path).resolve())
+                    if str(item.real_path or "").strip()
+                    else (
+                        str((Path(self.target_dir).resolve() / str(item.relpath or "")).resolve())
+                        if str(item.relpath or "").strip()
+                        else str(Path(self.target_dir).resolve())
+                    )
+                ),
                 depth=int(item.depth or 0),
                 is_new=bool(item.is_new),
             )
@@ -474,12 +595,18 @@ class OrganizerSession:
             strategy={
                 "template_id": self.strategy_template_id,
                 "task_type": task_type_for_organize_mode(self.organize_mode),
+                "organize_method": self.organize_method or organize_method_for_organize_mode(self.organize_mode),
                 "organize_mode": self.organize_mode,
                 "destination_index_depth": self.destination_index_depth,
                 "language": self.language,
                 "density": self.density,
                 "prefix_style": self.prefix_style,
                 "caution_level": self.caution_level,
+                "output_dir": self.output_dir,
+                "target_profile_id": self.target_profile_id,
+                "target_directories": list(self.selected_target_directories or []),
+                "new_directory_root": str(self.placement.new_directory_root or "").strip(),
+                "review_root": str(self.placement.review_root or "").strip(),
                 "note": self.strategy_note,
             },
             phase=_task_phase_for_stage(self.stage),
@@ -513,14 +640,37 @@ class OrganizerSession:
         conversation_state = ConversationState.from_dict(data.get("conversation_state"))
         execution_state = ExecutionState.from_dict(data.get("execution_state"))
         task_state = TaskState.from_dict(data.get("task_state"))
+        organize_mode = str(data.get("organize_mode", "initial") or "initial")
+        organize_method = str(data.get("organize_method") or "").strip()
+        if not organize_method:
+            organize_method = organize_method_for_organize_mode(organize_mode)
+        else:
+            organize_method = _normalize_organize_method(organize_method)
         return cls(
             planning_schema_version=int(data.get("planning_schema_version", 1) or 1),
             session_id=data["session_id"],
             target_dir=data["target_dir"],
+            placement=PlacementPayload.from_dict(data.get("placement")),
+            source_collection=[
+                item
+                for item in (
+                    SourceCollectionItem.from_dict(entry)
+                    for entry in data.get("source_collection", [])
+                )
+                if item is not None
+            ],
+            organize_method=organize_method,
+            output_dir=str(data.get("output_dir") or ""),
+            target_profile_id=str(data.get("target_profile_id") or ""),
+            selected_target_directories=[
+                str(item).strip()
+                for item in data.get("selected_target_directories", [])
+                if str(item).strip()
+            ],
             stage=data.get("stage", "draft"),
             strategy_template_id=data.get("strategy_template_id", DEFAULT_TEMPLATE_ID),
             strategy_template_label=data.get("strategy_template_label", "通用下载"),
-            organize_mode=str(data.get("organize_mode", "initial") or "initial"),
+            organize_mode=organize_mode,
             destination_index_depth=int(data.get("destination_index_depth", 2) or 2),
             language=data.get("language", DEFAULT_LANGUAGE),
             density=data.get("density", DEFAULT_DENSITY),

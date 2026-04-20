@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 from file_organizer.app.models import SessionMutationResult
 from file_organizer.execution import service as execution_service
+from file_organizer.execution.models import MappedExecutionAction, MappedExecutionPlan
 from file_organizer.rollback import service as rollback_service
 
 if TYPE_CHECKING:
@@ -14,6 +15,92 @@ class ExecutionAppService:
     def __init__(self, helpers: "OrganizerSessionService"):
         self.helpers = helpers
 
+    @staticmethod
+    def _display_path(path: Path, base_dir: Path) -> str:
+        try:
+            return path.relative_to(base_dir).as_posix()
+        except ValueError:
+            return path.as_posix()
+
+    def _build_mapped_execution_plan(self, session, final_plan, task, registry) -> MappedExecutionPlan:
+        base_dir = Path(session.target_dir).resolve()
+        placement = self.helpers._placement_payload(session.placement)
+        source_by_id = {item.ref_id: item for item in task.sources}
+        target_by_id = {item.slot_id: item for item in task.targets}
+        planner_by_source = self.helpers._planner_items_by_source(session)
+        mapping_by_source_id = {mapping.source_ref_id: mapping for mapping in task.mappings}
+
+        mkdir_actions: list[MappedExecutionAction] = []
+        known_mkdir_targets: set[str] = set()
+
+        move_actions: list[MappedExecutionAction] = []
+        for mapping in task.mappings:
+            if mapping.target_slot_id in {"", None}:
+                continue
+            source = source_by_id.get(mapping.source_ref_id)
+            if source is None:
+                continue
+            filename = Path(source.relpath).name
+            display_name = str(source.display_name or filename)
+            if mapping.target_slot_id == "Review":
+                review_root = Path(placement.review_root or self.helpers._default_review_root(placement.new_directory_root or session.target_dir)).resolve()
+                if str(review_root) not in known_mkdir_targets and not review_root.exists():
+                    known_mkdir_targets.add(str(review_root))
+                    raw_target_dir = self._display_path(review_root, base_dir)
+                    mkdir_actions.append(
+                        MappedExecutionAction(
+                            type="MKDIR",
+                            target_path=review_root,
+                            raw=f'MKDIR "{raw_target_dir}"',
+                            target_slot_id="Review",
+                            display_name=review_root.name or "Review",
+                            status="planned",
+                        )
+                    )
+                target_path = (review_root / filename).resolve()
+            else:
+                target_slot = target_by_id.get(mapping.target_slot_id)
+                if target_slot is None:
+                    continue
+                target_path = registry.resolve_target(mapping.target_slot_id, filename)
+                target_dir_path = target_path.parent.resolve(strict=False)
+                if str(target_dir_path) not in known_mkdir_targets and not target_dir_path.exists():
+                    known_mkdir_targets.add(str(target_dir_path))
+                    raw_target_dir = self._display_path(target_dir_path, base_dir)
+                    mkdir_actions.append(
+                        MappedExecutionAction(
+                            type="MKDIR",
+                            target_path=target_dir_path,
+                            raw=f'MKDIR "{raw_target_dir}"',
+                            target_slot_id=target_slot.slot_id,
+                            display_name=target_slot.display_name,
+                            status="planned",
+                        )
+                    )
+            raw_target = self._display_path(target_path, base_dir)
+            move_actions.append(
+                MappedExecutionAction(
+                    type="MOVE",
+                    source_path=registry.resolve_source(mapping.source_ref_id),
+                    target_path=target_path,
+                    raw=f'MOVE "{source.relpath}" "{raw_target}"',
+                    item_id=str(planner_by_source.get(source.relpath, {}).get("planner_id") or source.ref_id),
+                    source_ref_id=mapping.source_ref_id,
+                    target_slot_id=str(mapping.target_slot_id or ""),
+                    display_name=display_name,
+                    status=mapping.status,
+                )
+            )
+
+        mkdir_actions.sort(key=lambda action: action.target_path.as_posix())
+        move_actions.sort(key=lambda action: action.item_id)
+        return MappedExecutionPlan(
+            base_dir=base_dir,
+            mkdir_actions=mkdir_actions,
+            move_actions=move_actions,
+            all_actions=[*mkdir_actions, *move_actions],
+        )
+
     def run_precheck(self, session_id: str) -> SessionMutationResult:
         session = self.helpers._load_or_raise(session_id)
         self.helpers._ensure_mutable_stage(session)
@@ -21,11 +108,14 @@ class ExecutionAppService:
         self.helpers._write_session_debug_event("precheck.started", session)
         final_plan = self.helpers._final_plan_from_session(session)
         task, registry = self.helpers._build_organize_task(session, final_plan)
+        planner_by_source = self.helpers._planner_items_by_source(session)
+        source_by_id = {item.ref_id: item for item in task.sources}
+        source_id_by_relpath = {item.relpath: item.ref_id for item in task.sources}
+        target_by_id = {item.slot_id: item for item in task.targets}
+        mapped_plan = self._build_mapped_execution_plan(session, final_plan, task, registry)
         if self.helpers._normalize_organize_mode(session.organize_mode) == "incremental":
             selection = self.helpers._incremental_selection_snapshot(session)
             incremental_target_errors = []
-            source_by_id = {item.ref_id: item for item in task.sources}
-            target_by_id = {item.slot_id: item for item in task.targets}
             for mapping in task.mappings:
                 if mapping.target_slot_id in {"", "Review"}:
                     continue
@@ -39,31 +129,33 @@ class ExecutionAppService:
                 except ValueError:
                     target_dir = target_slot.real_path
                 if not self.helpers._validate_incremental_target_dir(target_dir, selection):
+                    display_name = str(source_ref.display_name or source_ref.ref_id)
                     incremental_target_errors.append(
-                        f"“归入已有目录”任务的目标超出允许范围：{source_ref.relpath} -> {target_dir or '(root)'}"
+                        f"“归入已有目录”任务的目标超出允许范围：{display_name} -> {target_dir or '(root)'}"
                     )
         else:
             incremental_target_errors = []
-        plan = execution_service.build_execution_plan(final_plan, Path(session.target_dir))
+        plan = execution_service.build_execution_plan_from_mapped(mapped_plan)
         precheck = execution_service.validate_execution_preconditions(plan)
         if incremental_target_errors:
             precheck.can_execute = False
             precheck.blocking_errors = list(precheck.blocking_errors) + incremental_target_errors
-        planner_by_source = self.helpers._planner_items_by_source(session)
-        move_preview = [
-            {
-                "item_id": str(planner_by_source.get(action.source.relative_to(plan.base_dir).as_posix(), {}).get("planner_id") or action.source.relative_to(plan.base_dir).as_posix()),
-                "source": action.source.relative_to(plan.base_dir).as_posix(),
-                "target": action.target.relative_to(plan.base_dir).as_posix(),
-            }
-            for action in plan.move_actions
-            if action.source is not None
-        ]
+        move_preview = []
+        for action in mapped_plan.move_actions:
+            source_relpath = self._display_path(action.source_path, plan.base_dir) if action.source_path is not None else ""
+            target_text = self._display_path(action.target_path, plan.base_dir)
+            move_preview.append(
+                {
+                    "item_id": action.item_id,
+                    "source": source_relpath,
+                    "target": target_text,
+                }
+            )
         session.precheck_summary = {
             "can_execute": precheck.can_execute,
             "blocking_errors": list(precheck.blocking_errors),
             "warnings": list(precheck.warnings),
-            "mkdir_preview": [action.target.relative_to(plan.base_dir).as_posix() for action in plan.mkdir_actions],
+            "mkdir_preview": [self._display_path(action.target_path, plan.base_dir) for action in mapped_plan.mkdir_actions],
             "move_preview": move_preview,
             "issues": self.helpers._precheck_issues(
                 list(precheck.blocking_errors),
@@ -119,7 +211,9 @@ class ExecutionAppService:
         self.helpers._record_event("execution.started", session)
 
         final_plan = self.helpers._final_plan_from_session(session)
-        plan = execution_service.build_execution_plan(final_plan, Path(session.target_dir))
+        task, registry = self.helpers._build_organize_task(session, final_plan)
+        mapped_plan = self._build_mapped_execution_plan(session, final_plan, task, registry)
+        plan = execution_service.build_execution_plan_from_mapped(mapped_plan)
         report = execution_service.execute_plan(plan)
         journal_id = self.helpers._latest_execution_id(Path(session.target_dir))
         if not journal_id:
@@ -269,7 +363,9 @@ class ExecutionAppService:
         if session.stage != "completed":
             raise RuntimeError("SESSION_STAGE_CONFLICT")
         final_plan = self.helpers._final_plan_from_session(session)
-        plan = execution_service.build_execution_plan(final_plan, Path(session.target_dir))
+        task, registry = self.helpers._build_organize_task(session, final_plan)
+        mapped_plan = self._build_mapped_execution_plan(session, final_plan, task, registry)
+        plan = execution_service.build_execution_plan_from_mapped(mapped_plan)
         empty_dirs = execution_service.get_empty_source_dirs(plan)
         if not empty_dirs:
             empty_dirs = [

@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 
 import { getSessionStageView } from "@/lib/session-view-model";
 import { cn } from "@/lib/utils";
-import type { IncrementalSelectionSnapshot, OrganizeMode, PlanItem, PlanSnapshot, PlanTargetSlot, SessionStage, SourceTreeEntry, TargetDirectoryNode } from "@/types/session";
+import type { IncrementalSelectionSnapshot, OrganizeMode, PlacementConfig, PlanItem, PlanSnapshot, PlanTargetSlot, SessionStage, SourceTreeEntry, TargetDirectoryNode } from "@/types/session";
 
 export type PreviewFilter = "all" | "changed" | "unresolved" | "review" | "invalidated";
 
@@ -60,6 +60,11 @@ function normalizePath(path: string | null | undefined): string {
   return String(path || "").replace(/\\/g, "/").replace(/^\/+|\/+$/g, "").trim();
 }
 
+function isAbsolutePath(path: string | null | undefined): boolean {
+  const value = String(path || "").trim();
+  return /^[a-zA-Z]:[\\/]/.test(value) || value.startsWith("/");
+}
+
 function normalizeEntryKind(entryType: string | null | undefined): "directory" | "file" {
   return ["dir", "directory", "folder"].includes(String(entryType || "").toLowerCase()) ? "directory" : "file";
 }
@@ -86,8 +91,12 @@ function mappingStatusLabel(status: string | undefined): string {
   return "已规划";
 }
 
-function resolveItemDirectory(item: PlanItem, targetSlotById: TargetSlotLookup): string {
-  if (item.status === "review" || item.target_slot_id === "Review") return "Review";
+function itemMetaLabel(item: Pick<PlanItem, "item_id" | "target_slot_id">): string {
+  return [item.item_id, item.target_slot_id || ""].filter(Boolean).join(" · ");
+}
+
+function resolveItemDirectory(item: PlanItem, targetSlotById: TargetSlotLookup, placement: PlacementConfig): string {
+  if (item.status === "review" || item.target_slot_id === "Review") return placement.review_root || "Review";
   if (item.target_slot_id) {
     const slot = targetSlotById.get(item.target_slot_id);
     if (slot?.relpath) return slot.relpath;
@@ -95,20 +104,20 @@ function resolveItemDirectory(item: PlanItem, targetSlotById: TargetSlotLookup):
   return "当前目录";
 }
 
-function resolveItemTargetPath(item: PlanItem, targetSlotById: TargetSlotLookup): string {
-  const directoryLabel = resolveItemDirectory(item, targetSlotById);
+function resolveItemTargetPath(item: PlanItem, targetSlotById: TargetSlotLookup, placement: PlacementConfig): string {
+  const directoryLabel = resolveItemDirectory(item, targetSlotById, placement);
   const filename = item.display_name || item.source_relpath.split("/").pop() || item.source_relpath;
   return directoryLabel && directoryLabel !== "当前目录" ? `${directoryLabel}/${filename}` : filename;
 }
 
-function isItemChanged(item: PlanItem, targetSlotById: TargetSlotLookup) {
-  return normalizePath(item.source_relpath) !== normalizePath(resolveItemTargetPath(item, targetSlotById));
+function isItemChanged(item: PlanItem, targetSlotById: TargetSlotLookup, placement: PlacementConfig) {
+  return normalizePath(item.source_relpath) !== normalizePath(resolveItemTargetPath(item, targetSlotById, placement));
 }
 
-function groupItemsByTargetSlot(items: PlanItem[], targetSlotById: TargetSlotLookup) {
+function groupItemsByTargetSlot(items: PlanItem[], targetSlotById: TargetSlotLookup, placement: PlacementConfig) {
   const groups = new Map<string, PlanItem[]>();
   items.forEach((item) => {
-    const directory = resolveItemDirectory(item, targetSlotById);
+    const directory = resolveItemDirectory(item, targetSlotById, placement);
     if (!directory || directory === "当前目录") return;
     const existing = groups.get(directory) || [];
     existing.push(item);
@@ -117,9 +126,9 @@ function groupItemsByTargetSlot(items: PlanItem[], targetSlotById: TargetSlotLoo
   return groups;
 }
 
-function matchesFilter(item: PlanItem, filter: PreviewFilter, targetSlotById: TargetSlotLookup) {
+function matchesFilter(item: PlanItem, filter: PreviewFilter, targetSlotById: TargetSlotLookup, placement: PlacementConfig) {
   if (filter === "all") return true;
-  if (filter === "changed") return isItemChanged(item, targetSlotById);
+  if (filter === "changed") return isItemChanged(item, targetSlotById, placement);
   if (filter === "unresolved") return item.status === "unresolved";
   if (filter === "review") return item.status === "review";
   return item.status === "invalidated";
@@ -375,6 +384,9 @@ function QueueCard({
             <div className="min-w-0">
               <p className="truncate text-[12px] font-semibold text-on-surface">{item.display_name}</p>
               <p className="truncate text-[11px] text-ui-muted">{resolveTargetLabel(item)}</p>
+              {itemMetaLabel(item) ? (
+                <p className="truncate text-[10px] font-bold text-ui-muted/80">{itemMetaLabel(item)}</p>
+              ) : null}
             </div>
             <span className="text-[11px] text-ui-muted">{fileExtension(item)}</span>
           </button>
@@ -630,10 +642,11 @@ export function PreviewPanel(props: PreviewPanelProps) {
     () => new Map((plan.target_slots || []).map((slot) => [slot.slot_id, slot])),
     [plan.target_slots],
   );
-  const resolveTargetLabel = (item: PlanItem) => resolveItemDirectory(item, targetSlotById);
+  const placement = plan.placement || { new_directory_root: "", review_root: "" };
+  const resolveTargetLabel = (item: PlanItem) => resolveItemDirectory(item, targetSlotById, placement);
   const resolveTargetMeta = (item: PlanItem) => {
     const directoryLabel = resolveTargetLabel(item);
-    const fullTargetPath = resolveItemTargetPath(item, targetSlotById);
+    const fullTargetPath = resolveItemTargetPath(item, targetSlotById, placement);
     const slotLabel = item.target_slot_id && item.target_slot_id !== "Review" ? item.target_slot_id : "";
     const mappingLabel = mappingStatusLabel(item.mapping_status || item.status);
     return { directoryLabel, fullTargetPath, slotLabel, mappingLabel };
@@ -641,18 +654,18 @@ export function PreviewPanel(props: PreviewPanelProps) {
   const filteredItems = useMemo(() => {
     const keyword = search.trim().toLowerCase();
     return allItems.filter((item) => {
-      if (!matchesFilter(item, filter, targetSlotById)) return false;
+      if (!matchesFilter(item, filter, targetSlotById, placement)) return false;
       if (extensionFilter !== "all" && fileExtension(item) !== extensionFilter) return false;
       if (!keyword) return true;
-      return [item.display_name, item.source_relpath, resolveItemTargetPath(item, targetSlotById), resolveTargetLabel(item), item.suggested_purpose || "", item.content_summary || ""]
+      return [item.display_name, item.source_relpath, resolveItemTargetPath(item, targetSlotById, placement), resolveTargetLabel(item), item.suggested_purpose || "", item.content_summary || ""]
         .some((value) => value.toLowerCase().includes(keyword));
     });
-  }, [allItems, extensionFilter, filter, search, targetSlotById]);
+  }, [allItems, extensionFilter, filter, placement, search, targetSlotById]);
   const filteredSourceEntries = useMemo(() => {
     const keyword = search.trim().toLowerCase();
     return sourceTreeEntries.filter((entry) => {
       const linkedItem = itemBySource.get(normalizePath(entry.source_relpath));
-      if (filter !== "all" && (!linkedItem || !matchesFilter(linkedItem, filter, targetSlotById))) return false;
+      if (filter !== "all" && (!linkedItem || !matchesFilter(linkedItem, filter, targetSlotById, placement))) return false;
       if (extensionFilter !== "all" && fileExtension(entry) !== extensionFilter) return false;
       if (!keyword) return true;
       return [
@@ -663,20 +676,20 @@ export function PreviewPanel(props: PreviewPanelProps) {
         linkedItem?.content_summary || "",
       ].some((value) => value.toLowerCase().includes(keyword));
     });
-  }, [extensionFilter, filter, itemBySource, search, sourceTreeEntries, targetSlotById]);
+  }, [extensionFilter, filter, itemBySource, placement, search, sourceTreeEntries, targetSlotById]);
   const selectedItem = useMemo(() => allItems.find((item) => item.item_id === selectedItemId) || null, [allItems, selectedItemId]);
   const mkdirPreview = precheckSummary?.mkdir_preview || [];
   const beforeTree = useMemo(() => buildSourceTree(filteredSourceEntries, itemBySource), [filteredSourceEntries, itemBySource]);
   const afterTree = useMemo(
-    () => buildPlanTree(filteredItems, mkdirPreview, (item) => resolveItemTargetPath(item, targetSlotById)),
-    [filteredItems, mkdirPreview, targetSlotById],
+    () => buildPlanTree(filteredItems, mkdirPreview, (item) => resolveItemTargetPath(item, targetSlotById, placement)),
+    [filteredItems, mkdirPreview, placement, targetSlotById],
   );
   const currentTree = viewMode === "before" ? beforeTree : afterTree;
   const flattenedTargetDirectories = useMemo(
     () => flattenTargetDirectoryTree(incrementalSelection?.target_directory_tree || []),
     [incrementalSelection?.target_directory_tree],
   );
-  const groupedByTargetSlot = useMemo(() => groupItemsByTargetSlot(allItems, targetSlotById), [allItems, targetSlotById]);
+  const groupedByTargetSlot = useMemo(() => groupItemsByTargetSlot(allItems, targetSlotById, placement), [allItems, placement, targetSlotById]);
   const availableTargetOptions = useMemo<AvailableTargetOption[]>(() => {
     const options = new Map<string, AvailableTargetOption>();
     options.set("Review", { key: "review", label: "Review", directory: "Review" });
@@ -719,6 +732,8 @@ export function PreviewPanel(props: PreviewPanelProps) {
     return Array.from(options.values()).sort((a, b) => a.directory.localeCompare(b.directory, "zh-CN"));
   }, [flattenedTargetDirectories, groupedByTargetSlot, incrementalSelection?.target_directories, organizeMode, plan.groups, plan.target_slots, targetSlotById]);
   const availableDirectories = useMemo(() => availableTargetOptions.map((item) => item.directory), [availableTargetOptions]);
+  const manualTargetTrimmed = manualTarget.trim();
+  const manualTargetInvalid = isAbsolutePath(manualTargetTrimmed) || /^review([\\/]|$)/i.test(manualTargetTrimmed);
   const canRunPrecheck = stageView.isAwaitingPrecheck && plan.readiness.can_precheck && !isPlanSyncing;
   const incrementalSummary = useMemo(() => {
     if (organizeMode !== "incremental" || !incrementalSelection) {
@@ -1046,8 +1061,21 @@ export function PreviewPanel(props: PreviewPanelProps) {
             <div className="max-h-[65vh] overflow-y-auto w-full p-6 space-y-6 bg-surface scrollbar-thin">
               <div className="grid gap-3">
                 <div className="min-w-0 flex-1 rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-4 py-3 shadow-sm">
-                  <div className="text-[11px] font-bold tracking-wider text-ui-muted flex items-center gap-1.5"><FolderOpen className="w-3.5 h-3.5" /> 原路径</div>
-                  <div className="mt-1 break-all text-[13px] font-medium text-on-surface">{editingItem.source_relpath}</div>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-[11px] font-bold tracking-wider text-ui-muted flex items-center gap-1.5"><FolderOpen className="w-3.5 h-3.5" /> 来源条目</div>
+                      <div className="mt-1 break-all text-[13px] font-medium text-on-surface">{editingItem.display_name}</div>
+                    </div>
+                    {itemMetaLabel(editingItem) ? (
+                      <span className="shrink-0 rounded-full border border-on-surface/8 bg-surface px-2 py-1 text-[10px] font-bold text-ui-muted">
+                        {itemMetaLabel(editingItem)}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="mt-3 border-t border-on-surface/6 pt-3">
+                    <div className="text-[11px] font-bold tracking-wider text-ui-muted">当前来源路径</div>
+                    <div className="mt-1 break-all text-[13px] font-medium text-on-surface">{editingItem.source_relpath}</div>
+                  </div>
                 </div>
                 <div className="min-w-0 flex-1 rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-4 py-3 shadow-sm relative overflow-hidden">
                   <div className="absolute -top-4 -right-2 p-4 opacity-[0.03] pointer-events-none"><Folder className="w-24 h-24" /></div>
@@ -1070,6 +1098,10 @@ export function PreviewPanel(props: PreviewPanelProps) {
                   <div className="mt-3 border-t border-on-surface/6 pt-3">
                     <div className="text-[11px] font-bold tracking-wider text-ui-muted">完整目标路径</div>
                     <div className="mt-1 break-all text-[13px] font-medium text-on-surface">{editingTargetMeta?.fullTargetPath}</div>
+                  </div>
+                  <div className="mt-3 grid gap-2 border-t border-on-surface/6 pt-3 text-[11px] text-ui-muted">
+                    <div>新目录生成位置：<span className="font-semibold text-on-surface">{placement.new_directory_root || "未配置"}</span></div>
+                    <div>Review 目录位置：<span className="font-semibold text-on-surface">{placement.review_root || "未配置"}</span></div>
                   </div>
                 </div>
               </div>
@@ -1140,7 +1172,7 @@ export function PreviewPanel(props: PreviewPanelProps) {
 
                   <div className="space-y-2 pt-2">
                     <button type="button" onClick={() => setShowManualInput((current) => !current)} className="text-[12px] font-bold text-primary flex items-center gap-1 opacity-80 hover:opacity-100 transition-opacity">
-                      {showManualInput ? "- 收起手动路径输入" : "+ 手动输入特殊路径"}
+                      {showManualInput ? "- 收起手动目标路径" : "+ 手动指定目标路径"}
                     </button>
                     {showManualInput ? (
                       <div className="relative">
@@ -1149,15 +1181,15 @@ export function PreviewPanel(props: PreviewPanelProps) {
                             <input
                               value={manualTarget}
                               onChange={(event) => setManualTarget(event.target.value)}
-                              placeholder="如: 项目/归档"
+                              placeholder="如: 新专题/归档"
                               className="h-10 w-full rounded-[8px] border border-on-surface/15 bg-surface px-3 text-[13px] font-medium text-on-surface outline-none focus:border-primary/50"
                             />
-                            {/* 路径建议下拉面板 */}
-                            {manualTarget.trim() && availableDirectories.filter(d => d.toLowerCase().includes(manualTarget.toLowerCase().trim()) && d !== manualTarget.trim()).length > 0 && (
+                            {/* 目标路径建议下拉面板 */}
+                            {manualTargetTrimmed && !manualTargetInvalid && availableDirectories.filter(d => d.toLowerCase().includes(manualTargetTrimmed.toLowerCase()) && d !== manualTargetTrimmed && d !== "Review").length > 0 && (
                               <div className="absolute bottom-full left-0 right-0 z-50 mb-2 max-h-48 overflow-y-auto rounded-[10px] border border-on-surface/10 bg-surface shadow-xl py-1 scrollbar-thin animate-in fade-in slide-in-from-bottom-2">
-                                <div className="px-3 py-1.5 text-[10px] font-bold text-ui-muted uppercase tracking-wider bg-on-surface/[0.02]">建议路径</div>
+                                <div className="px-3 py-1.5 text-[10px] font-bold text-ui-muted uppercase tracking-wider bg-on-surface/[0.02]">建议目标目录</div>
                                 {availableDirectories
-                                  .filter(d => d.toLowerCase().includes(manualTarget.toLowerCase().trim()) && d !== manualTarget.trim())
+                                  .filter(d => d.toLowerCase().includes(manualTargetTrimmed.toLowerCase()) && d !== manualTargetTrimmed && d !== "Review")
                                   .slice(0, 8)
                                   .map((dir) => (
                                     <button
@@ -1176,15 +1208,19 @@ export function PreviewPanel(props: PreviewPanelProps) {
                           <button
                             type="button"
                             onClick={() => {
-                              void applyItemTarget(editingItem.item_id, { target_dir: manualTarget.trim() });
+                              if (manualTargetInvalid || !manualTargetTrimmed) {
+                                return;
+                              }
+                              void applyItemTarget(editingItem.item_id, { target_dir: manualTargetTrimmed });
                               setEditingItemId(null);
                             }}
-                            className="shrink-0 h-10 rounded-[8px] bg-on-surface px-5 text-[13px] font-bold text-surface transition-transform active:scale-95 hover:bg-on-surface/90"
+                            disabled={manualTargetInvalid || !manualTargetTrimmed}
+                            className="shrink-0 h-10 rounded-[8px] bg-on-surface px-5 text-[13px] font-bold text-surface transition-transform active:scale-95 hover:bg-on-surface/90 disabled:cursor-not-allowed disabled:opacity-40"
                           >
-                            应用
+                            应用到此条目
                           </button>
                         </div>
-                        <p className="mt-1.5 text-[11px] text-ui-muted px-1">输入路径层级使用斜杠 / 分隔，例如：`Work/Docs`</p>
+                        <p className="mt-1.5 text-[11px] text-ui-muted px-1">这里填写的是相对“新目录生成位置”的路径，使用斜杠 `/` 分隔；不支持绝对路径或 `Review/...`。</p>
                       </div>
                     ) : null}
                   </div>

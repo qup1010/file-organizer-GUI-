@@ -51,6 +51,22 @@ function formatMovePath(path: string | null, baseDir: string) {
   return formatPath(normalizedPath);
 }
 
+function formatMoveBadge(item: {
+  item_id?: string | null;
+  target_slot_id?: string | null;
+}) {
+  const parts = [item.item_id, item.target_slot_id].filter(Boolean);
+  return parts.join(" · ");
+}
+
+function summarizeMoveNames(items: { display_name: string }[], limit = 3) {
+  const names = items.map((item) => item.display_name).filter(Boolean).slice(0, limit);
+  if (!names.length) {
+    return "";
+  }
+  return names.join("、") + (items.length > limit ? ` 等 ${items.length} 项` : "");
+}
+
 export default function HistoryPage() {
   const APP_CONTEXT_EVENT = "file-organizer-context-change";
   const HISTORY_CONTEXT_KEY = "history_header_context";
@@ -195,6 +211,7 @@ export default function HistoryPage() {
   const moveRows = journal?.restore_items?.length
     ? journal.restore_items
     : journal?.items?.filter((it) => it.action_type === "MOVE") ?? [];
+  const moveRowsSummary = summarizeMoveNames(moveRows);
 
   const activeCount = history.filter((item) => isHistorySessionEntry(item)).length;
   const completedCount = history.filter((item) => !isHistorySessionEntry(item) && item.status !== "rolled_back").length;
@@ -640,9 +657,16 @@ export default function HistoryPage() {
                                 moveRows.map((item, index) => (
                                   <tr key={index} className="transition-colors hover:bg-surface-container-low/28">
                                     <td className="px-4 py-3.5 align-top">
-                                      <p className="max-w-[18rem] truncate text-[14px] font-semibold text-on-surface" title={item.display_name}>
-                                        {item.display_name}
-                                      </p>
+                                      <div className="space-y-1">
+                                        <p className="max-w-[18rem] truncate text-[14px] font-semibold text-on-surface" title={item.display_name}>
+                                          {item.display_name}
+                                        </p>
+                                        {formatMoveBadge(item) ? (
+                                          <p className="text-[11px] font-medium text-ui-muted">
+                                            {formatMoveBadge(item)}
+                                          </p>
+                                        ) : null}
+                                      </div>
                                     </td>
                                     <td className="px-4 py-3.5">
                                       <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 text-[13px]">
@@ -692,7 +716,7 @@ export default function HistoryPage() {
       <ConfirmDialog
         open={rollbackConfirmOpen}
         title="确认回退这次执行？"
-        description="这会把本次整理已移动的文件尽量放回原位置。若目标文件已被占用或发生冲突，部分回退可能失败。"
+        description={`这会把本次整理已移动的 ${moveRows.length} 项内容尽量放回原位置${moveRowsSummary ? `。涉及条目：${moveRowsSummary}` : ""}。若目标文件已被占用或发生冲突，部分回退可能失败。`}
         confirmLabel="确认回退"
         cancelLabel="先不回退"
         tone="danger"

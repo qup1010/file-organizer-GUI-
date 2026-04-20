@@ -10,6 +10,31 @@ class ExecutionAction:
     target: Path
     source: Path | None = None
     raw: str = ""
+    item_id: str = ""
+    source_ref_id: str = ""
+    target_slot_id: str = ""
+    display_name: str = ""
+
+
+@dataclass
+class MappedExecutionAction:
+    type: str
+    target_path: Path
+    source_path: Path | None = None
+    raw: str = ""
+    item_id: str = ""
+    source_ref_id: str = ""
+    target_slot_id: str = ""
+    display_name: str = ""
+    status: str = ""
+
+
+@dataclass
+class MappedExecutionPlan:
+    base_dir: Path
+    mkdir_actions: list[MappedExecutionAction] = field(default_factory=list)
+    move_actions: list[MappedExecutionAction] = field(default_factory=list)
+    all_actions: list[MappedExecutionAction] = field(default_factory=list)
 
 
 @dataclass
@@ -50,6 +75,10 @@ class ExecutionJournalItem:
     source_before: str | None = None
     target_after: str | None = None
     created_path: str | None = None
+    item_id: str | None = None
+    source_ref_id: str | None = None
+    target_slot_id: str | None = None
+    display_name: str | None = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "ExecutionJournalItem":
@@ -80,6 +109,10 @@ class ExecutionJournal:
                     "source_before": item.source_before,
                     "target_after": item.target_after,
                     "created_path": item.created_path,
+                    "item_id": item.item_id,
+                    "source_ref_id": item.source_ref_id,
+                    "target_slot_id": item.target_slot_id,
+                    "display_name": item.display_name,
                 }
                 for item in self.items
             ],

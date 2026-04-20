@@ -53,6 +53,10 @@ def build_rollback_plan(journal: ExecutionJournal) -> RollbackPlan:
                     source=Path(item.target_after).resolve(),
                     target=Path(item.source_before).resolve(),
                     raw=item.raw,
+                    item_id=str(item.item_id or ""),
+                    source_ref_id=str(item.source_ref_id or ""),
+                    target_slot_id=str(item.target_slot_id or ""),
+                    display_name=str(item.display_name or ""),
                 )
             )
         elif item.action_type == "MKDIR" and item.created_path:
@@ -63,6 +67,10 @@ def build_rollback_plan(journal: ExecutionJournal) -> RollbackPlan:
                     source=created_path,
                     target=created_path,
                     raw=item.raw,
+                    item_id=str(item.item_id or ""),
+                    source_ref_id=str(item.source_ref_id or ""),
+                    target_slot_id=str(item.target_slot_id or ""),
+                    display_name=str(item.display_name or ""),
                 )
             )
 
@@ -127,10 +135,12 @@ def render_rollback_preview(plan: RollbackPlan, precheck: RollbackPrecheckResult
 
     if plan.actions:
         for index, action in enumerate(plan.actions, start=1):
+            display_label = str(action.display_name or action.item_id or "").strip()
+            label_prefix = f"[{display_label}] " if display_label else ""
             if action.type == "MOVE":
-                lines.append(f'{index}. MOVE "{action.source.as_posix()}" -> "{action.target.as_posix()}"')
+                lines.append(f'{index}. {label_prefix}MOVE "{action.source.as_posix()}" -> "{action.target.as_posix()}"')
             else:
-                lines.append(f'{index}. RMDIR "{action.source.as_posix()}"')
+                lines.append(f'{index}. {label_prefix}RMDIR "{action.source.as_posix()}"')
     else:
         lines.append("- 无可回退动作")
 
@@ -199,6 +209,10 @@ def finalize_rollback_state(journal: ExecutionJournal, report: RollbackReport) -
                     "target": item.action.target.as_posix(),
                     "status": item.status,
                     "message": item.message,
+                    "item_id": item.action.item_id or None,
+                    "source_ref_id": item.action.source_ref_id or None,
+                    "target_slot_id": item.action.target_slot_id or None,
+                    "display_name": item.action.display_name or None,
                 }
                 for item in report.results
             ],

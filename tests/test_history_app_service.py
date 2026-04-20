@@ -64,3 +64,7 @@ class HistoryAppServiceTests(unittest.TestCase):
 
         self.assertEqual(summary["status"], "completed")
         self.assertEqual(summary["item_count"], 2)
+        move_item = next(item for item in summary["items"] if item["action_type"] == "MOVE")
+        self.assertEqual(move_item["display_name"], "a.txt")
+        self.assertEqual(move_item["item_id"], "F001")
+        self.assertEqual(move_item["source_ref_id"], "F001")

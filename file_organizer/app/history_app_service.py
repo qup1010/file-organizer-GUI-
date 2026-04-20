@@ -94,7 +94,10 @@ class HistoryAppService:
                     "status": item.get("status"),
                     "source": item.get("source"),
                     "target": item.get("target"),
-                    "display_name": Path(item.get("source") or item.get("target") or "unknown").name,
+                    "display_name": str(item.get("display_name") or Path(item.get("source") or item.get("target") or "unknown").name),
+                    "item_id": item.get("item_id"),
+                    "source_ref_id": item.get("source_ref_id"),
+                    "target_slot_id": item.get("target_slot_id"),
                 }
                 for item in latest_attempt.get("results", [])
                 if item.get("action_type") == "MOVE"
@@ -116,7 +119,13 @@ class HistoryAppService:
                     "status": item.status,
                     "source": item.source_before,
                     "target": item.target_after,
-                    "display_name": Path(item.source_before).name if item.source_before else (Path(item.created_path).name if item.created_path else "unknown"),
+                    "display_name": str(
+                        item.display_name
+                        or (Path(item.source_before).name if item.source_before else (Path(item.created_path).name if item.created_path else "unknown"))
+                    ),
+                    "item_id": item.item_id,
+                    "source_ref_id": item.source_ref_id,
+                    "target_slot_id": item.target_slot_id,
                 }
                 for item in journal.items
             ],

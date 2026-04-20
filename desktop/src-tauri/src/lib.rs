@@ -38,6 +38,16 @@ fn pick_directories() -> Option<Vec<String>> {
 }
 
 #[tauri::command]
+fn pick_files() -> Option<Vec<String>> {
+    rfd::FileDialog::new().pick_files().map(|paths| {
+        paths
+            .into_iter()
+            .map(|path| path.to_string_lossy().into_owned())
+            .collect()
+    })
+}
+
+#[tauri::command]
 fn save_file_as(source_path: String, filename: String) -> Result<bool, String> {
     let save_path = rfd::FileDialog::new()
         .set_file_name(&filename)
@@ -303,6 +313,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             pick_directory,
             pick_directories,
+            pick_files,
             open_directory,
             save_file_as,
             get_runtime_config,

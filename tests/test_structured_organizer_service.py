@@ -60,7 +60,6 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
             "move_updates": [{"source": "截图1.png", "target": "Screenshots/截图1.png"}],
             "unresolved_adds": ["合同.pdf"],
             "unresolved_removals": ["截图1.png"],
-            "summary": "已按要求改名并调整截图归类",
         }
 
         updated, diff_summary, _ = organizer_service.apply_plan_diff(old_plan, diff)
@@ -74,7 +73,7 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
             },
         )
         self.assertEqual(updated.unresolved_items, ["合同.pdf"])
-        self.assertEqual(updated.summary, "已按要求改名并调整截图归类")
+        self.assertEqual(updated.summary, "已分类 1 项，调整 2 项，仍剩 1 项待定")
         self.assertTrue(any("Bills" in item for item in diff_summary))
         self.assertTrue(any("Screenshots/截图1.png" in item for item in diff_summary))
 
@@ -82,7 +81,7 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
         diff_call = SimpleNamespace(
             function=SimpleNamespace(
                 name="submit_plan_diff",
-                arguments='{"directory_renames": [], "move_updates": [{"source": "合同.pdf", "target": "Study/合同.pdf"}, {"source": "截图1.png", "target": "Review/截图1.png"}], "unresolved_adds": ["截图1.png"], "unresolved_removals": [], "summary": "先按用途归类"}',
+                arguments='{"directory_renames": [], "move_updates": [{"source": "合同.pdf", "target": "Study/合同.pdf"}, {"source": "截图1.png", "target": "Review/截图1.png"}], "unresolved_adds": ["截图1.png"], "unresolved_removals": []}',
             )
         )
         message = SimpleNamespace(content="", tool_calls=[diff_call])
@@ -96,90 +95,13 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
 
         self.assertEqual(content, organizer_service.SYNTHETIC_PLAN_REPLY)
         self.assertFalse(result["is_valid"])
-        self.assertEqual(result["display_plan"], {"focus": "summary", "summary": "先按用途归类", "reason": ""})
+        self.assertEqual(result["display_plan"], {"focus": "summary", "summary": "已分类 1 项，调整 2 项，仍剩 1 项待定", "reason": ""})
         self.assertEqual(result["assistant_message"]["content"], organizer_service.SYNTHETIC_PLAN_REPLY)
         self.assertEqual(result["pending_plan"].directories, ["Review", "Study"])
         self.assertEqual(
             {move.source: move.target for move in result["pending_plan"].moves},
             {"合同.pdf": "Study/合同.pdf", "截图1.png": "Review/截图1.png"},
         )
-
-    def test_run_organizer_cycle_returns_unresolved_request_block_without_mutating_plan(self):
-        unresolved_call = self._tool_call(
-            "request_unresolved_choices",
-            '{"request_id":"req_1","summary":"还有 1 个待确认项","items":[{"item_id":"截图1.png","display_name":"截图1.png","question":"更像学习截图还是问题记录？","suggested_folders":["学习资料","截图记录"]}]}',
-        )
-        current_plan = PendingPlan(
-            directories=["Review"],
-            moves=[PlanMove(source="截图1.png", target="Review/截图1.png")],
-            unresolved_items=["截图1.png"],
-        )
-        message = SimpleNamespace(content="", tool_calls=[unresolved_call])
-
-        with mock.patch.object(organizer_service, "chat_one_round", return_value=message):
-            content, result = organizer_service.run_organizer_cycle(
-                messages=[],
-                scan_lines="截图1.png | 截图记录 | 报错界面",
-                pending_plan=current_plan,
-            )
-
-        self.assertEqual(content, "")
-        self.assertEqual(result["pending_plan"], current_plan)
-        self.assertEqual(result["unresolved_request"]["request_id"], "req_1")
-        self.assertEqual(result["assistant_message"]["blocks"][0]["type"], "unresolved_choices")
-        self.assertEqual(result["assistant_message"]["blocks"][0]["items"][0]["suggested_folders"], ["学习资料", "截图记录"])
-
-    def test_run_organizer_cycle_accepts_stringified_unresolved_items_payload(self):
-        unresolved_call = self._tool_call(
-            "request_unresolved_choices",
-            '{"request_id":"req_1","summary":"还有 1 个待确认项","items":"[{\\"item_id\\":\\"截图1.png\\",\\"display_name\\":\\"截图1.png\\",\\"question\\":\\"更像学习截图还是问题记录？\\",\\"suggested_folders\\":[\\"学习资料\\",\\"截图记录\\"]}]"}',
-        )
-        message = SimpleNamespace(content="", tool_calls=[unresolved_call])
-
-        with mock.patch.object(organizer_service, "chat_one_round", return_value=message):
-            _, result = organizer_service.run_organizer_cycle(
-                messages=[],
-                scan_lines="截图1.png | 截图记录 | 报错界面",
-                pending_plan=PendingPlan(),
-            )
-
-        self.assertEqual(result["unresolved_request"]["items"][0]["item_id"], "截图1.png")
-        self.assertEqual(result["assistant_message"]["blocks"][0]["items"][0]["suggested_folders"], ["学习资料", "截图记录"])
-
-    def test_run_organizer_cycle_accepts_stringified_unresolved_items_payload_with_trailing_bracket(self):
-        items_payload = json.dumps(
-            [
-                {
-                    "item_id": "截图1.png",
-                    "display_name": "截图1.png",
-                    "question": "更像学习截图还是问题记录？",
-                    "suggested_folders": json.dumps(["学习资料", "截图记录"], ensure_ascii=False),
-                }
-            ],
-            ensure_ascii=False,
-        ) + "]"
-        unresolved_call = self._tool_call(
-            "request_unresolved_choices",
-            json.dumps(
-                {
-                    "request_id": "req_1",
-                    "summary": "还有 1 个待确认项",
-                    "items": f"\n{items_payload}\n",
-                },
-                ensure_ascii=False,
-            ),
-        )
-        message = SimpleNamespace(content="", tool_calls=[unresolved_call])
-
-        with mock.patch.object(organizer_service, "chat_one_round", return_value=message):
-            _, result = organizer_service.run_organizer_cycle(
-                messages=[],
-                scan_lines="截图1.png | 截图记录 | 报错界面",
-                pending_plan=PendingPlan(),
-            )
-
-        self.assertEqual(result["unresolved_request"]["items"][0]["item_id"], "截图1.png")
-        self.assertEqual(result["unresolved_request"]["items"][0]["suggested_folders"], ["学习资料", "截图记录"])
 
     def test_apply_plan_diff_auto_removes_unresolved_when_moved_to_non_review(self):
         old_plan = PendingPlan(
@@ -191,8 +113,7 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
             "directory_renames": [],
             "move_updates": [{"source": "合同.pdf", "target": "Finance/合同.pdf"}],
             "unresolved_adds": [],
-            "unresolved_removals": [], 
-            "summary": "自动同步测试",
+            "unresolved_removals": [],
         }
         
         updated, _, _ = organizer_service.apply_plan_diff(old_plan, diff)
@@ -238,30 +159,7 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
         client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create_mock)))
         messages = [
             {"role": "system", "content": "system prompt", "id": "sys_1"},
-            {
-                "role": "assistant",
-                "id": "assistant_1",
-                "content": "",
-                "blocks": [
-                    {
-                        "type": "unresolved_choices",
-                        "request_id": "req_1",
-                        "summary": "请确认归类",
-                        "status": "submitted",
-                        "items": [
-                            {
-                                "item_id": "md",
-                                "display_name": "md",
-                                "question": "放哪里？",
-                                "suggested_folders": ["学习资料", "文档资料"],
-                            }
-                        ],
-                        "submitted_resolutions": [
-                            {"item_id": "md", "display_name": "md", "selected_folder": "", "note": "这是课程笔记"}
-                        ],
-                    }
-                ],
-            },
+            {"role": "assistant", "id": "assistant_1", "content": "", "blocks": [{"type": "unresolved_choices"}]},
         ]
 
         with mock.patch.object(organizer_service, "create_openai_client", return_value=client), mock.patch.object(
@@ -273,11 +171,7 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
 
         request_messages = create_mock.call_args.kwargs["messages"]
         self.assertEqual(request_messages[0], {"role": "system", "content": "system prompt"})
-        self.assertEqual(request_messages[1]["role"], "assistant")
-        self.assertNotIn("id", request_messages[1])
-        self.assertNotIn("blocks", request_messages[1])
-        self.assertIn("待确认请求", request_messages[1]["content"])
-        self.assertIn("这是课程笔记", request_messages[1]["content"])
+        self.assertEqual(request_messages[1], {"role": "assistant", "content": ""})
 
     def test_chat_one_round_reads_runtime_model_when_not_explicitly_passed(self):
         response = SimpleNamespace(
@@ -322,7 +216,7 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
         )
 
         self.assertIn(
-            "F001 | file | very_long_real_filename_contract_v12_final_really_final.pdf | very_long_real_filename_contract_v12_final_really_final.pdf | 财务合同 | 付款协议",
+            "F001 | file | very_long_real_filename_contract_v12_final_really_final.pdf | 财务合同 | 付款协议",
             messages[0]["content"],
         )
         self.assertIn("`item_id` 是唯一操作键", messages[0]["content"])
@@ -351,8 +245,8 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
             ]
         )
 
-        self.assertIn("F001 | dir | project.v1 | project.v1 | 项目目录 | 目录入口", rendered)
-        self.assertIn("F002 | file | README | README | 说明文件 | 无后缀文本", rendered)
+        self.assertIn("F001 | dir | project.v1 | 项目目录 | 目录入口", rendered)
+        self.assertIn("F002 | file | README | 说明文件 | 无后缀文本", rendered)
 
     def test_apply_plan_diff_rejects_incremental_directory_rename_and_unselected_existing_root(self):
         old_plan = PendingPlan(
@@ -361,10 +255,9 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
         )
         diff = {
             "directory_renames": [{"from": "Docs", "to": "Archive"}],
-            "move_updates": [{"source": "合同.pdf", "target": "Study/合同.pdf"}],
+            "move_updates": [{"source": "合同.pdf", "target": "D:/existing/Study/合同.pdf"}],
             "unresolved_adds": [],
             "unresolved_removals": [],
-            "summary": "增量归档测试",
         }
 
         _, _, errors = organizer_service.apply_plan_diff(
@@ -373,8 +266,8 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
             valid_sources=["合同.pdf"],
             planning_context={
                 "organize_mode": "incremental",
-                "target_directories": ["Finance"],
-                "root_directory_options": ["Finance", "Study"],
+                "target_directories": ["D:/existing/Finance"],
+                "root_directory_options": ["D:/existing/Finance", "D:/existing/Study"],
             },
         )
 
@@ -393,8 +286,8 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
             final_plan,
             planning_context={
                 "organize_mode": "incremental",
-                "target_directories": ["Finance"],
-                "root_directory_options": ["Finance", "Study"],
+                "target_directories": ["D:/existing/Finance"],
+                "root_directory_options": ["D:/existing/Finance", "D:/existing/Study"],
             },
         )
 
@@ -404,13 +297,13 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
             "合同.pdf | 财务/合同 | 付款协议",
             FinalPlan(
                 directories=[],
-                moves=[PlanMove(source="合同.pdf", target="Study/合同.pdf")],
+                moves=[PlanMove(source="合同.pdf", target="D:/existing/Study/合同.pdf")],
                 unresolved_items=[],
             ),
             planning_context={
                 "organize_mode": "incremental",
-                "target_directories": ["Finance"],
-                "root_directory_options": ["Finance", "Study"],
+                "target_directories": ["D:/existing/Finance"],
+                "root_directory_options": ["D:/existing/Finance", "D:/existing/Study"],
             },
         )
 
@@ -421,7 +314,7 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
         diff_call = SimpleNamespace(
             function=SimpleNamespace(
                 name="submit_plan_diff",
-                arguments='{"directory_renames": [], "move_updates": [{"item_id": "F001", "target_dir": "Study"}], "unresolved_adds": ["F001"], "unresolved_removals": [], "summary": "已按用途整理"}',
+                arguments='{"directory_renames": [], "move_updates": [{"item_id": "F001", "target_dir": "Study"}], "unresolved_adds": ["F001"], "unresolved_removals": []}',
             )
         )
         message = SimpleNamespace(content="", tool_calls=[diff_call])
@@ -457,7 +350,7 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
         diff_call = SimpleNamespace(
             function=SimpleNamespace(
                 name="submit_plan_diff",
-                arguments='{"directory_renames": [], "move_updates": [{"item_id": "F001", "target_slot": "D001"}], "unresolved_adds": [], "unresolved_removals": [], "summary": "已按槽位归类"}',
+                arguments='{"directory_renames": [], "move_updates": [{"item_id": "F001", "target_slot": "D001"}], "unresolved_adds": [], "unresolved_removals": []}',
             )
         )
         message = SimpleNamespace(content="", tool_calls=[diff_call])
@@ -491,6 +384,50 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
         self.assertEqual(result["pending_plan"].moves[0].source, "contract.pdf")
         self.assertEqual(result["pending_plan"].moves[0].target, "Finance/合同/contract.pdf")
 
+    def test_run_organizer_cycle_falls_back_to_slot_real_path_when_relpath_is_missing(self):
+        diff_call = SimpleNamespace(
+            function=SimpleNamespace(
+                name="submit_plan_diff",
+                arguments='{"directory_renames": [], "move_updates": [{"item_id": "F001", "target_slot": "D031"}], "unresolved_adds": [], "unresolved_removals": []}',
+            )
+        )
+        message = SimpleNamespace(content="", tool_calls=[diff_call])
+
+        with mock.patch.object(organizer_service, "chat_one_round", return_value=message):
+            _, result = organizer_service.run_organizer_cycle(
+                messages=[],
+                scan_lines="contract.pdf | 财务合同 | 付款协议",
+                planner_items=[
+                    {
+                        "planner_id": "F001",
+                        "source_relpath": "contract.pdf",
+                        "display_name": "contract.pdf",
+                        "suggested_purpose": "财务合同",
+                        "summary": "付款协议",
+                        "ext": "pdf",
+                        "parent_hint": "",
+                    }
+                ],
+                pending_plan=PendingPlan(),
+                planning_context={
+                    "organize_mode": "incremental",
+                    "target_directories": ["D:/archive/docs"],
+                    "root_directory_options": ["D:/archive/docs", "D:/archive/media"],
+                    "target_slots": [
+                        {
+                            "slot_id": "D031",
+                            "display_name": "项目文档",
+                            "relpath": "",
+                            "real_path": "D:/archive/docs/项目文档",
+                            "depth": 1,
+                            "is_new": False,
+                        }
+                    ],
+                },
+            )
+
+        self.assertEqual(result["pending_plan"].moves[0].target, "D:/archive/docs/项目文档/contract.pdf")
+
     def test_build_prompt_includes_target_slot_inventory_for_incremental_mode(self):
         prompt = organizer_service.build_prompt(
             "F001 | file | contract.pdf | contract.pdf | 财务合同 | 付款协议",
@@ -506,20 +443,15 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
 
         self.assertIn("可用目标槽位", prompt)
         self.assertIn("D001 -> Finance/合同", prompt)
-        self.assertIn("优先提交 target_slot", prompt)
+        self.assertIn("优先使用 `target_slot`", prompt)
 
     def test_run_organizer_cycle_does_not_leak_planner_ids_into_pending_unresolved_items(self):
         diff_call = self._tool_call(
             "submit_plan_diff",
-            '{"directory_renames": [], "move_updates": [{"item_id": "F001", "target_dir": "Review"}], "unresolved_adds": ["F001"], "unresolved_removals": [], "summary": "需要你确认归类"}',
+            '{"directory_renames": [], "move_updates": [{"item_id": "F001", "target_dir": "Review"}], "unresolved_adds": ["F001"], "unresolved_removals": []}',
             tool_id="call_diff",
         )
-        unresolved_call = self._tool_call(
-            "request_unresolved_choices",
-            '{"request_id": "req_1", "summary": "请确认归类", "items": [{"item_id": "F001", "display_name": "very_long_real_filename_contract_v12_final_really_final.pdf", "question": "应该放学习资料还是财务资料？", "suggested_folders": ["学习资料", "财务资料"]}]}',
-            tool_id="call_unresolved",
-        )
-        message = SimpleNamespace(content="这份文件需要你确认归类。", tool_calls=[diff_call, unresolved_call])
+        message = SimpleNamespace(content="这份文件需要你确认归类。", tool_calls=[diff_call])
 
         with mock.patch.object(organizer_service, "chat_one_round", return_value=message):
             _, result = organizer_service.run_organizer_cycle(
@@ -553,6 +485,20 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
             ["very_long_real_filename_contract_v12_final_really_final.pdf"],
         )
 
+    def test_build_organizer_tools_only_exposes_plan_diff_in_default_mode(self):
+        tools = organizer_service.build_organizer_tools()
+
+        self.assertEqual([tool["function"]["name"] for tool in tools], ["submit_plan_diff"])
+
+    def test_build_organizer_tools_description_uses_field_based_protocol(self):
+        tool = organizer_service.build_organizer_tools()[0]
+        description = tool["function"]["description"]
+
+        self.assertIn("字段含义", description)
+        self.assertIn("directory_renames=目录改名", description)
+        self.assertIn("unresolved_adds=新增待确认条目", description)
+        self.assertIn("target_dir 只写相对新目录生成位置的目录路径", description)
+
     def test_run_organizer_cycle_retries_with_full_assistant_message_for_invalid_plan_diff(self):
         initial_messages = [{"role": "user", "content": "请整理"}]
         first_message = SimpleNamespace(
@@ -560,7 +506,7 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
             tool_calls=[
                 self._tool_call(
                     "submit_plan_diff",
-                    '{"directory_renames": [], "move_updates": [{"source": "不存在.txt", "target": "Study/不存在.txt"}], "unresolved_adds": [], "unresolved_removals": [], "summary": "已更新"}',
+                    '{"directory_renames": [], "move_updates": [{"source": "不存在.txt", "target": "Study/不存在.txt"}], "unresolved_adds": [], "unresolved_removals": []}',
                 )
             ],
         )
@@ -603,7 +549,7 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
                                 id="call_1",
                                 function=SimpleNamespace(
                                     name="submit_plan_diff",
-                                    arguments='{"summary":"已分类 1 项"}',
+                                    arguments='{"directory_renames":[],"move_updates":[],"unresolved_adds":[],"unresolved_removals":[]}',
                                 ),
                             )
                         ],
@@ -721,7 +667,7 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
                                     "type": "function",
                                     "function": {
                                         "name": "submit_plan_diff",
-                                        "arguments": '{"directory_renames":[],"move_updates":[],"unresolved_adds":[],"unresolved_removals":[],"summary":"已更新"}',
+                                        "arguments": '{"directory_renames":[],"move_updates":[],"unresolved_adds":[],"unresolved_removals":[]}',
                                     },
                                 }
                             ],
@@ -742,7 +688,7 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
 
         self.assertEqual(message.content, "")
         self.assertEqual(message.tool_calls[0].function.name, "submit_plan_diff")
-        self.assertIn('"summary":"已更新"', message.tool_calls[0].function.arguments)
+        self.assertIn('"move_updates":[]', message.tool_calls[0].function.arguments)
 
 
 if __name__ == "__main__":

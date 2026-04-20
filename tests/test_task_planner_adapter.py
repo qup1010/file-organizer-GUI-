@@ -2,6 +2,7 @@ import unittest
 
 from file_organizer.app.task_planner_adapter import TaskPlannerAdapter
 from file_organizer.domain.models import MappingEntry, OrganizeTask, SourceRef, TargetSlot
+from file_organizer.organize.models import PendingPlan, PlanMove
 
 
 class TaskPlannerAdapterTests(unittest.TestCase):
@@ -61,6 +62,82 @@ class TaskPlannerAdapterTests(unittest.TestCase):
         self.assertEqual(review_task.mappings[0].target_slot_id, "Review")
         self.assertEqual(review_task.mappings[0].status, "review")
         self.assertEqual(review_pending.moves[0].target, "Review/md")
+
+    def test_apply_pending_plan_defaults_unresolved_items_to_review(self):
+        pending = PendingPlan(
+            directories=[],
+            moves=[PlanMove(source="md", target="md", raw="")],
+            user_constraints=[],
+            unresolved_items=["md"],
+            summary="",
+        )
+
+        rebuilt = self.adapter.apply_pending_plan(self.base_task, pending)
+        roundtrip = self.adapter.to_pending_plan(rebuilt)
+
+        self.assertEqual(rebuilt.mappings[0].target_slot_id, "Review")
+        self.assertEqual(rebuilt.mappings[0].status, "unresolved")
+        self.assertEqual(roundtrip.moves[0].target, "Review/md")
+        self.assertEqual(roundtrip.unresolved_items, ["md"])
+
+    def test_apply_pending_plan_preserves_unresolved_items_without_moves(self):
+        pending = PendingPlan(
+            directories=[],
+            moves=[],
+            user_constraints=[],
+            unresolved_items=["md"],
+            summary="",
+        )
+
+        rebuilt = self.adapter.apply_pending_plan(self.base_task, pending)
+        roundtrip = self.adapter.to_pending_plan(rebuilt)
+
+        self.assertEqual(rebuilt.mappings[0].target_slot_id, "Review")
+        self.assertEqual(rebuilt.mappings[0].status, "unresolved")
+        self.assertEqual(roundtrip.moves[0].target, "Review/md")
+        self.assertEqual(roundtrip.unresolved_items, ["md"])
+
+    def test_roundtrip_pending_plan_preserves_absolute_target_slots_outside_base_dir(self):
+        cross_root_task = OrganizeTask(
+            task_id="task-abs",
+            sources=[
+                SourceRef(
+                    ref_id="F001",
+                    display_name="md",
+                    entry_type="file",
+                    origin="D:/workspace/Inbox",
+                    relpath="md",
+                    suggested_purpose="学习资料",
+                )
+            ],
+            targets=[
+                TargetSlot(
+                    slot_id="D031",
+                    display_name="项目文档",
+                    real_path="D:/workspace/Projects/项目文档",
+                    depth=1,
+                    is_new=False,
+                )
+            ],
+            mappings=[
+                MappingEntry(
+                    source_ref_id="F001",
+                    target_slot_id="D031",
+                    status="assigned",
+                    user_overridden=False,
+                )
+            ],
+            strategy={},
+            user_constraints=[],
+            phase="planning",
+        )
+
+        pending = self.adapter.to_pending_plan(cross_root_task)
+        rebuilt = self.adapter.apply_pending_plan(cross_root_task, pending)
+
+        self.assertEqual(pending.moves[0].target, "D:/workspace/Projects/项目文档/md")
+        self.assertEqual(rebuilt.mappings[0].target_slot_id, "D031")
+        self.assertEqual(rebuilt.mappings[0].status, "assigned")
 
 
 if __name__ == "__main__":

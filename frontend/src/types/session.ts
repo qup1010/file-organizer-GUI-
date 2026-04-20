@@ -31,17 +31,41 @@ export type StrategyPrefixStyle = "none" | "numeric" | "category";
 export type StrategyCautionLevel = "conservative" | "balanced";
 export type OrganizeMode = "initial" | "incremental";
 export type TaskType = "organize_full_directory" | "organize_into_existing";
+export type OrganizeMethod = "categorize_into_new_structure" | "assign_into_existing_categories";
 export type DestinationIndexDepth = 1 | 2 | 3;
+
+export interface SessionSourceSelection {
+  source_type: "file" | "directory";
+  path: string;
+}
+
+export interface TargetProfileDirectory {
+  path: string;
+  label?: string;
+}
+
+export interface TargetProfile {
+  profile_id: string;
+  name: string;
+  directories: TargetProfileDirectory[];
+  created_at: string;
+  updated_at: string;
+}
 
 export interface SessionStrategySelection {
   template_id: StrategyTemplateId;
   organize_mode: OrganizeMode;
   task_type?: TaskType;
+  organize_method?: OrganizeMethod;
   destination_index_depth: DestinationIndexDepth;
   language: StrategyLanguage;
   density: StrategyDensity;
   prefix_style: StrategyPrefixStyle;
   caution_level: StrategyCautionLevel;
+  output_dir?: string;
+  target_profile_id?: string;
+  new_directory_root?: string;
+  review_root?: string;
   note: string;
 }
 
@@ -50,11 +74,13 @@ export interface SessionStrategySummary extends SessionStrategySelection {
   template_description?: string;
   task_type: TaskType;
   task_type_label: string;
+  organize_method: OrganizeMethod;
   organize_mode_label: string;
   language_label: string;
   density_label: string;
   prefix_style_label: string;
   caution_level_label: string;
+  target_directories?: string[];
   preview_directories?: string[];
 }
 
@@ -133,6 +159,12 @@ export interface PlanTargetSlot {
   relpath: string;
   depth: number;
   is_new: boolean;
+  real_path?: string;
+}
+
+export interface PlacementConfig {
+  new_directory_root: string;
+  review_root: string;
 }
 
 export interface PlanMappingEntry {
@@ -178,6 +210,7 @@ export interface PlanSnapshot {
   summary: string;
   items: PlanItem[];
   groups: PlanGroup[];
+  placement?: PlacementConfig;
   target_slots: PlanTargetSlot[];
   mappings: PlanMappingEntry[];
   display_plan?: any;
@@ -236,36 +269,11 @@ export interface RollbackReport {
   status: "success" | "partial_failure" | "aborted" | string;
 }
 
-export interface UnresolvedChoiceItem {
-  item_id: string;
-  display_name: string;
-  question: string;
-  suggested_folders: string[];
-}
-
-export interface UnresolvedChoiceResolution {
-  item_id: string;
-  display_name?: string;
-  selected_folder: string;
-  note: string;
-}
-
-export interface UnresolvedChoicesBlock {
-  type: "unresolved_choices";
-  request_id: string;
-  summary: string;
-  status?: "pending" | "submitted" | string;
-  items: UnresolvedChoiceItem[];
-  submitted_resolutions?: UnresolvedChoiceResolution[];
-}
-
-export type AssistantMessageBlock = UnresolvedChoicesBlock;
-
 export interface AssistantMessage {
   id: string;
   role: string;
   content: string;
-  blocks?: AssistantMessageBlock[];
+  blocks?: Array<Record<string, unknown>>;
   visibility?: "public" | "internal" | string;
 }
 
@@ -293,6 +301,7 @@ export type IntegrityFlags = Record<string, unknown> & {
 export interface SessionSnapshot {
   session_id: string;
   target_dir: string;
+  placement?: PlacementConfig;
   stage: SessionStage;
   summary: string;
   strategy: SessionStrategySummary;
@@ -351,10 +360,16 @@ export interface MessageResponse {
   session_snapshot: SessionSnapshot;
 }
 
-export interface ResolveUnresolvedChoicesResponse {
-  session_id: string;
-  assistant_message: AssistantMessage | null;
-  session_snapshot: SessionSnapshot;
+export interface CreateSessionRequest {
+  sources: SessionSourceSelection[];
+  resume_if_exists?: boolean;
+  organize_method: OrganizeMethod;
+  strategy?: SessionStrategySelection;
+  output_dir?: string;
+  target_profile_id?: string;
+  target_directories?: string[];
+  new_directory_root?: string;
+  review_root?: string;
 }
 
 export interface ConfirmTargetsRequest {
@@ -382,11 +397,6 @@ export interface UpdateItemRequest {
   target_dir?: string;
   target_slot?: string;
   move_to_review?: boolean;
-}
-
-export interface ResolveUnresolvedChoicesRequest {
-  request_id: string;
-  resolutions: UnresolvedChoiceResolution[];
 }
 
 export interface PrecheckResponse {
@@ -426,6 +436,9 @@ export interface JournalSummary {
     source: string | null;
     target: string | null;
     display_name: string;
+    item_id?: string | null;
+    source_ref_id?: string | null;
+    target_slot_id?: string | null;
   }[];
   items?: {
     action_type: string;
@@ -433,6 +446,9 @@ export interface JournalSummary {
     source: string | null;
     target: string | null;
     display_name: string;
+    item_id?: string | null;
+    source_ref_id?: string | null;
+    target_slot_id?: string | null;
   }[];
 }
 

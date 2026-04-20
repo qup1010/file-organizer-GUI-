@@ -55,7 +55,14 @@ class ScanWorkflowService:
         if is_incremental:
             selection = self.helpers._incremental_selection_snapshot(session)
             selected_targets = list(selection.get("target_directories") or [])
-            discovery_scan_lines = self.helpers._incremental_root_discovery_runner(Path(session.target_dir))
+            if self.helpers._can_use_single_directory_scan(session):
+                discovery_scan_lines = self.helpers._incremental_root_discovery_runner(Path(session.target_dir))
+            else:
+                discovery_scan_lines, _ = self.helpers._scan_source_collection(
+                    session,
+                    scan_runner or self.helpers._default_scan_runner,
+                    session_id=session.session_id,
+                )
             available_root_dirs = set(self.helpers._root_directory_options_from_scan(discovery_scan_lines))
             if not selected_targets or any(item not in available_root_dirs for item in selected_targets):
                 session.scan_lines = discovery_scan_lines
@@ -90,11 +97,18 @@ class ScanWorkflowService:
                 self.helpers._record_event("plan.updated", session)
                 return SessionMutationResult(session_snapshot=self.helpers._build_snapshot(session))
 
-            full_scan_lines = self.helpers._call_with_optional_session_id(
-                scan_runner or self.helpers._default_scan_runner,
-                Path(session.target_dir),
-                session_id=session.session_id,
-            )
+            if self.helpers._can_use_single_directory_scan(session):
+                full_scan_lines = self.helpers._call_with_optional_session_id(
+                    scan_runner or self.helpers._default_scan_runner,
+                    Path(session.target_dir),
+                    session_id=session.session_id,
+                )
+            else:
+                full_scan_lines, _ = self.helpers._scan_source_collection(
+                    session,
+                    scan_runner or self.helpers._default_scan_runner,
+                    session_id=session.session_id,
+                )
             active_scan_lines = self.helpers._filter_incremental_pending_scan_lines(full_scan_lines, selected_targets)
             session.incremental_selection = {
                 **selection,
@@ -184,8 +198,9 @@ class ScanWorkflowService:
         self.helpers._ensure_schema_compatible_for_resume(session)
         self.helpers._ensure_not_locked(session)
         is_incremental = self.helpers._normalize_organize_mode(session.organize_mode) == "incremental"
+        has_preselected_targets = bool(session.selected_target_directories)
         if scan_runner is not None:
-            if is_incremental:
+            if is_incremental and not has_preselected_targets:
                 self.helpers._run_incremental_target_discovery(session, scan_runner)
                 return self.helpers._load_or_raise(session_id)
             self.helpers._run_scan_sync(session, scan_runner)
@@ -194,8 +209,13 @@ class ScanWorkflowService:
         if session.stage not in {"draft", "stale", "interrupted", "planning", "selecting_incremental_scope"}:
             raise RuntimeError("SESSION_STAGE_CONFLICT")
 
-        if is_incremental:
+        if is_incremental and not has_preselected_targets:
             self.helpers._run_incremental_target_discovery(session, self.helpers._incremental_root_discovery_runner)
+            return self.helpers._load_or_raise(session_id)
+
+        if not self.helpers._can_use_single_directory_scan(session):
+            self.helpers._run_scan_sync(session, scan_runner or self.helpers._default_scan_runner)
+            self.helpers.orchestrator.maybe_run_auto_plan_after_scan(session)
             return self.helpers._load_or_raise(session_id)
 
         target_dir = Path(session.target_dir).resolve()

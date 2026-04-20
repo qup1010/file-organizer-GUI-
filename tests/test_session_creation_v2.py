@@ -1,0 +1,222 @@
+import shutil
+import time
+import unittest
+from pathlib import Path
+from unittest import mock
+
+from fastapi.testclient import TestClient
+
+from file_organizer.api.main import create_app
+from file_organizer.app.session_service import OrganizerSessionService
+from file_organizer.app.session_store import SessionStore
+
+
+class SessionCreationV2Tests(unittest.TestCase):
+    def setUp(self):
+        self.root = Path("test_temp_session_creation_v2")
+        if self.root.exists():
+            shutil.rmtree(self.root)
+        self.sources_dir = self.root / "Sources"
+        self.sources_dir.mkdir(parents=True, exist_ok=True)
+        self.output_dir = self.root / "Output"
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.target_a = self.root / "CategoriesA"
+        self.target_b = self.root / "CategoriesB"
+        self.target_a.mkdir(parents=True, exist_ok=True)
+        self.target_b.mkdir(parents=True, exist_ok=True)
+        self.store = SessionStore(self.root / "sessions")
+        self.service = OrganizerSessionService(self.store)
+        self.client = TestClient(create_app(self.service))
+
+    def tearDown(self):
+        if self.root.exists():
+            last_error = None
+            for _ in range(5):
+                try:
+                    shutil.rmtree(self.root)
+                    return
+                except PermissionError as exc:
+                    last_error = exc
+                    time.sleep(0.1)
+            if last_error is not None:
+                raise last_error
+
+    def test_post_sessions_accepts_sources_and_output_dir(self):
+        response = self.client.post(
+            "/api/sessions",
+            json={
+                "sources": [{"source_type": "directory", "path": str(self.sources_dir)}],
+                "resume_if_exists": False,
+                "organize_method": "categorize_into_new_structure",
+                "output_dir": str(self.output_dir),
+                "strategy": {
+                    "template_id": "general_downloads",
+                    "task_type": "organize_full_directory",
+                    "organize_method": "categorize_into_new_structure",
+                },
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["session_snapshot"]["strategy"]["organize_method"], "categorize_into_new_structure")
+        self.assertEqual(payload["session_snapshot"]["strategy"]["output_dir"], str(self.output_dir))
+
+    def test_post_sessions_rejects_missing_output_dir_for_new_structure(self):
+        response = self.client.post(
+            "/api/sessions",
+            json={
+                "sources": [{"source_type": "directory", "path": str(self.sources_dir)}],
+                "resume_if_exists": False,
+                "organize_method": "categorize_into_new_structure",
+                "strategy": {"template_id": "general_downloads"},
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error_code"], "OUTPUT_DIR_REQUIRED")
+
+    def test_post_sessions_accepts_target_directories_for_existing_categories(self):
+        response = self.client.post(
+            "/api/sessions",
+            json={
+                "sources": [{"source_type": "directory", "path": str(self.sources_dir)}],
+                "resume_if_exists": False,
+                "organize_method": "assign_into_existing_categories",
+                "target_directories": [str(self.target_a), str(self.target_b)],
+                "strategy": {
+                    "template_id": "general_downloads",
+                    "task_type": "organize_into_existing",
+                    "organize_method": "assign_into_existing_categories",
+                },
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["session_snapshot"]["strategy"]["organize_method"], "assign_into_existing_categories")
+        self.assertEqual(
+            payload["session_snapshot"]["strategy"]["target_directories"],
+            [str(self.target_a), str(self.target_b)],
+        )
+
+    def test_target_profile_crud_and_create_session_with_profile(self):
+        created = self.client.post(
+            "/api/target-profiles",
+            json={
+                "name": "办公目录池",
+                "directories": [
+                    {"path": str(self.target_a), "label": "A"},
+                    {"path": str(self.target_b), "label": "B"},
+                ],
+            },
+        )
+        self.assertEqual(created.status_code, 200)
+        profile_id = created.json()["item"]["profile_id"]
+
+        listed = self.client.get("/api/target-profiles")
+        self.assertEqual(listed.status_code, 200)
+        self.assertEqual(len(listed.json()["items"]), 1)
+
+        updated = self.client.patch(
+            f"/api/target-profiles/{profile_id}",
+            json={"name": "办公目录池-已更新"},
+        )
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(updated.json()["item"]["name"], "办公目录池-已更新")
+
+        response = self.client.post(
+            "/api/sessions",
+            json={
+                "sources": [{"source_type": "directory", "path": str(self.sources_dir)}],
+                "resume_if_exists": False,
+                "organize_method": "assign_into_existing_categories",
+                "target_profile_id": profile_id,
+                "strategy": {
+                    "template_id": "general_downloads",
+                    "task_type": "organize_into_existing",
+                    "organize_method": "assign_into_existing_categories",
+                },
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["session_snapshot"]["strategy"]["target_profile_id"], profile_id)
+
+        deleted = self.client.delete(f"/api/target-profiles/{profile_id}")
+        self.assertEqual(deleted.status_code, 200)
+
+    def test_start_scan_supports_mixed_source_collection(self):
+        source_dir = self.sources_dir / "dir-source"
+        source_dir.mkdir(parents=True, exist_ok=True)
+        single_file = self.sources_dir / "lonely.txt"
+        single_file.write_text("hello", encoding="utf-8")
+
+        created = self.service.create_session(
+            [
+                {"source_type": "directory", "path": str(source_dir)},
+                {"source_type": "file", "path": str(single_file)},
+            ],
+            resume_if_exists=False,
+            organize_method="categorize_into_new_structure",
+            strategy={"template_id": "general_downloads"},
+            output_dir=str(self.output_dir),
+        )
+        session = created.session
+        assert session is not None
+
+        def scan_runner(_path: Path, session_id: str | None = None):
+            del session_id
+            return "inside.txt | file | 资料 | 目录中的文件"
+
+        with mock.patch(
+            "file_organizer.app.session_service.analysis_service.run_analysis_cycle_for_entries",
+            return_value="lonely.txt | file | 资料 | 单文件来源",
+        ):
+            scanned = self.service.start_scan(session.session_id, scan_runner=scan_runner)
+
+        self.assertEqual(scanned.stage, "planning")
+        snapshot = self.service.get_snapshot(session.session_id)
+        item_relpaths = {item["source_relpath"] for item in snapshot.get("source_tree_entries", [])}
+        self.assertIn("dir-source/inside.txt", item_relpaths)
+        self.assertIn("lonely.txt", item_relpaths)
+
+    def test_scan_source_collection_keeps_multiple_file_sources_flat_paths(self):
+        first_file = self.sources_dir / "future_architecture.md"
+        second_file = self.sources_dir / "分析.png"
+        first_file.write_text("hello", encoding="utf-8")
+        second_file.write_text("hello", encoding="utf-8")
+
+        created = self.service.create_session(
+            [
+                {"source_type": "file", "path": str(first_file)},
+                {"source_type": "file", "path": str(second_file)},
+            ],
+            resume_if_exists=False,
+            organize_method="categorize_into_new_structure",
+            strategy={"template_id": "general_downloads"},
+            output_dir=str(self.output_dir),
+        )
+        session = created.session
+        assert session is not None
+
+        def analyze_entries(_directory: Path, entry_names: list[str], session_id: str | None = None):
+            del session_id
+            name = entry_names[0]
+            if name.endswith(".md"):
+                return f"{name} | file | 技术文档 | 架构说明"
+            return f"{name} | file | 图片/截图 | 分析截图"
+
+        with mock.patch(
+            "file_organizer.app.session_service.analysis_service.run_analysis_cycle_for_entries",
+            side_effect=analyze_entries,
+        ):
+            scan_lines, entries = self.service._scan_source_collection(session, scan_runner=lambda _path: "")
+
+        self.assertEqual({entry["source_relpath"] for entry in entries}, {"future_architecture.md", "分析.png"})
+        self.assertNotIn("future_architecture.md/future_architecture.md", scan_lines)
+        self.assertNotIn("分析.png/分析.png", scan_lines)
+
+        session.scan_lines = scan_lines
+        self.service._ensure_planner_items(session, scan_lines)
+        tree_relpaths = {item["source_relpath"] for item in session.source_tree_entries}
+        self.assertEqual(tree_relpaths, {"future_architecture.md", "分析.png"})

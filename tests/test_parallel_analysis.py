@@ -69,8 +69,8 @@ class ParallelAnalysisTests(unittest.TestCase):
                 arguments=json.dumps(
                     {
                         "items": [
-                            {"entry_name": "alpha.txt", "suggested_purpose": "文档", "summary": "alpha"},
-                            {"entry_name": "keepdir", "suggested_purpose": "目录", "summary": "keepdir"},
+                            {"entry_id": "F001", "entry_type": "file", "suggested_purpose": "文档", "summary": "alpha"},
+                            {"entry_id": "F002", "entry_type": "dir", "suggested_purpose": "目录", "summary": "keepdir"},
                         ]
                     },
                     ensure_ascii=False,
@@ -205,7 +205,7 @@ class ParallelAnalysisTests(unittest.TestCase):
         missing_batch = set(analysis_service._split_batches(entries)[0])
         self.assertIsNotNone(rendered)
         for name in missing_batch:
-            self.assertIn(f"{name} | 待判断 | 分析未覆盖，需手动确认", rendered)
+            self.assertIn(f"{name} |  | 待判断 | 分析未覆盖，需手动确认", rendered)
 
 
 if __name__ == "__main__":

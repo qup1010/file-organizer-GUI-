@@ -87,6 +87,9 @@ DEFAULT_DESTINATION_INDEX_DEPTH = 2
 TASK_TYPE_ORGANIZE_FULL_DIRECTORY = "organize_full_directory"
 TASK_TYPE_ORGANIZE_INTO_EXISTING = "organize_into_existing"
 DEFAULT_TASK_TYPE = TASK_TYPE_ORGANIZE_FULL_DIRECTORY
+ORGANIZE_METHOD_CATEGORIZE_INTO_NEW_STRUCTURE = "categorize_into_new_structure"
+ORGANIZE_METHOD_ASSIGN_INTO_EXISTING_CATEGORIES = "assign_into_existing_categories"
+DEFAULT_ORGANIZE_METHOD = ORGANIZE_METHOD_CATEGORIZE_INTO_NEW_STRUCTURE
 
 STRATEGY_TEMPLATES = deepcopy(_CATALOG["strategy_templates"])
 LANGUAGES = deepcopy(_CATALOG["languages"])
@@ -100,6 +103,28 @@ def task_type_for_organize_mode(organize_mode: str | None) -> str:
     if normalized == "incremental":
         return TASK_TYPE_ORGANIZE_INTO_EXISTING
     return TASK_TYPE_ORGANIZE_FULL_DIRECTORY
+
+
+def organize_method_for_task_type(task_type: str | None) -> str:
+    normalized = str(task_type or DEFAULT_TASK_TYPE).strip().lower()
+    if normalized == TASK_TYPE_ORGANIZE_INTO_EXISTING:
+        return ORGANIZE_METHOD_ASSIGN_INTO_EXISTING_CATEGORIES
+    return ORGANIZE_METHOD_CATEGORIZE_INTO_NEW_STRUCTURE
+
+
+def organize_method_for_organize_mode(organize_mode: str | None) -> str:
+    return organize_method_for_task_type(task_type_for_organize_mode(organize_mode))
+
+
+def task_type_for_organize_method(organize_method: str | None) -> str:
+    normalized = str(organize_method or DEFAULT_ORGANIZE_METHOD).strip().lower()
+    if normalized == ORGANIZE_METHOD_ASSIGN_INTO_EXISTING_CATEGORIES:
+        return TASK_TYPE_ORGANIZE_INTO_EXISTING
+    return TASK_TYPE_ORGANIZE_FULL_DIRECTORY
+
+
+def organize_mode_for_organize_method(organize_method: str | None) -> str:
+    return organize_mode_for_task_type(task_type_for_organize_method(organize_method))
 
 
 def organize_mode_for_task_type(task_type: str | None) -> str:
@@ -119,6 +144,16 @@ def task_type_label(task_type: str | None) -> str:
 def _normalize_task_type(value: str | None) -> str:
     normalized = str(value or "").strip().lower()
     if normalized in {TASK_TYPE_ORGANIZE_FULL_DIRECTORY, TASK_TYPE_ORGANIZE_INTO_EXISTING}:
+        return normalized
+    return ""
+
+
+def _normalize_organize_method(value: str | None) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in {
+        ORGANIZE_METHOD_CATEGORIZE_INTO_NEW_STRUCTURE,
+        ORGANIZE_METHOD_ASSIGN_INTO_EXISTING_CATEGORIES,
+    }:
         return normalized
     return ""
 
@@ -185,18 +220,29 @@ def normalize_strategy_selection(raw: dict | None = None) -> dict:
 
     requested_task_type = _normalize_task_type(payload.get("task_type"))
     requested_organize_mode = str(payload.get("organize_mode") or "").strip().lower()
+    requested_organize_method = _normalize_organize_method(payload.get("organize_method"))
     if requested_organize_mode not in {"initial", "incremental"}:
         requested_organize_mode = ""
     if requested_task_type and requested_organize_mode:
         expected_mode = organize_mode_for_task_type(requested_task_type)
         if expected_mode != requested_organize_mode:
             raise ValueError("TASK_TYPE_CONFLICT")
-    organize_mode = (
-        organize_mode_for_task_type(requested_task_type)
-        if requested_task_type
-        else (requested_organize_mode or DEFAULT_ORGANIZE_MODE)
+    if requested_task_type and requested_organize_method:
+        expected_method = organize_method_for_task_type(requested_task_type)
+        if expected_method != requested_organize_method:
+            raise ValueError("TASK_TYPE_CONFLICT")
+    if requested_organize_mode and requested_organize_method:
+        expected_method = organize_method_for_organize_mode(requested_organize_mode)
+        if expected_method != requested_organize_method:
+            raise ValueError("TASK_TYPE_CONFLICT")
+    organize_method = (
+        requested_organize_method
+        or (organize_method_for_task_type(requested_task_type) if requested_task_type else "")
+        or (organize_method_for_organize_mode(requested_organize_mode) if requested_organize_mode else "")
+        or DEFAULT_ORGANIZE_METHOD
     )
-    task_type = requested_task_type or task_type_for_organize_mode(organize_mode)
+    task_type = requested_task_type or task_type_for_organize_method(organize_method)
+    organize_mode = requested_organize_mode or organize_mode_for_organize_method(organize_method)
 
     try:
         destination_index_depth = int(payload.get("destination_index_depth") or DEFAULT_DESTINATION_INDEX_DEPTH)
@@ -205,6 +251,15 @@ def normalize_strategy_selection(raw: dict | None = None) -> dict:
     destination_index_depth = max(1, min(3, destination_index_depth))
 
     note = str(payload.get("note") or "").strip()
+    output_dir = str(payload.get("output_dir") or "").strip()
+    target_profile_id = str(payload.get("target_profile_id") or "").strip()
+    new_directory_root = str(payload.get("new_directory_root") or "").strip()
+    review_root = str(payload.get("review_root") or "").strip()
+    target_directories = [
+        str(item).strip()
+        for item in (payload.get("target_directories") or [])
+        if str(item).strip()
+    ]
     preview_directories = build_preview_directories(
         template_id,
         language=language,
@@ -226,9 +281,15 @@ def normalize_strategy_selection(raw: dict | None = None) -> dict:
         "caution_level_label": CAUTION_LEVELS[caution_level]["label"],
         "task_type": task_type,
         "task_type_label": task_type_label(task_type),
+        "organize_method": organize_method,
         "organize_mode": organize_mode,
         "organize_mode_label": task_type_label(task_type),
         "destination_index_depth": destination_index_depth,
+        "output_dir": output_dir,
+        "target_profile_id": target_profile_id,
+        "target_directories": target_directories,
+        "new_directory_root": new_directory_root,
+        "review_root": review_root,
         "note": note,
         "preview_directories": preview_directories,
     }
@@ -259,6 +320,10 @@ def build_strategy_prompt_fragment(selection: dict | None = None) -> str:
             caution["prompt_fragment"],
             f"- 目标目录可见深度为 {normalized['destination_index_depth']}。",
         ]
+    if normalized["new_directory_root"]:
+        lines.append(f"- 新目录生成位置：{normalized['new_directory_root']}")
+    if normalized["review_root"]:
+        lines.append(f"- Review 目录位置：{normalized['review_root']}")
     if normalized["note"]:
         lines.append(f"用户补充说明：{normalized['note']}")
     return "\n".join(lines)

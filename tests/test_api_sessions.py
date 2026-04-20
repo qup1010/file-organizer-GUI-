@@ -688,43 +688,13 @@ class SessionApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.json()["error_code"], "INCREMENTAL_TARGETS_EMPTY")
 
-    def test_unresolved_resolutions_endpoint_returns_updated_snapshot(self):
-        created = self.client.post(
-            "/api/sessions",
-            json={"target_dir": str(self.target_dir), "resume_if_exists": False},
-        ).json()
+    def test_unresolved_resolutions_endpoint_is_removed(self):
+        response = self.client.post(
+            "/api/sessions/session-legacy/unresolved-resolutions",
+            json={"request_id": "req_1", "resolutions": []},
+        )
 
-        with mock.patch.object(self.service, "resolve_unresolved_choices") as resolve_unresolved_choices:
-            resolve_unresolved_choices.return_value = mock.Mock(
-                assistant_message={"role": "assistant", "content": ""},
-                session_snapshot={"stage": "planning", "messages": []},
-            )
-
-            response = self.client.post(
-                f"/api/sessions/{created['session_id']}/unresolved-resolutions",
-                json={
-                    "request_id": "req_1",
-                    "resolutions": [{"item_id": "md", "selected_folder": "Review", "note": ""}],
-                },
-            )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["session_snapshot"]["stage"], "planning")
-
-    def test_unresolved_resolutions_endpoint_returns_409_for_conflict(self):
-        created = self.client.post(
-            "/api/sessions",
-            json={"target_dir": str(self.target_dir), "resume_if_exists": False},
-        ).json()
-
-        with mock.patch.object(self.service, "resolve_unresolved_choices", side_effect=RuntimeError("UNRESOLVED_ITEM_CONFLICT")):
-            response = self.client.post(
-                f"/api/sessions/{created['session_id']}/unresolved-resolutions",
-                json={"request_id": "req_1", "resolutions": []},
-            )
-
-        self.assertEqual(response.status_code, 409)
-        self.assertEqual(response.json()["error_code"], "UNRESOLVED_ITEM_CONFLICT")
+        self.assertEqual(response.status_code, 404)
 
 
 if __name__ == "__main__":

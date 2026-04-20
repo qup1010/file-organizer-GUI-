@@ -2,6 +2,16 @@
 
 > 本文档是一份长期架构蓝图，基于对当前系统的审计和对核心领域的重新理解而编写。
 > 用于指导后续迭代，不要求一次性实现。
+>
+> 实现状态更新：
+> - 截至 2026-04-20，本文档中的核心主干已经有相当一部分落地，包括：
+>   - `sources[]` 输入模型
+>   - `SourceRef / TargetSlot / MappingEntry / OrganizeTask`
+>   - 分析层与规划层的 ID 主语
+>   - 映射驱动的快照、预检和执行前模型
+>   - execution / rollback journal 的路径 + ID 双写
+> - 当前更准确的实现状态，请参考：
+>   - [实现状态说明](/D:/code/projects/active/FilePilot/docs/implementation-status-2026-04-20.md)
 
 ---
 

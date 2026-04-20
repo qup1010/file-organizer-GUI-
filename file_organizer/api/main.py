@@ -26,9 +26,15 @@ logger = logging.getLogger(__name__)
 
 
 class CreateSessionPayload(BaseModel):
-    target_dir: str
+    sources: list[dict[str, Any]] = Field(default_factory=list)
     resume_if_exists: bool = False
+    organize_method: str
     strategy: dict[str, Any] | None = None
+    output_dir: str | None = None
+    target_profile_id: str | None = None
+    target_directories: list[str] = Field(default_factory=list)
+    new_directory_root: str | None = None
+    review_root: str | None = None
 
 
 class MessagePayload(BaseModel):
@@ -37,6 +43,21 @@ class MessagePayload(BaseModel):
 
 class ConfirmTargetsPayload(BaseModel):
     selected_target_dirs: list[str] = Field(default_factory=list)
+
+
+class TargetProfileDirectoryPayload(BaseModel):
+    path: str
+    label: str | None = None
+
+
+class CreateTargetProfilePayload(BaseModel):
+    name: str
+    directories: list[TargetProfileDirectoryPayload] = Field(default_factory=list)
+
+
+class UpdateTargetProfilePayload(BaseModel):
+    name: str | None = None
+    directories: list[TargetProfileDirectoryPayload] | None = None
 
 
 class UpdateItemPayload(BaseModel):
@@ -423,13 +444,28 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
     def create_session(payload: CreateSessionPayload):
         try:
             result = app.state.service.create_session(
-                payload.target_dir,
+                payload.sources,
                 payload.resume_if_exists,
+                payload.organize_method,
                 payload.strategy,
+                output_dir=str(payload.output_dir or ""),
+                target_profile_id=str(payload.target_profile_id or ""),
+                target_directories=list(payload.target_directories or []),
+                new_directory_root=str(payload.new_directory_root or ""),
+                review_root=str(payload.review_root or ""),
             )
         except ValueError as exc:
             if str(exc) == "TASK_TYPE_CONFLICT":
                 return JSONResponse(status_code=400, content={"error_code": "TASK_TYPE_CONFLICT"})
+            if str(exc) in {
+                "SOURCES_REQUIRED",
+                "OUTPUT_DIR_REQUIRED",
+                "NEW_DIRECTORY_ROOT_REQUIRED",
+                "REVIEW_ROOT_REQUIRED",
+                "TARGET_DIRECTORIES_REQUIRED",
+                "TARGET_PROFILE_NOT_FOUND",
+            }:
+                return JSONResponse(status_code=400, content={"error_code": str(exc)})
             raise
         except RuntimeError as exc:
             if str(exc) == "SESSION_LOCKED":
@@ -446,6 +482,41 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
             ),
             "session_snapshot": app.state.service.get_snapshot(session.session_id) if session else None,
         }
+
+    @app.get("/api/target-profiles")
+    def list_target_profiles():
+        return {"items": app.state.service.list_target_profiles()}
+
+    @app.post("/api/target-profiles")
+    def create_target_profile(payload: CreateTargetProfilePayload):
+        try:
+            profile = app.state.service.create_target_profile(
+                payload.name,
+                [item.model_dump() for item in payload.directories],
+            )
+            return {"item": profile}
+        except ValueError as exc:
+            if str(exc) == "TARGET_PROFILE_NAME_REQUIRED":
+                return JSONResponse(status_code=400, content={"error_code": str(exc)})
+            raise
+
+    @app.patch("/api/target-profiles/{profile_id}")
+    def update_target_profile(profile_id: str, payload: UpdateTargetProfilePayload):
+        try:
+            profile = app.state.service.update_target_profile(
+                profile_id,
+                name=payload.name,
+                directories=([item.model_dump() for item in payload.directories] if payload.directories is not None else None),
+            )
+            return {"item": profile}
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="TARGET_PROFILE_NOT_FOUND")
+
+    @app.delete("/api/target-profiles/{profile_id}")
+    def delete_target_profile(profile_id: str):
+        if not app.state.service.delete_target_profile(profile_id):
+            raise HTTPException(status_code=404, detail="TARGET_PROFILE_NOT_FOUND")
+        return {"status": "deleted", "profile_id": profile_id}
 
     @app.get("/api/sessions/{session_id}")
     def get_session(session_id: str):
@@ -562,32 +633,10 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
                 raise HTTPException(status_code=404, detail="ITEM_NOT_FOUND")
             if str(exc) == "TARGET_SLOT_NOT_FOUND":
                 raise HTTPException(status_code=404, detail="TARGET_SLOT_NOT_FOUND")
+            if str(exc) in {"ABSOLUTE_TARGET_DIR_NOT_ALLOWED", "REVIEW_SUBDIRECTORY_NOT_ALLOWED"}:
+                return _error_response(app.state.service, session_id, str(exc), 400)
             if str(exc) == "INCREMENTAL_TARGET_NOT_ALLOWED":
                 return _error_response(app.state.service, session_id, "INCREMENTAL_TARGET_NOT_ALLOWED", 409)
-            return _error_response(app.state.service, session_id, "SESSION_STAGE_CONFLICT", 409)
-
-    @app.post("/api/sessions/{session_id}/unresolved-resolutions")
-    def resolve_unresolved_choices(session_id: str, payload: dict):
-        try:
-            result = app.state.service.resolve_unresolved_choices(
-                session_id,
-                str(payload.get("request_id") or ""),
-                list(payload.get("resolutions") or []),
-            )
-            return {
-                "session_id": session_id,
-                "assistant_message": result.assistant_message,
-                "session_snapshot": result.session_snapshot,
-            }
-        except FileNotFoundError:
-            raise HTTPException(status_code=404, detail="SESSION_NOT_FOUND")
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc))
-        except RuntimeError as exc:
-            if str(exc) == "UNRESOLVED_REQUEST_NOT_FOUND":
-                return _error_response(app.state.service, session_id, "UNRESOLVED_REQUEST_NOT_FOUND", 409)
-            if str(exc) == "UNRESOLVED_ITEM_CONFLICT":
-                return _error_response(app.state.service, session_id, "UNRESOLVED_ITEM_CONFLICT", 409)
             return _error_response(app.state.service, session_id, "SESSION_STAGE_CONFLICT", 409)
 
     @app.post("/api/sessions/{session_id}/precheck")
@@ -669,6 +718,11 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
 
     @app.get("/api/sessions/{session_id}/events")
     def events(session_id: str, request: Request):
+        try:
+            app.state.service.get_snapshot(session_id)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="SESSION_NOT_FOUND")
+
         def stream():
             snapshot = app.state.service.get_snapshot(session_id)
             initial_event = {

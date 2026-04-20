@@ -22,13 +22,16 @@ from file_organizer.app.models import (
     ExecutionState,
     OrganizerSession,
     PendingPlanPayload,
+    PlacementPayload,
     PlanGroupPayload,
     PlanMappingPayload,
     PlanSnapshotItem,
     PlanSnapshotPayload,
     PlanTargetSlotPayload,
     SessionMutationResult,
+    SourceCollectionItem,
     TaskState,
+    TargetProfile,
     utc_now_iso,
 )
 from file_organizer.app.planning_conversation_service import PlanningConversationService
@@ -38,6 +41,7 @@ from file_organizer.app.scan_workflow_service import ScanWorkflowService
 from file_organizer.app.snapshot_builder import SnapshotBuilder
 from file_organizer.app.source_manager import SourceManager
 from file_organizer.app.session_store import SessionStore
+from file_organizer.app.target_profile_store import TargetProfileStore
 from file_organizer.app.target_manager import TargetManager
 from file_organizer.app.task_planner_adapter import TaskPlannerAdapter
 from file_organizer.domain.models import MappingEntry, OrganizeTask, SourceRef, TargetSlot
@@ -46,8 +50,11 @@ from file_organizer.organize import service as organize_service
 from file_organizer.organize.models import FinalPlan, PendingPlan, PlanMove
 from file_organizer.organize.strategy_templates import (
     build_strategy_prompt_fragment,
+    organize_method_for_organize_mode,
+    organize_mode_for_organize_method,
     normalize_strategy_selection,
     task_type_for_organize_mode,
+    task_type_for_organize_method,
 )
 from file_organizer.rollback import service as rollback_service
 from file_organizer.shared.logging_utils import append_debug_event
@@ -64,6 +71,7 @@ class OrganizerSessionService:
 
     def __init__(self, store: SessionStore, scanner: AsyncScanner | None = None):
         self.store = store
+        self.target_profiles = TargetProfileStore(self.store.root_dir / "target_profiles")
         self.async_scanner = scanner or AsyncScanner()
         self._event_log: dict[str, list[dict]] = {}
         self._subscribers: dict[str, list[Queue]] = {}
@@ -153,6 +161,113 @@ class OrganizerSessionService:
         return "incremental" if str(value or "").strip().lower() == "incremental" else "initial"
 
     @staticmethod
+    def _normalize_organize_method(value: str | None) -> str:
+        return (
+            "assign_into_existing_categories"
+            if str(value or "").strip().lower() == "assign_into_existing_categories"
+            else "categorize_into_new_structure"
+        )
+
+    def _reconcile_session_strategy_fields(self, session: OrganizerSession) -> bool:
+        normalized_mode = self._normalize_organize_mode(session.organize_mode)
+        expected_method = organize_method_for_organize_mode(normalized_mode)
+        changed = False
+
+        if session.organize_mode != normalized_mode:
+            session.organize_mode = normalized_mode
+            changed = True
+
+        if self._normalize_organize_method(session.organize_method) != expected_method:
+            session.organize_method = expected_method
+            changed = True
+
+        return changed
+
+    @staticmethod
+    def _normalize_source_collection(
+        sources: list[dict] | list[SourceCollectionItem] | None,
+    ) -> list[SourceCollectionItem]:
+        normalized: list[SourceCollectionItem] = []
+        for entry in sources or []:
+            if isinstance(entry, SourceCollectionItem):
+                item = entry
+            elif isinstance(entry, dict):
+                item = SourceCollectionItem.from_dict(entry)
+            else:
+                item = None
+            if item is not None:
+                normalized.append(item)
+        return normalized
+
+    @staticmethod
+    def _normalize_target_directories(value: list[str] | None) -> list[str]:
+        normalized: list[str] = []
+        for item in value or []:
+            text = str(item or "").strip()
+            if text:
+                normalized.append(text)
+        return list(dict.fromkeys(normalized))
+
+    @staticmethod
+    def _normalize_placement_root(value: str | None) -> str:
+        text = str(value or "").strip()
+        return str(Path(text).resolve()) if text else ""
+
+    @classmethod
+    def _default_review_root(cls, new_directory_root: str) -> str:
+        normalized_new_root = cls._normalize_placement_root(new_directory_root)
+        if not normalized_new_root:
+            return ""
+        return str((Path(normalized_new_root) / "Review").resolve())
+
+    @classmethod
+    def _placement_payload(
+        cls,
+        placement: PlacementPayload | dict | None = None,
+        *,
+        new_directory_root: str | None = None,
+        review_root: str | None = None,
+    ) -> PlacementPayload:
+        base = PlacementPayload.from_dict(placement)
+        normalized_new_root = cls._normalize_placement_root(
+            new_directory_root if new_directory_root is not None else base.new_directory_root
+        )
+        normalized_review_root = cls._normalize_placement_root(
+            review_root if review_root is not None else base.review_root
+        )
+        if normalized_new_root and not normalized_review_root:
+            normalized_review_root = cls._default_review_root(normalized_new_root)
+        return PlacementPayload(
+            new_directory_root=normalized_new_root,
+            review_root=normalized_review_root,
+        )
+
+    @staticmethod
+    def _derive_session_root_dir(
+        source_collection: list[SourceCollectionItem],
+        organize_method: str,
+        *,
+        output_dir: str = "",
+        target_directories: list[str] | None = None,
+    ) -> Path:
+        if output_dir.strip():
+            return Path(output_dir).resolve()
+        paths = [Path(item.path).resolve() for item in source_collection if str(item.path).strip()]
+        if not paths:
+            raise ValueError("SOURCES_REQUIRED")
+        if len(paths) == 1:
+            path = paths[0]
+            return path if path.is_dir() else path.parent
+        directory_paths = [path if path.is_dir() else path.parent for path in paths]
+        common = Path(directory_paths[0])
+        for candidate in directory_paths[1:]:
+            while not str(candidate).lower().startswith(str(common).lower()) and common != common.parent:
+                common = common.parent
+            while common != common.parent and not str(candidate).lower().startswith(str(common).lower()):
+                common = common.parent
+        return common.resolve()
+
+    @staticmethod
     def _normalize_destination_index_depth(value: int | str | None) -> int:
         try:
             parsed = int(value or 2)
@@ -166,6 +281,28 @@ class OrganizerSessionService:
         if len(text) >= 2 and text[0].upper() == "D" and text[1:].isdigit():
             return int(text[1:])
         return 0
+
+    @staticmethod
+    def _is_absolute_target_path(value: str | None) -> bool:
+        try:
+            return Path(str(value or "").strip()).is_absolute()
+        except OSError:
+            return False
+
+    def _resolve_target_real_path(self, session: OrganizerSession, target_dir: str) -> Path:
+        text = str(target_dir or "").strip()
+        candidate = Path(text)
+        if candidate.is_absolute():
+            return candidate.resolve()
+        placement = self._placement_payload(session.placement)
+        base_root = placement.new_directory_root or session.target_dir
+        return (Path(base_root).resolve() / text).resolve()
+
+    def _review_target_path(self, session: OrganizerSession, source_relpath: str) -> Path:
+        placement = self._placement_payload(session.placement)
+        filename = Path(str(source_relpath or "")).name
+        base_root = placement.review_root or self._default_review_root(placement.new_directory_root or session.target_dir)
+        return (Path(base_root).resolve() / filename).resolve()
 
     @staticmethod
     def _task_phase_for_stage(stage: str) -> str:
@@ -185,7 +322,6 @@ class OrganizerSessionService:
         return "setup"
 
     def _source_refs_from_session(self, session: OrganizerSession) -> list[SourceRef]:
-        source_origin = str(Path(session.target_dir).resolve())
         planner_items = list(session.planner_items or [])
         if planner_items:
             refs: list[SourceRef] = []
@@ -193,6 +329,7 @@ class OrganizerSessionService:
                 source_relpath = str(item.get("source_relpath") or "").replace("\\", "/").strip()
                 if not source_relpath:
                     continue
+                source_origin, _ = self._origin_for_source_relpath(session, source_relpath)
                 refs.append(
                     SourceRef(
                         ref_id=str(item.get("planner_id") or self._planner_id_for_source(session, source_relpath) or source_relpath),
@@ -213,6 +350,7 @@ class OrganizerSessionService:
             source_relpath = str(entry.get("source_relpath") or "").replace("\\", "/").strip()
             if not source_relpath:
                 continue
+            source_origin, _ = self._origin_for_source_relpath(session, source_relpath)
             refs.append(
                 SourceRef(
                     ref_id=f"F{index:03d}",
@@ -236,8 +374,19 @@ class OrganizerSessionService:
         base_dir = Path(session.target_dir).resolve()
         next_number = 1
         slots: list[TargetSlot] = []
+        tree_nodes = list(selection.get("target_directory_tree") or [])
+        if not tree_nodes and selection.get("target_directories"):
+            tree_nodes = [
+                {"relpath": self._normalize_relpath(path), "name": Path(str(path)).name, "children": []}
+                for path in selection.get("target_directories") or []
+                if self._normalize_relpath(path)
+            ]
+
+        max_depth = self._normalize_destination_index_depth(session.destination_index_depth)
 
         def walk(nodes: list[dict], depth: int) -> list[TargetSlot]:
+            if depth >= max_depth:
+                return []
             nonlocal next_number
             branch: list[TargetSlot] = []
             for node in nodes:
@@ -246,10 +395,15 @@ class OrganizerSessionService:
                 relpath = self._normalize_relpath(node.get("relpath"))
                 if not relpath:
                     continue
+                real_path = (
+                    Path(relpath).resolve()
+                    if self._is_absolute_target_path(relpath)
+                    else (base_dir / relpath).resolve()
+                )
                 slot = TargetSlot(
                     slot_id=f"D{next_number:03d}",
                     display_name=str(node.get("name") or Path(relpath).name),
-                    real_path=str((base_dir / relpath).resolve()),
+                    real_path=str(real_path),
                     depth=depth,
                     is_new=False,
                 )
@@ -259,7 +413,7 @@ class OrganizerSessionService:
                 branch.append(slot)
             return branch
 
-        walk(list(selection.get("target_directory_tree") or []), 0)
+        walk(tree_nodes, 0)
         slots.sort(key=lambda item: self._target_slot_number(item.slot_id))
         return slots
 
@@ -277,12 +431,11 @@ class OrganizerSessionService:
         register_target_tree(self._target_slots_from_session(session))
 
         if plan is not None:
-            base_dir = Path(session.target_dir).resolve()
             for move in (plan.moves or []):
                 target_dir = self._target_dir_for_move(move.target)
                 if not target_dir or target_dir == "Review":
                     continue
-                real_path = str((base_dir / target_dir).resolve())
+                real_path = str(self._resolve_target_real_path(session, target_dir))
                 registry.ensure_target(
                     display_name=Path(target_dir).name or target_dir,
                     real_path=real_path,
@@ -315,11 +468,12 @@ class OrganizerSessionService:
                 target_slot_id = "Review"
                 status = "review"
             else:
+                resolved_target = str(self._resolve_target_real_path(session, target_dir))
                 slot = registry.ensure_target(
                     display_name=Path(target_dir).name or target_dir,
-                    real_path=str((Path(session.target_dir).resolve() / target_dir).resolve()),
+                    real_path=resolved_target,
                     depth=max(0, len(Path(target_dir).parts) - 1),
-                    is_new=registry.target_for_real_path(str((Path(session.target_dir).resolve() / target_dir).resolve())) is None,
+                    is_new=registry.target_for_real_path(resolved_target) is None,
                 )
                 target_slot_id = slot.slot_id
                 status = "assigned"
@@ -356,13 +510,12 @@ class OrganizerSessionService:
                 phase=self._task_phase_for_stage(session.stage),
             )
         if not base_task.sources:
-            source_origin = str(Path(session.target_dir).resolve())
             base_task.sources = [
                 SourceRef(
                     ref_id=f"F{index:03d}",
                     display_name=Path(str(move.source or "")).name,
                     entry_type="file",
-                    origin=source_origin,
+                    origin=self._origin_for_source_relpath(session, str(move.source or ""))[0],
                     relpath=str(move.source or "").replace("\\", "/").strip(),
                     suggested_purpose="",
                     content_summary="",
@@ -377,6 +530,11 @@ class OrganizerSessionService:
         task.user_constraints = list(session.user_constraints)
         task.phase = self._task_phase_for_stage(session.stage)
         registry = self._build_id_registry(session, active_plan)
+        if task.sources:
+            registered_source_ids = {source.ref_id for source in registry.list_sources()}
+            for source in task.sources:
+                if source.ref_id not in registered_source_ids:
+                    registry.register_source(source)
         if not task.sources:
             task.sources = registry.list_sources()
         if not task.targets:
@@ -406,7 +564,10 @@ class OrganizerSessionService:
         task, _ = self._build_organize_task(session, plan)
         for target in task.targets:
             if target.slot_id == normalized_slot_id:
-                return self._target_slot_relpath(session, target)
+                relpath = self._target_slot_relpath(session, target)
+                if relpath:
+                    return relpath
+                return self._normalize_relpath(target.real_path)
         raise RuntimeError("TARGET_SLOT_NOT_FOUND")
 
     def _planning_scope_sources(self, session: OrganizerSession) -> list[str]:
@@ -431,10 +592,10 @@ class OrganizerSessionService:
     def _incremental_selection_defaults(self, session: OrganizerSession) -> dict:
         return {
             "required": self._normalize_organize_mode(session.organize_mode) == "incremental",
-            "status": "pending",
+            "status": "ready" if session.selected_target_directories else "pending",
             "destination_index_depth": self._normalize_destination_index_depth(session.destination_index_depth),
             "root_directory_options": [],
-            "target_directories": [],
+            "target_directories": list(session.selected_target_directories or []),
             "target_directory_tree": [],
             "pending_items_count": 0,
             "source_scan_completed": False,
@@ -479,6 +640,111 @@ class OrganizerSessionService:
             summary = str(entry.get("summary") or "").strip()
             lines.append(f"{source_relpath} | {entry_type} | {purpose} | {summary}".rstrip())
         return "\n".join(lines)
+
+    def _source_alias_map(self, session: OrganizerSession) -> dict[str, SourceCollectionItem]:
+        items = self._normalize_source_collection(session.source_collection)
+        if len(items) == 1 and items[0].source_type == "directory":
+            return {}
+        counts: dict[str, int] = {}
+        mapping: dict[str, SourceCollectionItem] = {}
+        for item in items:
+            base = Path(item.path).name or ("file" if item.source_type == "file" else "source")
+            alias = base
+            counts[base] = counts.get(base, 0) + 1
+            if counts[base] > 1:
+                alias = f"{base}_{counts[base]}"
+            mapping[alias] = item
+        return mapping
+
+    def _scan_source_collection(
+        self,
+        session: OrganizerSession,
+        scan_runner,
+        *,
+        session_id: str | None = None,
+    ) -> tuple[str, list[dict]]:
+        source_collection = self._normalize_source_collection(session.source_collection)
+        if not source_collection:
+            source_collection = [SourceCollectionItem(source_type="directory", path=session.target_dir)]
+        alias_map = self._source_alias_map(session)
+        entries: list[dict] = []
+        for item in source_collection:
+            item_path = Path(item.path).resolve()
+            alias = next((key for key, value in alias_map.items() if value.path == item.path and value.source_type == item.source_type), "")
+            if item.source_type == "directory":
+                scan_lines = self._call_with_optional_session_id(scan_runner, item_path, session_id=session_id)
+                for entry in self._scan_entries(scan_lines):
+                    source_relpath = self._normalize_relpath(entry.get("source_relpath"))
+                    if not source_relpath:
+                        continue
+                    prefixed = f"{alias}/{source_relpath}" if alias else source_relpath
+                    entries.append(
+                        {
+                            **entry,
+                            "source_relpath": prefixed,
+                            "origin_path": str(item_path),
+                            "origin_relpath": source_relpath,
+                        }
+                    )
+                continue
+            analyzed_lines = self._call_with_optional_session_id(
+                analysis_service.run_analysis_cycle_for_entries,
+                item_path.parent,
+                [item_path.name],
+                session_id=session_id,
+            )
+            analyzed_entries = self._scan_entries(analyzed_lines)
+            if not analyzed_entries:
+                raise RuntimeError(f"FILE_SOURCE_ANALYSIS_EMPTY:{item_path}")
+            for entry in analyzed_entries:
+                source_relpath = self._normalize_relpath(entry.get("source_relpath")) or item_path.name
+                if alias:
+                    prefixed = alias if source_relpath == self._normalize_relpath(item_path.name) else f"{alias}/{source_relpath}"
+                else:
+                    prefixed = source_relpath
+                entries.append(
+                    {
+                        **entry,
+                        "item_id": prefixed,
+                        "display_name": str(entry.get("display_name") or item_path.name),
+                        "source_relpath": prefixed,
+                        "origin_path": str(item_path),
+                        "origin_relpath": source_relpath,
+                    }
+                )
+        return self._render_scan_lines(entries), entries
+
+    def _origin_for_source_relpath(self, session: OrganizerSession, source_relpath: str) -> tuple[str, str]:
+        normalized = self._normalize_relpath(source_relpath)
+        source_collection = self._normalize_source_collection(session.source_collection)
+        if not source_collection:
+            base_dir = Path(session.target_dir).resolve()
+            return str(base_dir), normalized
+        alias_map = self._source_alias_map(session)
+        if not alias_map and len(source_collection) == 1:
+            item = source_collection[0]
+            if item.source_type == "directory":
+                return str(Path(item.path).resolve()), normalized
+            return str(Path(item.path).resolve().parent), Path(item.path).name
+        first_segment, _, remainder = normalized.partition("/")
+        target_item = alias_map.get(first_segment)
+        if target_item is None:
+            first_item = source_collection[0]
+            if first_item.source_type == "directory":
+                return str(Path(first_item.path).resolve()), normalized
+            return str(Path(first_item.path).resolve().parent), Path(first_item.path).name
+        if target_item.source_type == "directory":
+            return str(Path(target_item.path).resolve()), remainder or ""
+        return str(Path(target_item.path).resolve().parent), Path(target_item.path).name
+
+    def _can_use_single_directory_scan(self, session: OrganizerSession) -> bool:
+        source_collection = self._normalize_source_collection(session.source_collection)
+        if len(source_collection) != 1:
+            return False
+        item = source_collection[0]
+        if item.source_type != "directory":
+            return False
+        return Path(item.path).resolve() == Path(session.target_dir).resolve()
 
     def _build_incremental_root_entries(self, target_dir: Path) -> list[dict]:
         if not target_dir.exists():
@@ -535,12 +801,17 @@ class OrganizerSessionService:
         selection = self._incremental_selection_snapshot(session)
         task, _ = self._build_organize_task(session)
         return {
+            "organize_method": self._normalize_organize_method(session.organize_method),
             "organize_mode": self._normalize_organize_mode(session.organize_mode),
             "scope_sources": self._planning_scope_sources(session),
             "destination_index_depth": selection["destination_index_depth"],
+            "new_directory_root": str(self._placement_payload(session.placement).new_directory_root or ""),
+            "review_root": str(self._placement_payload(session.placement).review_root or ""),
             "root_directory_options": list(selection["root_directory_options"]),
             "target_directories": list(selection["target_directories"]),
             "target_directory_tree": copy.deepcopy(selection["target_directory_tree"]),
+            "output_dir": str(session.output_dir or "").strip(),
+            "target_profile_id": str(session.target_profile_id or "").strip(),
             "source_refs": [
                 {
                     "ref_id": item.ref_id,
@@ -661,6 +932,7 @@ class OrganizerSessionService:
         return pending
 
     def _sync_session_views(self, session: OrganizerSession, task: OrganizeTask | None = None) -> None:
+        self._reconcile_session_strategy_fields(session)
         active_task = task or self._task_from_session(session)
         active_task.user_constraints = list(session.user_constraints or active_task.user_constraints or [])
         session.task_state = TaskState.from_task(active_task)
@@ -823,34 +1095,6 @@ class OrganizerSessionService:
             task=active_task,
         )
         return pending
-
-    def _resolve_request_item_source(
-        self,
-        session: OrganizerSession,
-        pending: PendingPlan,
-        item_id: str,
-    ) -> str | None:
-        source_relpath = self._planner_source_for_item_id(session, item_id)
-        if source_relpath:
-            return self._normalize_relpath(source_relpath)
-
-        normalized_item_id = self._normalize_relpath(item_id)
-        if not normalized_item_id:
-            return None
-
-        pending_sources = {
-            self._normalize_relpath(move.source)
-            for move in pending.moves
-            if self._normalize_relpath(move.source)
-        }
-        unresolved_sources = {
-            self._normalize_relpath(unresolved_item)
-            for unresolved_item in pending.unresolved_items
-            if self._normalize_relpath(unresolved_item)
-        }
-        if normalized_item_id in pending_sources or normalized_item_id in unresolved_sources:
-            return normalized_item_id
-        return None
 
     def _related_item_ids_for_message(
         self,
@@ -1027,6 +1271,8 @@ class OrganizerSessionService:
 
         session.scan_lines = filtered_scan_lines
         session.planning_schema_version = CURRENT_PLANNING_SCHEMA_VERSION
+        session.organize_mode = self._normalize_organize_mode(session.organize_mode)
+        session.organize_method = organize_method_for_organize_mode(session.organize_mode)
         session.planner_items = self._build_planner_items(filtered_scan_lines, existing_items=session.planner_items)
         session.source_tree_entries = self._build_source_tree_entries(
             target_dir,
@@ -1037,7 +1283,11 @@ class OrganizerSessionService:
             **current_selection,
             "status": "ready",
             "target_directories": normalized_selected,
-            "target_directory_tree": self._explore_target_directories(target_dir, normalized_selected),
+            "target_directory_tree": self._explore_target_directories(
+                target_dir, 
+                normalized_selected, 
+                max_depth=self._normalize_destination_index_depth(session.destination_index_depth)
+            ),
             "pending_items_count": len(pending_entries),
             "source_scan_completed": True,
         }
@@ -1062,25 +1312,6 @@ class OrganizerSessionService:
         normalized_target = str(target or "").strip().replace("\\", "/")
         target_name = Path(normalized_target).name.lower() if normalized_target else ""
         return (1 if filename and target_name == filename else 0, len(normalized_target))
-
-    def _submitted_folder_resolution_sources(self, session: OrganizerSession) -> set[str]:
-        resolved_sources: set[str] = set()
-        messages = list(session.messages)
-        if session.assistant_message:
-            messages.append(session.assistant_message)
-        for message in messages:
-            for block in self._message_blocks(message):
-                if block.get("type") != "unresolved_choices" or block.get("status") != "submitted":
-                    continue
-                for resolution in block.get("submitted_resolutions") or []:
-                    if not isinstance(resolution, dict):
-                        continue
-                    if not str(resolution.get("selected_folder") or "").strip():
-                        continue
-                    source_relpath = self._planner_source_for_item_id(session, str(resolution.get("item_id") or ""))
-                    if source_relpath:
-                        resolved_sources.add(source_relpath)
-        return resolved_sources
 
     def _normalize_pending_plan_identifiers(self, session: OrganizerSession) -> bool:
         if not self._pending_plan_payload(session.pending_plan):
@@ -1117,13 +1348,6 @@ class OrganizerSessionService:
                 continue
             normalized_unresolved.append(source_relpath)
             seen_unresolved.add(source_relpath)
-
-        resolved_sources = self._submitted_folder_resolution_sources(session)
-        if resolved_sources:
-            filtered_unresolved = [item for item in normalized_unresolved if item not in resolved_sources]
-            if filtered_unresolved != normalized_unresolved:
-                normalized_unresolved = filtered_unresolved
-                changed = True
 
         if not changed:
             return False
@@ -1171,8 +1395,69 @@ class OrganizerSessionService:
                 raise
             return func(*args, **kwargs)
 
-    def create_session(self, target_dir: str, resume_if_exists: bool, strategy: dict | None = None) -> CreateSessionResult:
-        return self.orchestrator.create_session(target_dir, resume_if_exists, strategy=strategy)
+    def create_session(
+        self,
+        sources: list[dict] | str,
+        resume_if_exists: bool,
+        organize_method: str | None = None,
+        strategy: dict | None = None,
+        *,
+        output_dir: str = "",
+        target_profile_id: str = "",
+        target_directories: list[str] | None = None,
+        new_directory_root: str = "",
+        review_root: str = "",
+    ) -> CreateSessionResult:
+        normalized_sources = sources
+        normalized_method = organize_method
+        if isinstance(sources, str):
+            normalized_sources = [{"source_type": "directory", "path": sources}]
+            normalized_method = normalized_method or self._normalize_organize_method(
+                (strategy or {}).get("organize_method")
+                or (
+                    "assign_into_existing_categories"
+                    if str((strategy or {}).get("task_type") or "").strip() == "organize_into_existing"
+                    else ""
+                )
+                or organize_method_for_organize_mode((strategy or {}).get("organize_mode"))
+            )
+            if not output_dir and normalized_method == "categorize_into_new_structure":
+                output_dir = sources
+            if (
+                normalized_method == "assign_into_existing_categories"
+                and not target_profile_id
+                and not (target_directories or [])
+            ):
+                target_directories = [sources]
+        return self.orchestrator.create_session(
+            normalized_sources,
+            resume_if_exists,
+            normalized_method or "categorize_into_new_structure",
+            strategy=strategy,
+            output_dir=output_dir,
+            target_profile_id=target_profile_id,
+            target_directories=target_directories,
+            new_directory_root=new_directory_root,
+            review_root=review_root,
+        )
+
+    def list_target_profiles(self) -> list[dict]:
+        return [item.to_dict() for item in self.target_profiles.list()]
+
+    def create_target_profile(self, name: str, directories: list[dict]) -> dict:
+        if not str(name or "").strip():
+            raise ValueError("TARGET_PROFILE_NAME_REQUIRED")
+        profile = self.target_profiles.create(str(name).strip(), directories)
+        return profile.to_dict()
+
+    def update_target_profile(self, profile_id: str, *, name: str | None = None, directories: list[dict] | None = None) -> dict:
+        profile = self.target_profiles.update(profile_id, name=name, directories=directories)
+        if profile is None:
+            raise FileNotFoundError(profile_id)
+        return profile.to_dict()
+
+    def delete_target_profile(self, profile_id: str) -> bool:
+        return self.target_profiles.delete(profile_id)
 
     def abandon_session(self, session_id: str) -> dict:
         return self.lifecycle.abandon_session(session_id)
@@ -1281,123 +1566,6 @@ class OrganizerSessionService:
             preserving_previous_plan=preserving_previous_plan,
         )
 
-    @staticmethod
-    def _message_blocks(message: dict) -> list[dict]:
-        blocks = message.get("blocks")
-        return blocks if isinstance(blocks, list) else []
-
-    def _ordered_unresolved_item_ids(self, session: OrganizerSession, pending: PendingPlan) -> list[str]:
-        unresolved_set = set(pending.unresolved_items or [])
-        ordered: list[str] = []
-        seen: set[str] = set()
-        for move in pending.moves:
-            if move.source in unresolved_set and move.source not in seen:
-                ordered.append(self._planner_id_for_source(session, move.source))
-                seen.add(move.source)
-        for item_id in pending.unresolved_items or []:
-            if item_id not in seen:
-                ordered.append(self._planner_id_for_source(session, item_id))
-                seen.add(item_id)
-        return ordered
-
-    def _normalize_unresolved_block_items(self, session: OrganizerSession, block: dict, candidate_ids: list[str]) -> bool:
-        items = block.get("items")
-        if not isinstance(items, list) or not items:
-            return False
-
-        exact_candidates = {candidate.lower(): candidate for candidate in candidate_ids}
-        source_candidates: dict[str, str] = {}
-        name_candidates: dict[str, list[str]] = {}
-        for candidate in candidate_ids:
-            source_relpath = self._planner_source_for_item_id(session, candidate)
-            display_name = self._planner_display_name(session, candidate)
-            if source_relpath:
-                source_candidates[source_relpath.lower()] = candidate
-            if display_name:
-                name_candidates.setdefault(display_name.lower(), []).append(candidate)
-
-        changed = False
-        used_candidates: set[str] = set()
-        normalized_ids_by_index: list[str | None] = []
-
-        for item in items:
-            if not isinstance(item, dict):
-                normalized_ids_by_index.append(None)
-                continue
-
-            raw_id = str(item.get("item_id") or "").strip()
-            display_name = str(item.get("display_name") or "").strip()
-            normalized_id = None
-
-            if raw_id:
-                exact_match = exact_candidates.get(raw_id.lower())
-                if exact_match and exact_match not in used_candidates:
-                    normalized_id = exact_match
-
-            if normalized_id is None:
-                source_match = source_candidates.get(raw_id.lower())
-                if source_match and source_match not in used_candidates:
-                    normalized_id = source_match
-
-            if normalized_id is None:
-                for candidate in name_candidates.get((raw_id or display_name).lower(), []):
-                    if candidate not in used_candidates:
-                        normalized_id = candidate
-                        break
-
-            if normalized_id:
-                if raw_id != normalized_id:
-                    item["item_id"] = normalized_id
-                    changed = True
-                normalized_display_name = self._planner_display_name(session, normalized_id)
-                if display_name != normalized_display_name:
-                    item["display_name"] = normalized_display_name
-                    changed = True
-                used_candidates.add(normalized_id)
-
-            normalized_ids_by_index.append(normalized_id or raw_id or None)
-
-        submitted = block.get("submitted_resolutions")
-        if isinstance(submitted, list):
-            for index, resolution in enumerate(submitted):
-                if not isinstance(resolution, dict):
-                    continue
-                normalized_id = normalized_ids_by_index[index] if index < len(normalized_ids_by_index) else None
-                if not normalized_id:
-                    continue
-                if str(resolution.get("item_id") or "").strip() != normalized_id:
-                    resolution["item_id"] = normalized_id
-                    changed = True
-                normalized_display_name = self._planner_display_name(session, normalized_id)
-                if str(resolution.get("display_name") or "").strip() != normalized_display_name:
-                    resolution["display_name"] = normalized_display_name
-                    changed = True
-
-        return changed
-
-    def _normalize_unresolved_request_blocks(self, session: OrganizerSession) -> bool:
-        pending = self._pending_plan_from_session(session)
-        candidate_ids = self._ordered_unresolved_item_ids(session, pending)
-        if not candidate_ids:
-            return False
-
-        changed = False
-        for message in session.messages:
-            for block in self._message_blocks(message):
-                if block.get("type") != "unresolved_choices":
-                    continue
-                if self._normalize_unresolved_block_items(session, block, candidate_ids):
-                    changed = True
-
-        if session.assistant_message:
-            for block in self._message_blocks(session.assistant_message):
-                if block.get("type") != "unresolved_choices":
-                    continue
-                if self._normalize_unresolved_block_items(session, block, candidate_ids):
-                    changed = True
-
-        return changed
-
     def _normalized_target_directory(
         self,
         session: OrganizerSession,
@@ -1413,7 +1581,12 @@ class OrganizerSessionService:
             resolved_target_dir = target_dir
             if target_slot is not None:
                 resolved_target_dir = self._target_dir_from_slot_id(session, target_slot, pending)
+                return resolved_target_dir
+            if self._is_absolute_target_path(resolved_target_dir):
+                raise RuntimeError("ABSOLUTE_TARGET_DIR_NOT_ALLOWED")
             normalized_dir = self._normalize_relpath(resolved_target_dir)
+            if normalized_dir == "Review" or normalized_dir.startswith("Review/"):
+                raise RuntimeError("REVIEW_SUBDIRECTORY_NOT_ALLOWED")
 
         if (
             self._normalize_organize_mode(session.organize_mode) == "incremental"
@@ -1496,9 +1669,6 @@ class OrganizerSessionService:
 
     def submit_user_intent(self, session_id: str, content: str) -> SessionMutationResult:
         return self.planning_conversation.submit_user_intent(session_id, content)
-
-    def resolve_unresolved_choices(self, session_id: str, request_id: str, resolutions: list[dict]) -> SessionMutationResult:
-        return self.planning_conversation.resolve_unresolved_choices(session_id, request_id, resolutions)
 
     def run_precheck(self, session_id: str) -> SessionMutationResult:
         return self.execution_app.run_precheck(session_id)
@@ -1947,7 +2117,6 @@ class OrganizerSessionService:
             return
 
         if self._normalize_organize_mode(session.organize_mode) == "incremental":
-            session.planner_items = []
             session.pending_plan = self._pending_plan_payload(PendingPlan())
             session.plan_snapshot = self._plan_snapshot_payload(
                 self._plan_snapshot(PendingPlan(), {}, scan_lines=session.scan_lines, session=session)
@@ -1957,13 +2126,35 @@ class OrganizerSessionService:
             session.assistant_message = None
             session.last_ai_pending_plan = None
             session.summary = ""
+            self._ensure_planner_items(session, session.scan_lines)
             session.source_tree_entries = self._build_source_tree_entries(
                 Path(session.target_dir),
                 session.scan_lines,
-                planner_items=[],
+                planner_items=session.planner_items,
             )
-            self._set_incremental_selection_pending(session, session.scan_lines)
-            session.stage = "selecting_incremental_scope"
+            if session.selected_target_directories:
+                session.incremental_selection = {
+                    **self._incremental_selection_snapshot(session),
+                    "status": "ready",
+                    "target_directories": list(session.selected_target_directories),
+                    "target_directory_tree": self._explore_target_directories(
+                        Path(session.target_dir),
+                        list(session.selected_target_directories),
+                        max_depth=self._normalize_destination_index_depth(session.destination_index_depth)
+                    ),
+                    "pending_items_count": len(all_entries),
+                    "source_scan_completed": True,
+                }
+                session.stage = "planning"
+            else:
+                session.planner_items = []
+                session.source_tree_entries = self._build_source_tree_entries(
+                    Path(session.target_dir),
+                    session.scan_lines,
+                    planner_items=[],
+                )
+                self._set_incremental_selection_pending(session, session.scan_lines)
+                session.stage = "selecting_incremental_scope"
         else:
             session.incremental_selection = self._incremental_selection_defaults(session)
             session.stage = "planning"
@@ -2014,13 +2205,21 @@ class OrganizerSessionService:
         session.scanner_progress = self._initial_scan_progress(Path(session.target_dir))
         self.store.save(session)
         self._record_event("scan.started", session)
-        result = self._call_with_optional_session_id(
-            scan_runner,
-            Path(session.target_dir),
-            session_id=session.session_id,
-        )
-        all_entries = self._scan_entries(result)
-        total_count = self._count_visible_entries(Path(session.target_dir))
+        if self._can_use_single_directory_scan(session):
+            result = self._call_with_optional_session_id(
+                scan_runner,
+                Path(session.target_dir),
+                session_id=session.session_id,
+            )
+            all_entries = self._scan_entries(result)
+            total_count = self._count_visible_entries(Path(session.target_dir))
+        else:
+            result, all_entries = self._scan_source_collection(
+                session,
+                scan_runner,
+                session_id=session.session_id,
+            )
+            total_count = len(all_entries)
         if not all_entries:
             outcome = self._handle_empty_scan_result(session, total_count=total_count, mode="sync")
             if outcome == "scan_empty_result":
@@ -2030,7 +2229,6 @@ class OrganizerSessionService:
         session.scan_lines = result or ""
         session.planning_schema_version = CURRENT_PLANNING_SCHEMA_VERSION
         if self._normalize_organize_mode(session.organize_mode) == "incremental":
-            session.planner_items = []
             session.pending_plan = self._pending_plan_payload(PendingPlan())
             session.plan_snapshot = self._plan_snapshot_payload(
                 self._plan_snapshot(PendingPlan(), {}, scan_lines=session.scan_lines, session=session)
@@ -2038,13 +2236,35 @@ class OrganizerSessionService:
             session.messages = []
             session.assistant_message = None
             session.summary = ""
+            self._ensure_planner_items(session, session.scan_lines)
             session.source_tree_entries = self._build_source_tree_entries(
                 Path(session.target_dir),
                 session.scan_lines,
-                planner_items=[],
+                planner_items=session.planner_items,
             )
-            self._set_incremental_selection_pending(session, session.scan_lines)
-            session.stage = "selecting_incremental_scope"
+            if session.selected_target_directories:
+                session.incremental_selection = {
+                    **self._incremental_selection_snapshot(session),
+                    "status": "ready",
+                    "target_directories": list(session.selected_target_directories),
+                    "target_directory_tree": self._explore_target_directories(
+                        Path(session.target_dir),
+                        list(session.selected_target_directories),
+                        max_depth=self._normalize_destination_index_depth(session.destination_index_depth)
+                    ),
+                    "pending_items_count": len(all_entries),
+                    "source_scan_completed": True,
+                }
+                session.stage = "planning"
+            else:
+                session.planner_items = []
+                session.source_tree_entries = self._build_source_tree_entries(
+                    Path(session.target_dir),
+                    session.scan_lines,
+                    planner_items=[],
+                )
+                self._set_incremental_selection_pending(session, session.scan_lines)
+                session.stage = "selecting_incremental_scope"
         else:
             self._ensure_planner_items(session, session.scan_lines)
             session.incremental_selection = self._incremental_selection_defaults(session)
@@ -2071,14 +2291,12 @@ class OrganizerSessionService:
     def _load_or_raise(self, session_id: str) -> OrganizerSession:
         session = self.store.load(session_id)
         if session is None:
-            raise KeyError(f"Session {session_id} not found")
+            raise FileNotFoundError(f"Session {session_id} not found")
         if self._ensure_planning_schema_compatibility(session):
             self.store.save(session)
             return session
         changed = self._normalize_pending_plan_identifiers(session)
         if self._normalize_last_ai_pending_plan(session):
-            changed = True
-        if self._normalize_unresolved_request_blocks(session):
             changed = True
         if self._ensure_plan_snapshot_consistency(session) or changed:
             self.store.save(session)
@@ -2105,7 +2323,6 @@ class OrganizerSessionService:
             self._ensure_message_id(session.assistant_message)
         self._normalize_pending_plan_identifiers(session)
         self._normalize_last_ai_pending_plan(session)
-        self._normalize_unresolved_request_blocks(session)
         self._ensure_plan_snapshot_consistency(session)
         self._sync_session_views(session)
         source_tree_entries = copy.deepcopy(
@@ -2121,6 +2338,7 @@ class OrganizerSessionService:
         return {
             "session_id": session.session_id,
             "target_dir": str(session.target_dir),
+            "placement": copy.deepcopy(self._placement_payload(session.placement).__dict__),
             "stage": session.stage,
             "summary": session.summary,
             "scanner_progress": copy.deepcopy(session.scanner_progress),
@@ -2154,9 +2372,15 @@ class OrganizerSessionService:
                 "caution_level_label": strategy_summary["caution_level_label"],
                 "task_type": strategy_summary["task_type"],
                 "task_type_label": strategy_summary["task_type_label"],
+                "organize_method": strategy_summary["organize_method"],
                 "organize_mode": strategy_summary["organize_mode"],
                 "organize_mode_label": strategy_summary["organize_mode_label"],
                 "destination_index_depth": strategy_summary["destination_index_depth"],
+                "output_dir": strategy_summary["output_dir"],
+                "target_profile_id": strategy_summary["target_profile_id"],
+                "target_directories": list(strategy_summary["target_directories"]),
+                "new_directory_root": strategy_summary["new_directory_root"],
+                "review_root": strategy_summary["review_root"],
                 "note": strategy_summary["note"],
                 "preview_directories": strategy_summary["preview_directories"],
             }
@@ -2427,7 +2651,7 @@ class OrganizerSessionService:
             try:
                 relpath = real_path.relative_to(target_root).as_posix()
             except ValueError:
-                relpath = ""
+                relpath = str(real_path)
             payloads.append(
                 PlanTargetSlotPayload(
                     slot_id=item.slot_id,
@@ -2435,6 +2659,7 @@ class OrganizerSessionService:
                     relpath=relpath,
                     depth=item.depth,
                     is_new=item.is_new,
+                    real_path=str(real_path),
                 )
             )
         return payloads
@@ -2609,16 +2834,24 @@ class OrganizerSessionService:
         return journal.execution_id if journal else None
 
     def _strategy_selection(self, session: OrganizerSession) -> dict:
+        self._reconcile_session_strategy_fields(session)
         organize_mode = self._normalize_organize_mode(session.organize_mode)
+        organize_method = self._normalize_organize_method(session.organize_method or organize_method_for_organize_mode(organize_mode))
         return {
             "template_id": session.strategy_template_id,
-            "task_type": task_type_for_organize_mode(organize_mode),
+            "task_type": task_type_for_organize_method(organize_method),
+            "organize_method": organize_method,
             "organize_mode": organize_mode,
             "destination_index_depth": self._normalize_destination_index_depth(session.destination_index_depth),
             "language": session.language,
             "density": session.density,
             "prefix_style": session.prefix_style,
             "caution_level": session.caution_level,
+            "output_dir": str(session.output_dir or "").strip(),
+            "target_profile_id": str(session.target_profile_id or "").strip(),
+            "target_directories": list(session.selected_target_directories or []),
+            "new_directory_root": str(self._placement_payload(session.placement).new_directory_root or "").strip(),
+            "review_root": str(self._placement_payload(session.placement).review_root or "").strip(),
             "note": session.strategy_note,
         }
 
@@ -2629,7 +2862,13 @@ class OrganizerSessionService:
             "template_label": summary["template_label"],
             "task_type": summary["task_type"],
             "task_type_label": summary["task_type_label"],
+            "organize_method": summary["organize_method"],
             "destination_index_depth": summary["destination_index_depth"],
+            "output_dir": summary["output_dir"],
+            "target_profile_id": summary["target_profile_id"],
+            "target_directories": list(summary["target_directories"]),
+            "new_directory_root": summary["new_directory_root"],
+            "review_root": summary["review_root"],
             "caution_level": summary["caution_level"],
             "caution_level_label": summary["caution_level_label"],
             "note": summary["note"],

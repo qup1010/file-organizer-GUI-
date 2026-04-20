@@ -20,12 +20,9 @@ import type {
   ComposerMode,
   ScannerProgress,
   SessionStage,
-  UnresolvedChoiceResolution,
-  UnresolvedChoicesBlock,
 } from "@/types/session";
 
 import { MarkdownProse } from "./markdown-prose";
-import { UnresolvedChoicesBubble, type ResolutionDraft, type ResolutionDraftMap } from "./unresolved-choices-bubble";
 import { ComposerBar } from "./composer-bar";
 
 function cn(...inputs: ClassValue[]) {
@@ -59,7 +56,6 @@ interface ConversationPanelProps {
   setMessageInput: (val: string) => void;
   onSendMessage: () => void;
   onStartScan: () => void;
-  onResolveUnresolved: (payload: { request_id: string; resolutions: UnresolvedChoiceResolution[] }) => Promise<void> | void;
   unresolvedCount: number;
   notice?: ConversationNotice | null;
   scanner?: ScannerProgress;
@@ -89,7 +85,6 @@ export function ConversationPanel({
   setMessageInput,
   onSendMessage,
   onStartScan,
-  onResolveUnresolved,
   unresolvedCount,
   notice,
   scanner,
@@ -99,30 +94,6 @@ export function ConversationPanel({
   const stageView = getSessionStageView(stage);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isPinnedToBottom, setIsPinnedToBottom] = useState(true);
-  const [resolutionDrafts, setResolutionDrafts] = useState<Record<string, ResolutionDraftMap>>({});
-  const [resolutionWarnings, setResolutionWarnings] = useState<Record<string, string | null>>({});
-  const [submittingRequestId, setSubmittingRequestId] = useState<string | null>(null);
-
-  useEffect(() => {
-    setResolutionDrafts((prev) => {
-      const next = { ...prev };
-      for (const message of messages) {
-        for (const block of message.blocks || []) {
-          if (block.type !== "unresolved_choices") continue;
-          const existing = next[block.request_id] || {};
-          const merged: ResolutionDraftMap = { ...existing };
-          for (const item of block.items) {
-            if (!merged[item.item_id]) {
-              merged[item.item_id] = { selected_folder: "", note: "", custom_selected: false };
-            }
-          }
-          next[block.request_id] = merged;
-        }
-      }
-      return next;
-    });
-  }, [messages]);
-
 
   useEffect(() => {
     if (!isPinnedToBottom) return;
@@ -144,53 +115,6 @@ export function ConversationPanel({
     if (!container) return;
     container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
     setIsPinnedToBottom(true);
-  };
-
-  const updateDraft = (requestId: string, itemId: string, updater: (draft: ResolutionDraft) => ResolutionDraft) => {
-    setResolutionDrafts((prev) => ({
-      ...prev,
-      [requestId]: {
-        ...(prev[requestId] || {}),
-        [itemId]: updater(prev[requestId]?.[itemId] || { selected_folder: "", note: "", custom_selected: false }),
-      },
-    }));
-  };
-
-  const handleSubmitUnresolved = async (block: UnresolvedChoicesBlock) => {
-    const drafts = resolutionDrafts[block.request_id] || {};
-    const missing = block.items
-      .filter((item) => {
-        const draft = drafts[item.item_id] || { selected_folder: "", note: "", custom_selected: false };
-        const customNote = draft.custom_selected ? draft.note.trim() : "";
-        return !draft.selected_folder && !customNote;
-      })
-      .map((item) => item.display_name);
-
-    if (missing.length > 0) {
-      setResolutionWarnings((prev) => ({
-        ...prev,
-        [block.request_id]: `以下条目仍未处理：${missing.join("、")}`,
-      }));
-      return;
-    }
-
-    setResolutionWarnings((prev) => ({ ...prev, [block.request_id]: null }));
-    setSubmittingRequestId(block.request_id);
-    try {
-      await onResolveUnresolved({
-        request_id: block.request_id,
-        resolutions: block.items.map((item) => {
-          const draft = drafts[item.item_id] || { selected_folder: "", note: "", custom_selected: false };
-          return {
-            item_id: item.item_id,
-            selected_folder: draft.selected_folder,
-            note: draft.custom_selected ? draft.note.trim() : "",
-          };
-        }),
-      });
-    } finally {
-      setSubmittingRequestId((current) => (current === block.request_id ? null : current));
-    }
   };
 
   const renderNotice = notice ? (
@@ -327,9 +251,9 @@ export function ConversationPanel({
           {messages.map((message, idx) => {
             const isAssistant = message.role === "assistant";
             const prevMessage = messages[idx - 1];
-            const isPrevSystemLog = prevMessage?.role === "assistant" && !prevMessage.content?.trim() && (prevMessage.blocks || []).length === 0;
+            const isPrevSystemLog = prevMessage?.role === "assistant" && !prevMessage.content?.trim();
             const isGrouped = prevMessage && prevMessage.role === message.role && !isPrevSystemLog;
-            const isSystemLog = isAssistant && !message.content?.trim() && (message.blocks || []).length === 0;
+            const isSystemLog = isAssistant && !message.content?.trim();
 
             if (isSystemLog) {
               return (
@@ -379,41 +303,6 @@ export function ConversationPanel({
                       {isAssistant ? <MarkdownProse content={message.content} /> : message.content}
                     </div>
                   )}
-                  {isAssistant && (message.blocks || []).map((block) => {
-                    if (block.type !== "unresolved_choices") return null;
-                    return (
-                      <div key={block.request_id} className="max-w-[90%] 2xl:max-w-[88%] transform group">
-                        <UnresolvedChoicesBubble
-                          block={block}
-                          drafts={resolutionDrafts[block.request_id] || {}}
-                          warning={resolutionWarnings[block.request_id] || null}
-                          isSubmitting={submittingRequestId === block.request_id}
-                          onPickFolder={(itemId, folder) => {
-                            updateDraft(block.request_id, itemId, (draft) => ({ ...draft, selected_folder: folder, custom_selected: false }));
-                          }}
-                          onPickCustom={(itemId) => {
-                            updateDraft(block.request_id, itemId, (draft) => ({ ...draft, selected_folder: "", custom_selected: true }));
-                          }}
-                          onChangeNote={(itemId, note) => {
-                            updateDraft(block.request_id, itemId, (draft) => ({ ...draft, note, custom_selected: true, selected_folder: "" }));
-                          }}
-                          onSetAllReview={() => {
-                            setResolutionDrafts((prev) => ({
-                              ...prev,
-                              [block.request_id]: Object.fromEntries(
-                                block.items.map((item) => {
-                                  const current = prev[block.request_id]?.[item.item_id] || { selected_folder: "", note: "", custom_selected: false };
-                                  return [item.item_id, { ...current, selected_folder: "Review", custom_selected: false }];
-                                }),
-                              ),
-                            }));
-                            setResolutionWarnings((prev) => ({ ...prev, [block.request_id]: null }));
-                          }}
-                          onSubmit={() => void handleSubmitUnresolved(block)}
-                        />
-                      </div>
-                    );
-                  })}
                 </div>
               </motion.div>
             );

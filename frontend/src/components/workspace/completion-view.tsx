@@ -22,6 +22,21 @@ interface CompletionViewProps {
   onGoHome: () => void;
 }
 
+function renderItemMeta(item: {
+  item_id?: string | null;
+  target_slot_id?: string | null;
+}) {
+  return [item.item_id, item.target_slot_id].filter(Boolean).join(" · ");
+}
+
+function summarizeJournalNames(items: { display_name: string }[], limit = 3): string {
+  const names = items.map((item) => item.display_name).filter(Boolean).slice(0, limit);
+  if (!names.length) {
+    return "";
+  }
+  return names.join("、") + (items.length > limit ? ` 等 ${items.length} 项` : "");
+}
+
 export function CompletionView({
   journal,
   summary,
@@ -70,6 +85,7 @@ export function CompletionView({
   );
   const isPartial = (journal.failure_count || 0) > 0;
   const baseLabel = targetDir.split(/[\\/]/).filter(Boolean).at(-1) || "当前目录";
+  const moveItemsSummary = summarizeJournalNames(moveItems);
 
   const beforeTree = {
     title: "整理前目录树",
@@ -208,6 +224,9 @@ export function CompletionView({
                         <div key={idx} className="flex items-center justify-between gap-3 px-3 py-1.5 rounded-[6px] hover:bg-error/5 transition-colors border border-transparent hover:border-error/10">
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-[12px] font-medium text-on-surface" title={item.display_name}>{item.display_name}</p>
+                            {renderItemMeta(item) ? (
+                              <p className="truncate text-[10px] font-bold text-ui-muted">{renderItemMeta(item)}</p>
+                            ) : null}
                             <p className="truncate text-[10px] text-error/60 font-mono" title={item.target || ""}>{item.target}</p>
                           </div>
                           <AlertTriangle className="h-3 w-3 text-error/30 shrink-0" />
@@ -230,6 +249,9 @@ export function CompletionView({
                         <div key={idx} className="flex items-center justify-between gap-3 px-3 py-1.5 rounded-[6px] hover:bg-warning/5 transition-colors border border-transparent hover:border-warning/10">
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-[12px] font-medium text-on-surface" title={item.display_name}>{item.display_name}</p>
+                            {renderItemMeta(item) ? (
+                              <p className="truncate text-[10px] font-bold text-ui-muted">{renderItemMeta(item)}</p>
+                            ) : null}
                             <p className="truncate text-[10px] text-warning-dim/60 font-mono" title={item.target || ""}>{item.target}</p>
                           </div>
                           <Layers className="h-3 w-3 text-warning/30 shrink-0" />
@@ -296,7 +318,7 @@ export function CompletionView({
       <ConfirmDialog
         open={rollbackConfirmOpen}
         title="确认回退这次整理？"
-        description="这会尝试把本次整理移动过的文件放回原位置。已经存在冲突或被占用的文件，回退时仍可能失败。"
+        description={`这会尝试把本次整理移动过的 ${moveItems.length} 项内容放回原位置${reviewItems.length > 0 ? `，其中 ${reviewItems.length} 项当前位于 Review` : ""}${moveItemsSummary ? `。涉及条目：${moveItemsSummary}` : ""}。已存在冲突或被占用的文件，回退时仍可能失败。`}
         confirmLabel="开始回退"
         cancelLabel="先不回退"
         tone="danger"

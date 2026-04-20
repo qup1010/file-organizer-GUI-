@@ -121,7 +121,7 @@ class StructuredAnalysisServiceTests(unittest.TestCase):
         tool_call = SimpleNamespace(
             function=SimpleNamespace(
                 name=analysis_service.SUBMIT_ANALYSIS_TOOL_NAME,
-                arguments='{"items": [{"entry_name": "合同.pdf", "entry_type": "file", "suggested_purpose": "财务/合同", "summary": "付款协议", "evidence_sources": ["filename"], "confidence": 0.9}, {"entry_name": "Screenshots", "entry_type": "dir", "suggested_purpose": "截图记录", "summary": "软件报错截图", "evidence_sources": ["directory_listing"], "confidence": 0.7}]}'
+                arguments='{"items": [{"entry_id": "F002", "entry_type": "file", "suggested_purpose": "财务/合同", "summary": "付款协议", "evidence_sources": ["filename"], "confidence": 0.9}, {"entry_id": "F001", "entry_type": "dir", "suggested_purpose": "截图记录", "summary": "软件报错截图", "evidence_sources": ["directory_listing"], "confidence": 0.7}]}'
             )
         )
         response = SimpleNamespace(
@@ -139,6 +139,60 @@ class StructuredAnalysisServiceTests(unittest.TestCase):
         self.assertIn("model_wait_start", events)
         self.assertIn("model_wait_end", events)
         self.assertLess(events.index("model_wait_start"), events.index("model_wait_end"))
+
+    def test_run_analysis_cycle_prompt_uses_entry_id_and_not_absolute_paths(self):
+        tool_call = SimpleNamespace(
+            function=SimpleNamespace(
+                name=analysis_service.SUBMIT_ANALYSIS_TOOL_NAME,
+                arguments='{"items": [{"entry_id": "F001", "entry_type": "file", "suggested_purpose": "财务/合同", "summary": "付款协议"}, {"entry_id": "F002", "entry_type": "dir", "suggested_purpose": "截图记录", "summary": "软件报错截图"}]}'
+            )
+        )
+        response = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(tool_calls=[tool_call], content=""))]
+        )
+        create_mock = mock.Mock(return_value=response)
+        client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create_mock)))
+
+        with mock.patch.object(analysis_service, "get_client", return_value=client):
+            rendered = analysis_service.run_analysis_cycle(self.base_dir)
+
+        self.assertIn("付款协议", rendered)
+        self.assertIn("软件报错截图", rendered)
+        messages = create_mock.call_args.kwargs["messages"]
+        self.assertIn("F001 |", messages[0]["content"])
+        self.assertIn("F002 |", messages[0]["content"])
+        self.assertNotIn(str(self.base_dir.resolve()), messages[0]["content"])
+
+    def test_batch_read_tool_resolves_entry_ids_without_exposing_absolute_paths(self):
+        entry_context = {
+            "F001": {
+                "entry_id": "F001",
+                "entry_name": "合同.pdf",
+                "display_name": "合同.pdf",
+                "entry_type": "file",
+                "absolute_path": str((self.base_dir / "合同.pdf").resolve()),
+            }
+        }
+
+        result = analysis_service._dispatch_tool_call(
+            self.base_dir,
+            analysis_service.BATCH_READ_TOOL_NAME,
+            {"entry_ids": ["F001"]},
+            entry_context=entry_context,
+        )
+
+        self.assertIn("条目 [F001 | 合同.pdf] 内容开始", result)
+        self.assertNotIn(str((self.base_dir / "合同.pdf").resolve()), result)
+
+    def test_submit_analysis_tool_schema_no_longer_exposes_entry_name(self):
+        submit_tool = next(
+            tool
+            for tool in analysis_service.tools
+            if tool["function"]["name"] == analysis_service.SUBMIT_ANALYSIS_TOOL_NAME
+        )
+
+        item_properties = submit_tool["function"]["parameters"]["properties"]["items"]["items"]["properties"]
+        self.assertNotIn("entry_name", item_properties)
 
     def test_run_analysis_cycle_serializes_tool_call_messages_before_retrying(self):
         first_response = SimpleNamespace(
@@ -171,7 +225,7 @@ class StructuredAnalysisServiceTests(unittest.TestCase):
                                 type="function",
                                 function=SimpleNamespace(
                                     name=analysis_service.SUBMIT_ANALYSIS_TOOL_NAME,
-                                    arguments='{"items": [{"entry_name": "合同.pdf", "suggested_purpose": "财务/合同", "summary": "付款协议"}, {"entry_name": "Screenshots", "suggested_purpose": "截图记录", "summary": "软件报错截图"}]}',
+                                    arguments='{"items": [{"entry_id": "F002", "entry_type": "file", "suggested_purpose": "财务/合同", "summary": "付款协议"}, {"entry_id": "F001", "entry_type": "dir", "suggested_purpose": "截图记录", "summary": "软件报错截图"}]}',
                                 ),
                             )
                         ],
@@ -225,7 +279,7 @@ class StructuredAnalysisServiceTests(unittest.TestCase):
                                 type="function",
                                 function=SimpleNamespace(
                                     name=analysis_service.SUBMIT_ANALYSIS_TOOL_NAME,
-                                    arguments='{"items": [{"entry_name": "合同.pdf", "suggested_purpose": "财务/合同", "summary": "付款协议"}, {"entry_name": "Screenshots", "suggested_purpose": "截图记录", "summary": "软件报错截图"}]}',
+                                    arguments='{"items": [{"entry_id": "F002", "entry_type": "file", "suggested_purpose": "财务/合同", "summary": "付款协议"}, {"entry_id": "F001", "entry_type": "dir", "suggested_purpose": "截图记录", "summary": "软件报错截图"}]}',
                                 ),
                             )
                         ],
@@ -298,7 +352,7 @@ class StructuredAnalysisServiceTests(unittest.TestCase):
                                     "type": "function",
                                     "function": {
                                         "name": "submit_analysis_result",
-                                        "arguments": '{"items": [{"entry_name": "合同.pdf", "suggested_purpose": "finance/contract", "summary": "payment agreement"}, {"entry_name": "Screenshots", "suggested_purpose": "screenshots", "summary": "error screenshots"}]}'
+                                        "arguments": '{"items": [{"entry_id": "F002", "entry_type": "file", "suggested_purpose": "finance/contract", "summary": "payment agreement"}, {"entry_id": "F001", "entry_type": "dir", "suggested_purpose": "screenshots", "summary": "error screenshots"}]}'
                                     },
                                 }
                             ]
