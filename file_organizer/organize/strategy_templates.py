@@ -82,12 +82,45 @@ DEFAULT_LANGUAGE = str(_CATALOG["defaults"].get("language", "zh") or "zh")
 DEFAULT_DENSITY = str(_CATALOG["defaults"].get("density", "normal") or "normal")
 DEFAULT_PREFIX_STYLE = str(_CATALOG["defaults"].get("prefixStyle", "none") or "none")
 DEFAULT_CAUTION_LEVEL = str(_CATALOG["defaults"].get("cautionLevel", "balanced") or "balanced")
+DEFAULT_ORGANIZE_MODE = "initial"
+DEFAULT_DESTINATION_INDEX_DEPTH = 2
+TASK_TYPE_ORGANIZE_FULL_DIRECTORY = "organize_full_directory"
+TASK_TYPE_ORGANIZE_INTO_EXISTING = "organize_into_existing"
+DEFAULT_TASK_TYPE = TASK_TYPE_ORGANIZE_FULL_DIRECTORY
 
 STRATEGY_TEMPLATES = deepcopy(_CATALOG["strategy_templates"])
 LANGUAGES = deepcopy(_CATALOG["languages"])
 DENSITIES = deepcopy(_CATALOG["densities"])
 PREFIX_STYLES = deepcopy(_CATALOG["prefix_styles"])
 CAUTION_LEVELS = deepcopy(_CATALOG["caution_levels"])
+
+
+def task_type_for_organize_mode(organize_mode: str | None) -> str:
+    normalized = str(organize_mode or DEFAULT_ORGANIZE_MODE).strip().lower()
+    if normalized == "incremental":
+        return TASK_TYPE_ORGANIZE_INTO_EXISTING
+    return TASK_TYPE_ORGANIZE_FULL_DIRECTORY
+
+
+def organize_mode_for_task_type(task_type: str | None) -> str:
+    normalized = str(task_type or DEFAULT_TASK_TYPE).strip().lower()
+    if normalized == TASK_TYPE_ORGANIZE_INTO_EXISTING:
+        return "incremental"
+    return "initial"
+
+
+def task_type_label(task_type: str | None) -> str:
+    normalized = str(task_type or DEFAULT_TASK_TYPE).strip().lower()
+    if normalized == TASK_TYPE_ORGANIZE_INTO_EXISTING:
+        return "归入已有目录"
+    return "整理整个目录"
+
+
+def _normalize_task_type(value: str | None) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in {TASK_TYPE_ORGANIZE_FULL_DIRECTORY, TASK_TYPE_ORGANIZE_INTO_EXISTING}:
+        return normalized
+    return ""
 
 
 def _directory_entries_for(template: dict, density: str) -> list[dict]:
@@ -150,6 +183,27 @@ def normalize_strategy_selection(raw: dict | None = None) -> dict:
     if caution_level not in CAUTION_LEVELS:
         caution_level = template.get("default_caution_level") or DEFAULT_CAUTION_LEVEL
 
+    requested_task_type = _normalize_task_type(payload.get("task_type"))
+    requested_organize_mode = str(payload.get("organize_mode") or "").strip().lower()
+    if requested_organize_mode not in {"initial", "incremental"}:
+        requested_organize_mode = ""
+    if requested_task_type and requested_organize_mode:
+        expected_mode = organize_mode_for_task_type(requested_task_type)
+        if expected_mode != requested_organize_mode:
+            raise ValueError("TASK_TYPE_CONFLICT")
+    organize_mode = (
+        organize_mode_for_task_type(requested_task_type)
+        if requested_task_type
+        else (requested_organize_mode or DEFAULT_ORGANIZE_MODE)
+    )
+    task_type = requested_task_type or task_type_for_organize_mode(organize_mode)
+
+    try:
+        destination_index_depth = int(payload.get("destination_index_depth") or DEFAULT_DESTINATION_INDEX_DEPTH)
+    except (TypeError, ValueError):
+        destination_index_depth = DEFAULT_DESTINATION_INDEX_DEPTH
+    destination_index_depth = max(1, min(3, destination_index_depth))
+
     note = str(payload.get("note") or "").strip()
     preview_directories = build_preview_directories(
         template_id,
@@ -170,6 +224,11 @@ def normalize_strategy_selection(raw: dict | None = None) -> dict:
         "prefix_style_label": PREFIX_STYLES[prefix_style]["label"],
         "caution_level": caution_level,
         "caution_level_label": CAUTION_LEVELS[caution_level]["label"],
+        "task_type": task_type,
+        "task_type_label": task_type_label(task_type),
+        "organize_mode": organize_mode,
+        "organize_mode_label": task_type_label(task_type),
+        "destination_index_depth": destination_index_depth,
         "note": note,
         "preview_directories": preview_directories,
     }
@@ -178,20 +237,28 @@ def normalize_strategy_selection(raw: dict | None = None) -> dict:
 def build_strategy_prompt_fragment(selection: dict | None = None) -> str:
     normalized = normalize_strategy_selection(selection)
     template = STRATEGY_TEMPLATES[normalized["template_id"]]
-    language = LANGUAGES[normalized["language"]]
-    density = DENSITIES[normalized["density"]]
-    prefix_style = PREFIX_STYLES[normalized["prefix_style"]]
     caution = CAUTION_LEVELS[normalized["caution_level"]]
-
-    lines = [
-        "当前固定整理策略（必须优先遵守）：",
-        f"- 主模板：{normalized['template_label']}。{template['description']}",
-        template["prompt_fragment"],
-        language["prompt_fragment"],
-        density["prompt_fragment"],
-        prefix_style["prompt_fragment"],
-        caution["prompt_fragment"],
-    ]
+    if normalized["organize_mode"] == "initial":
+        language = LANGUAGES[normalized["language"]]
+        density = DENSITIES[normalized["density"]]
+        prefix_style = PREFIX_STYLES[normalized["prefix_style"]]
+        lines = [
+            "当前固定整理策略（必须优先遵守）：",
+            f"- 主模板：{normalized['template_label']}。{template['description']}",
+            template["prompt_fragment"],
+            language["prompt_fragment"],
+            density["prompt_fragment"],
+            prefix_style["prompt_fragment"],
+            caution["prompt_fragment"],
+            "当前任务类型：整理整个目录。只整理当前目录这一层的条目，可以创建新的目标目录。",
+        ]
+    else:
+        lines = [
+            "当前固定整理策略（必须优先遵守）：",
+            "- 当前任务类型：归入已有目录。优先复用已有目录结构，不要把任务理解成重新设计分类体系。",
+            caution["prompt_fragment"],
+            f"- 目标目录可见深度为 {normalized['destination_index_depth']}。",
+        ]
     if normalized["note"]:
         lines.append(f"用户补充说明：{normalized['note']}")
     return "\n".join(lines)

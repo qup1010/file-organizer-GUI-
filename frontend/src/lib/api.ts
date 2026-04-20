@@ -1,6 +1,8 @@
 import { waitForRuntimeConfig } from "@/lib/runtime";
 import type {
   CleanupResponse,
+  ConfirmTargetsRequest,
+  ConfirmTargetsResponse,
   CreateSessionResponse,
   ExecuteResponse,
   GetSessionResponse,
@@ -71,6 +73,7 @@ export interface ApiClient {
   abandonSession(session_id: string): Promise<{ session_id: string; session_snapshot: SessionSnapshot }>;
   scanSession(session_id: string): Promise<ScanAcceptedResponse>;
   refreshSession(session_id: string): Promise<ScanAcceptedResponse>;
+  confirmTargetDirectories(session_id: string, payload: ConfirmTargetsRequest): Promise<ConfirmTargetsResponse>;
   sendMessage(session_id: string, content: string): Promise<MessageResponse>;
   resolveUnresolvedChoices(session_id: string, payload: ResolveUnresolvedChoicesRequest): Promise<ResolveUnresolvedChoicesResponse>;
   updateItem(session_id: string, payload: UpdateItemRequest): Promise<{ session_id: string; session_snapshot: SessionSnapshot }>;
@@ -140,6 +143,18 @@ export function createApiClient(baseUrl: string, apiToken?: string): ApiClient {
         baseUrl,
         `/api/sessions/${session_id}/refresh`,
         { method: "POST" },
+        apiToken,
+      );
+    },
+    async confirmTargetDirectories(session_id, payload) {
+      return requestJson<ConfirmTargetsResponse>(
+        baseUrl,
+        `/api/sessions/${session_id}/confirm-targets`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
         apiToken,
       );
     },

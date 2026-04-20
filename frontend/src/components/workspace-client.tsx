@@ -4,6 +4,7 @@ import React, { useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { AlertTriangle, FolderTree, Layers, Loader2, LogOut, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { getSessionStageView } from "@/lib/session-view-model";
 import { cn } from "@/lib/utils";
 
 import { useSession } from "@/lib/use-session";
@@ -17,6 +18,7 @@ import { MinimalScanningView } from "./workspace/minimal-scanning-view";
 import { PrecheckView } from "./workspace/precheck-view";
 import { CompletionView } from "./workspace/completion-view";
 import { ConversationPanel, type ConversationNotice } from "./workspace/conversation-panel";
+import { IncrementalSelectionView } from "./workspace/incremental-selection-view";
 import { PreviewFilter, PreviewFocusRequest, PreviewPanel } from "./workspace/preview-panel";
 
 const DEFAULT_LEFT_WIDTH = 50;
@@ -52,6 +54,7 @@ export default function WorkspaceClient() {
     resolveUnresolvedChoices,
     scan,
     refreshPlan,
+    confirmTargetDirectories,
     runPrecheck,
     returnToPlanning,
     execute,
@@ -138,6 +141,8 @@ export default function WorkspaceClient() {
       summary: snapshot?.plan_snapshot?.summary || "",
       items: snapshot?.plan_snapshot?.items || [],
       groups: snapshot?.plan_snapshot?.groups || [],
+      target_slots: snapshot?.plan_snapshot?.target_slots || [],
+      mappings: snapshot?.plan_snapshot?.mappings || [],
       unresolved_items: snapshot?.plan_snapshot?.unresolved_items || [],
       review_items: snapshot?.plan_snapshot?.review_items || [],
       invalidated_items: snapshot?.plan_snapshot?.invalidated_items || [],
@@ -153,9 +158,11 @@ export default function WorkspaceClient() {
   );
 
   const precheck = snapshot?.precheck_summary ?? null;
-  const isBusy = ["scanning", "executing", "rolling_back"].includes(stage) || loading;
+  const incrementalSelection = snapshot?.incremental_selection ?? null;
+  const stageView = useMemo(() => getSessionStageView(stage), [stage]);
+  const isBusy = stageView.isBusyStage || loading;
   const isPlanSyncing = plannerStatus.isRunning;
-  const canRunPrecheck = stage === "ready_for_precheck" && plan.readiness.can_precheck && !isPlanSyncing;
+  const canRunPrecheck = stageView.isAwaitingPrecheck && plan.readiness.can_precheck && !isPlanSyncing;
   const progressPercent = scanner.total_count > 0 ? (scanner.processed_count / scanner.total_count) * 100 : 0;
   const showConversationPane = true;
   const effectiveComposerMode = isReadOnly ? "hidden" : composerMode;
@@ -165,37 +172,40 @@ export default function WorkspaceClient() {
     [targetPath],
   );
   const nextStepHint = useMemo(() => {
-    if (isReadOnly && stage !== "completed") {
+    if (isReadOnly && !stageView.isCompleted) {
       return "当前为只读查看模式。如需继续整理，请返回首页重新启动或恢复任务。";
     }
-    if (stage === "idle" || stage === "draft") {
+    if (stageView.isDraftLike) {
       return "下一步请先开始扫描。系统会读取目录结构并建立初始分析范围。";
     }
-    if (stage === "scanning") {
+    if (stageView.isScanning) {
       return "扫描完成后会自动显示整理方案。";
     }
-    if (stage === "planning") {
+    if (stageView.isTargetSelection) {
+      return "先选择目标目录，系统会把剩余根级条目作为待整理项，再生成归入已有目录方案。";
+    }
+    if (stageView.isPlanning) {
       return canRunPrecheck
         ? "建议运行预检，核实移动范围。"
         : "可以继续调整要求，直到方案可预检。";
     }
-    if (stage === "ready_for_precheck") {
+    if (stageView.isAwaitingPrecheck) {
       return canRunPrecheck ? "方案已就绪，建议开始运行预检。" : "方案同步中，完成后即可预检。";
     }
-    if (stage === "ready_to_execute") {
+    if (stageView.isReadyToExecute) {
       return "预检完成，请在右侧确认影响范围并执行。";
     }
-    if (stage === "executing") {
+    if (stageView.isExecuting) {
       return "正在执行文件变更，请稍后...";
     }
-    if (stage === "completed") {
+    if (stageView.isCompleted) {
       return "整理已完成。你可以处理失败项或清理空目录。";
     }
-    if (stage === "stale" || stage === "interrupted") {
+    if (stageView.isRecovery) {
       return "建议先重新扫描，确认目录状态后再继续整理。";
     }
     return "当前任务正在继续推进。";
-  }, [canRunPrecheck, isReadOnly, stage]);
+  }, [canRunPrecheck, isReadOnly, stageView]);
   const reviewMoveCount = useMemo(
     () => precheck?.move_preview.filter((move) => move.target.split(/[\\/]/).some((part) => part.toLowerCase() === "review")).length ?? 0,
     [precheck],
@@ -211,9 +221,9 @@ export default function WorkspaceClient() {
     }
     setScanPreviewHoldUntil(Date.now() + SCAN_PREVIEW_GRACE_MS);
   }, []);
-  const shouldShowScanningPreview = stage === "scanning" || (
+  const shouldShowScanningPreview = stageView.isScanning || (
     scanPreviewHoldUntil !== null &&
-    ["planning", "ready_for_precheck"].includes(stage) &&
+    stageView.isPlanningConversation &&
     scanner.status !== "idle" &&
     !plannerStatus.isRunning
   );
@@ -286,7 +296,7 @@ export default function WorkspaceClient() {
 
   const handleExitWorkbench = () => {
     setShowExitMenu(false);
-    if (isReadOnly || stage === "completed") {
+    if (isReadOnly || stageView.isCompleted) {
       router.push("/");
       return;
     }
@@ -321,7 +331,7 @@ export default function WorkspaceClient() {
       return {
         tone: "warning",
         title: "实时连接已断开",
-        description: stage === "completed"
+        description: stageView.isCompleted
           ? "当前页面会保留已同步的记录和结果，输入已关闭。你可以先查看右侧结果，或重新连接恢复实时状态。"
           : "当前页面仍可查看已同步内容。重新连接后，会恢复实时事件更新并重新同步当前任务。",
         primaryAction: {
@@ -333,7 +343,7 @@ export default function WorkspaceClient() {
       };
     }
 
-    if (isReadOnly && stage !== "completed") {
+    if (isReadOnly && !stageView.isCompleted) {
       return {
         tone: "warning",
         title: "这是只读模式",
@@ -345,7 +355,7 @@ export default function WorkspaceClient() {
       return null;
     }
 
-    if (stage === "ready_to_execute") {
+    if (stageView.isReadyToExecute) {
       return {
         tone: "info",
         title: "预检已完成",
@@ -359,7 +369,7 @@ export default function WorkspaceClient() {
       };
     }
 
-    if (stage === "stale") {
+    if (stageView.isStale) {
       return {
         tone: "warning",
         title: "当前方案已过期",
@@ -375,7 +385,7 @@ export default function WorkspaceClient() {
       };
     }
 
-    if (stage === "interrupted") {
+    if (stageView.isInterrupted) {
       return {
         tone: "danger",
         title: "任务已中断",
@@ -391,7 +401,7 @@ export default function WorkspaceClient() {
       };
     }
 
-    if (stage === "completed") {
+    if (stageView.isCompleted) {
       return {
         tone: "info",
         title: isReadOnly ? "这是之前的整理结果" : "整理完成",
@@ -402,13 +412,13 @@ export default function WorkspaceClient() {
     }
 
     return null;
-  }, [canRunPrecheck, isReadOnly, refreshPlan, returnToPlanning, retryStream, snapshot?.last_error, stage, streamStatus]);
+  }, [canRunPrecheck, isReadOnly, refreshPlan, returnToPlanning, retryStream, snapshot?.last_error, stageView, streamStatus]);
 
   React.useEffect(() => {
-    if (stage === "scanning") {
+    if (stageView.isScanning) {
       beginScanPreviewHold();
     }
-  }, [beginScanPreviewHold, stage]);
+  }, [beginScanPreviewHold, stageView]);
 
   React.useEffect(() => {
     if (typeof window === "undefined") {
@@ -440,10 +450,10 @@ export default function WorkspaceClient() {
   }, [scanPreviewHoldUntil, shouldShowScanningPreview]);
 
   React.useEffect(() => {
-    if (stage === "completed" && !journal && !journalLoading && !isBusy) {
+    if (stageView.isCompleted && !journal && !journalLoading && !isBusy) {
       void loadJournal();
     }
-  }, [stage, journal, journalLoading, isBusy, loadJournal]);
+  }, [stageView, journal, journalLoading, isBusy, loadJournal]);
 
   React.useEffect(() => {
     return () => {
@@ -536,7 +546,7 @@ export default function WorkspaceClient() {
               );
             }
 
-            if (stage === "completed") {
+            if (stageView.isCompleted) {
               return (
                 <CompletionView
                   journal={journal}
@@ -557,7 +567,7 @@ export default function WorkspaceClient() {
               );
             }
 
-            if (stage === "ready_to_execute") {
+            if (stageView.isReadyToExecute) {
               return (
                 <PrecheckView
                   summary={snapshot?.precheck_summary || null}
@@ -582,7 +592,7 @@ export default function WorkspaceClient() {
               );
             }
 
-            if (stage === "idle" || stage === "draft") {
+            if (stageView.isDraftLike) {
               return (
                 <EmptyState
                   icon={Layers}
@@ -593,9 +603,24 @@ export default function WorkspaceClient() {
               );
             }
 
+            if (stageView.isTargetSelection) {
+              return (
+                <IncrementalSelectionView
+                  rootDirectoryOptions={incrementalSelection?.root_directory_options || []}
+                  sourceTreeEntries={snapshot?.source_tree_entries || []}
+                  loading={loading}
+                  onConfirm={(selectedTargetDirs) => {
+                    if (!isReadOnly) {
+                      void confirmTargetDirectories(selectedTargetDirs);
+                    }
+                  }}
+                />
+              );
+            }
+
             return (
               <div className="flex h-full flex-col">
-                {(stage === "stale" || stage === "interrupted") && (
+                {stageView.isRecovery && (
                   <div className="z-10 border-b border-warning/15 bg-warning-container/8 px-4 py-2.5 backdrop-blur-sm">
                     <div className="flex items-center justify-between gap-4">
                       <div className="flex items-center gap-3">
@@ -603,7 +628,7 @@ export default function WorkspaceClient() {
                           <AlertTriangle className="h-4 w-4" />
                         </div>
                         <p className="text-[13px] font-medium text-on-surface">
-                          {stage === "stale" ? "当前方案已过期，建议重新扫描以同步目录状态。" : "任务已中断，建议重新扫描后再继续。"}
+                          {stageView.isStale ? "当前方案已过期，建议重新扫描以同步目录状态。" : "任务已中断，建议重新扫描后再继续。"}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -630,6 +655,7 @@ export default function WorkspaceClient() {
                   <PreviewPanel
                     plan={plan}
                     stage={stage}
+                    organizeMode={snapshot?.strategy?.organize_mode || "initial"}
                     isBusy={isBusy}
                     isPlanSyncing={isPlanSyncing}
                     plannerStatus={plannerStatus}
@@ -637,6 +663,7 @@ export default function WorkspaceClient() {
                     readOnly={isReadOnly}
                     focusRequest={previewFocusRequest}
                     sourceTreeEntries={snapshot?.source_tree_entries || []}
+                    incrementalSelection={incrementalSelection}
                     precheckSummary={snapshot?.precheck_summary}
                     onRunPrecheck={() => {
                       if (!isReadOnly) void runPrecheck();
@@ -718,7 +745,7 @@ export default function WorkspaceClient() {
           <span className="inline-flex items-center gap-1.5 rounded-full border border-on-surface/8 bg-surface-container-low px-2 py-0.5 text-[10px] font-bold text-on-surface-variant">
             <span className={cn(
               "h-1.5 w-1.5 rounded-full",
-              stage === "completed" ? "bg-success" : "bg-primary/60"
+              stageView.isCompleted ? "bg-success" : "bg-primary/60"
             )} />
             {getFriendlyStage(stage)}
           </span>

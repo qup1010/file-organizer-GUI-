@@ -8,6 +8,7 @@ import type {
   StrategyDensity,
   StrategyLanguage,
   StrategyPrefixStyle,
+  TaskType,
   StrategyTemplateId,
 } from "@/types/session";
 
@@ -58,8 +59,19 @@ export const DENSITY_OPTIONS: StrategyOptionMeta<StrategyDensity>[] = catalog.de
 export const PREFIX_STYLE_OPTIONS: StrategyOptionMeta<StrategyPrefixStyle>[] = catalog.prefixStyles;
 export const CAUTION_LEVEL_OPTIONS: StrategyOptionMeta<StrategyCautionLevel>[] = catalog.cautionLevels;
 
+export function taskTypeForOrganizeMode(organizeMode: SessionStrategySelection["organize_mode"] | null | undefined): TaskType {
+  return organizeMode === "incremental" ? "organize_into_existing" : "organize_full_directory";
+}
+
+export function taskTypeLabel(taskType: TaskType): string {
+  return taskType === "organize_into_existing" ? "归入已有目录" : "整理整个目录";
+}
+
 export const DEFAULT_STRATEGY_SELECTION: SessionStrategySelection = {
   template_id: catalog.defaults.templateId,
+  organize_mode: "initial",
+  task_type: "organize_full_directory",
+  destination_index_depth: 2,
   language: catalog.defaults.language,
   density: catalog.defaults.density,
   prefix_style: catalog.defaults.prefixStyle,
@@ -139,6 +151,9 @@ export function getLaunchStrategyFromConfig(config?: LaunchStrategyConfig | null
 
   return {
     template_id: templateId,
+    organize_mode: "initial",
+    task_type: "organize_full_directory",
+    destination_index_depth: 2,
     language: isValidLanguage(config?.LAUNCH_DEFAULT_LANGUAGE)
       ? config.LAUNCH_DEFAULT_LANGUAGE
       : suggested.language,
@@ -161,6 +176,7 @@ export function shouldSkipLaunchStrategyPrompt(config?: LaunchStrategyConfig | n
 
 export function buildStrategySummary(strategy: SessionStrategySelection): SessionStrategySummary {
   const template = getTemplateMeta(strategy.template_id);
+  const taskType = strategy.task_type || taskTypeForOrganizeMode(strategy.organize_mode);
   const languageLabel = LANGUAGE_OPTIONS.find((item) => item.id === strategy.language)?.label || "中文目录";
   const densityLabel = DENSITY_OPTIONS.find((item) => item.id === strategy.density)?.label || "常规分类";
   const prefixStyleLabel = PREFIX_STYLE_OPTIONS.find((item) => item.id === strategy.prefix_style)?.label || "无前缀";
@@ -168,8 +184,11 @@ export function buildStrategySummary(strategy: SessionStrategySelection): Sessio
 
   return {
     ...strategy,
+    task_type: taskType,
+    task_type_label: taskTypeLabel(taskType),
     template_label: template.label,
     template_description: template.description,
+    organize_mode_label: taskTypeLabel(taskType),
     language_label: languageLabel,
     density_label: densityLabel,
     prefix_style_label: prefixStyleLabel,

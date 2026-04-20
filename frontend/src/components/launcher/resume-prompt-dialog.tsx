@@ -1,23 +1,9 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { History } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { getFriendlyStage } from "@/lib/utils";
 import { StrategySummaryChips } from "./strategy-summary-chips";
 import { SessionSnapshot, SessionStrategySummary } from "@/types/session";
-
-const STAGE_LABELS: Record<string, string> = {
-  idle: "准备中",
-  draft: "正在准备方案",
-  scanning: "正在扫描",
-  planning: "正在整理方案",
-  ready_for_precheck: "可开始预检",
-  ready_to_execute: "等待执行",
-  executing: "正在执行整理",
-  completed: "整理已完成",
-  rolling_back: "正在回退",
-  abandoned: "已放弃",
-  stale: "方案已过期",
-  interrupted: "已中断",
-};
 
 export function ResumePromptDialog({
   open,
@@ -71,7 +57,7 @@ export function ResumePromptDialog({
             <p className="mb-5 text-sm leading-relaxed text-on-surface-variant">
               检测到这个目录（<strong>{targetDir.split(/[\\/]/).pop()}</strong>）
               {isCompletedResume ? "之前已经整理过一次" : "之前还有一条未完成的记录"}（当前状态：
-              <em>{STAGE_LABELS[resumePrompt.snapshot.stage] || resumePrompt.snapshot.stage}</em>）。
+              <em>{getFriendlyStage(resumePrompt.snapshot.stage)}</em>）。
             </p>
 
             <div className="mb-6 rounded-[10px] border border-on-surface/8 bg-surface px-5 py-5">

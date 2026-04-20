@@ -15,7 +15,8 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { HistoryItem } from "@/types/session";
+import { getSessionStageView } from "@/lib/session-view-model";
+import { HistoryItem, SessionStage } from "@/types/session";
 import { cn, getFriendlyStatus, formatDisplayDate, getFriendlyStage } from "@/lib/utils";
 import { getHistoryEntryName, isHistorySessionEntry, useHistoryList } from "@/lib/use-history-list";
 
@@ -125,8 +126,9 @@ export function SessionHistory({ maxItems }: { maxItems?: number }) {
           <div className="space-y-2.5">
           {(maxItems ? filteredHistory.slice(0, maxItems) : filteredHistory).map((item, idx) => {
             const isRolledBack = item.status === 'rolled_back';
-            const isCompleted = item.status === 'success' || item.status === 'completed';
             const isSession = isHistorySessionEntry(item);
+            const sessionStageView = isSession ? getSessionStageView(item.status as SessionStage) : null;
+            const isCompleted = isSession ? Boolean(sessionStageView?.isCompleted) : item.status === 'success' || item.status === 'completed';
             const dirName = getHistoryEntryName(item);
             
             const actionLabel = isSession ? "查看任务" : "查看结果";

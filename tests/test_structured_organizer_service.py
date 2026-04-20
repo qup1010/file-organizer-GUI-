@@ -304,7 +304,7 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
 
         self.assertNotIn("请先调用 submit_plan_diff", messages[1]["content"])
 
-    def test_build_initial_messages_with_planner_items_hides_real_source_names(self):
+    def test_build_initial_messages_with_planner_items_includes_real_name_context_but_keeps_item_id_as_key(self):
         messages = organizer_service.build_initial_messages(
             "very_long_real_filename_contract_v12_final_really_final.pdf | 财务合同 | 付款协议",
             planner_items=[
@@ -321,11 +321,11 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
             ],
         )
 
-        self.assertIn("F001 | file | 财务合同 | 付款协议 [ext: pdf]", messages[0]["content"])
-        self.assertNotIn(
-            "very_long_real_filename_contract_v12_final_really_final.pdf | 财务合同 | 付款协议",
+        self.assertIn(
+            "F001 | file | very_long_real_filename_contract_v12_final_really_final.pdf | very_long_real_filename_contract_v12_final_really_final.pdf | 财务合同 | 付款协议",
             messages[0]["content"],
         )
+        self.assertIn("`item_id` 是唯一操作键", messages[0]["content"])
 
     def test_render_planner_scan_lines_preserves_entry_type_for_dir_and_suffixless_file(self):
         rendered = organizer_service.render_planner_scan_lines(
@@ -351,8 +351,71 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
             ]
         )
 
-        self.assertIn("F001 | dir | 项目目录 | 目录入口", rendered)
-        self.assertIn("F002 | file | 说明文件 | 无后缀文本", rendered)
+        self.assertIn("F001 | dir | project.v1 | project.v1 | 项目目录 | 目录入口", rendered)
+        self.assertIn("F002 | file | README | README | 说明文件 | 无后缀文本", rendered)
+
+    def test_apply_plan_diff_rejects_incremental_directory_rename_and_unselected_existing_root(self):
+        old_plan = PendingPlan(
+            moves=[PlanMove(source="合同.pdf", target="合同.pdf")],
+            unresolved_items=[],
+        )
+        diff = {
+            "directory_renames": [{"from": "Docs", "to": "Archive"}],
+            "move_updates": [{"source": "合同.pdf", "target": "Study/合同.pdf"}],
+            "unresolved_adds": [],
+            "unresolved_removals": [],
+            "summary": "增量归档测试",
+        }
+
+        _, _, errors = organizer_service.apply_plan_diff(
+            old_plan,
+            diff,
+            valid_sources=["合同.pdf"],
+            planning_context={
+                "organize_mode": "incremental",
+                "target_directories": ["Finance"],
+                "root_directory_options": ["Finance", "Study"],
+            },
+        )
+
+        self.assertTrue(any("禁止目录改名" in error for error in errors))
+        self.assertTrue(any("不在允许范围内" in error for error in errors))
+
+    def test_validate_final_plan_allows_new_top_level_but_rejects_unselected_existing_root(self):
+        final_plan = FinalPlan(
+            directories=["NewDir"],
+            moves=[PlanMove(source="合同.pdf", target="NewDir/合同.pdf")],
+            unresolved_items=[],
+        )
+
+        validation = organizer_service.validate_final_plan(
+            "合同.pdf | 财务/合同 | 付款协议",
+            final_plan,
+            planning_context={
+                "organize_mode": "incremental",
+                "target_directories": ["Finance"],
+                "root_directory_options": ["Finance", "Study"],
+            },
+        )
+
+        self.assertTrue(validation["is_valid"])
+
+        blocked_validation = organizer_service.validate_final_plan(
+            "合同.pdf | 财务/合同 | 付款协议",
+            FinalPlan(
+                directories=[],
+                moves=[PlanMove(source="合同.pdf", target="Study/合同.pdf")],
+                unresolved_items=[],
+            ),
+            planning_context={
+                "organize_mode": "incremental",
+                "target_directories": ["Finance"],
+                "root_directory_options": ["Finance", "Study"],
+            },
+        )
+
+        self.assertFalse(blocked_validation["is_valid"])
+        self.assertTrue(any("不在允许范围内" in error for error in blocked_validation["mode_errors"]))
 
     def test_run_organizer_cycle_translates_planner_ids_back_to_real_sources(self):
         diff_call = SimpleNamespace(
@@ -389,6 +452,61 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
             result["pending_plan"].moves[0].target,
             "Study/very_long_real_filename_contract_v12_final_really_final.pdf",
         )
+
+    def test_run_organizer_cycle_accepts_target_slot_and_translates_to_real_directory(self):
+        diff_call = SimpleNamespace(
+            function=SimpleNamespace(
+                name="submit_plan_diff",
+                arguments='{"directory_renames": [], "move_updates": [{"item_id": "F001", "target_slot": "D001"}], "unresolved_adds": [], "unresolved_removals": [], "summary": "已按槽位归类"}',
+            )
+        )
+        message = SimpleNamespace(content="", tool_calls=[diff_call])
+
+        with mock.patch.object(organizer_service, "chat_one_round", return_value=message):
+            _, result = organizer_service.run_organizer_cycle(
+                messages=[],
+                scan_lines="contract.pdf | 财务合同 | 付款协议",
+                planner_items=[
+                    {
+                        "planner_id": "F001",
+                        "source_relpath": "contract.pdf",
+                        "display_name": "contract.pdf",
+                        "suggested_purpose": "财务合同",
+                        "summary": "付款协议",
+                        "ext": "pdf",
+                        "parent_hint": "",
+                    }
+                ],
+                pending_plan=PendingPlan(),
+                planning_context={
+                    "organize_mode": "incremental",
+                    "target_directories": ["Finance"],
+                    "root_directory_options": ["Finance", "Study"],
+                    "target_slots": [
+                        {"slot_id": "D001", "display_name": "合同", "relpath": "Finance/合同", "depth": 1, "is_new": False}
+                    ],
+                },
+            )
+
+        self.assertEqual(result["pending_plan"].moves[0].source, "contract.pdf")
+        self.assertEqual(result["pending_plan"].moves[0].target, "Finance/合同/contract.pdf")
+
+    def test_build_prompt_includes_target_slot_inventory_for_incremental_mode(self):
+        prompt = organizer_service.build_prompt(
+            "F001 | file | contract.pdf | contract.pdf | 财务合同 | 付款协议",
+            planning_context={
+                "organize_mode": "incremental",
+                "target_directories": ["Finance"],
+                "root_directory_options": ["Finance", "Study"],
+                "target_slots": [
+                    {"slot_id": "D001", "display_name": "合同", "relpath": "Finance/合同", "depth": 1, "is_new": False}
+                ],
+            },
+        )
+
+        self.assertIn("可用目标槽位", prompt)
+        self.assertIn("D001 -> Finance/合同", prompt)
+        self.assertIn("优先提交 target_slot", prompt)
 
     def test_run_organizer_cycle_does_not_leak_planner_ids_into_pending_unresolved_items(self):
         diff_call = self._tool_call(
@@ -468,7 +586,7 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
         self.assertEqual(retry_messages[1]["tool_calls"][0]["function"]["name"], "submit_plan_diff")
         self.assertEqual(retry_messages[2]["role"], "tool")
         self.assertEqual(retry_messages[2]["tool_call_id"], "call_1")
-        self.assertIn("不存在的文件源", retry_messages[3]["content"])
+        self.assertIn("不存在的源文件或目录", retry_messages[3]["content"])
 
     def test_chat_one_round_debug_log_records_chunk_and_synthetic_fields(self):
         chunk_1 = SimpleNamespace(

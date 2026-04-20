@@ -4,16 +4,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { createApiClient } from "@/lib/api";
 import { getApiBaseUrl, getApiToken, isTauriDesktop, waitForRuntimeConfig } from "@/lib/runtime";
+import { getSessionStageView } from "@/lib/session-view-model";
 import { createSessionEventStream, type SessionEventStream } from "@/lib/sse";
 import type {
   AssistantMessage,
   PlannerProgress,
   AssistantRuntimeStatus,
-  ComposerMode,
   JournalSummary,
   SessionEvent,
   SessionSnapshot,
-  SessionStage,
   StreamStatus,
 } from "@/types/session";
 
@@ -130,16 +129,6 @@ function assistantRuntimeFromTyping(phase: "scan" | "plan"): AssistantRuntimeSta
         label: "正在生成整理建议",
         detail: "内容会持续更新到对话区",
       };
-}
-
-function composerModeForStage(stage: SessionStage): ComposerMode {
-  if (stage === "planning" || stage === "ready_for_precheck") {
-    return "editable";
-  }
-  if (stage === "scanning" || stage === "idle" || stage === "draft") {
-    return "readonly";
-  }
-  return "hidden";
 }
 
 const IDLE_PLANNER_PROGRESS: PlannerProgress = {
@@ -271,6 +260,8 @@ export function useSession(sessionId: string | null) {
     clearOfflineTimer();
     hasConnectedRef.current = true;
     setStreamStatus("connected");
+    const snapshotPlannerProgress = normalizePlannerProgress(event.session_snapshot?.planner_progress);
+    const shouldPreserveAssistantDraft = snapshotPlannerProgress.status === "running" && snapshotPlannerProgress.phase === "streaming_reply";
 
     if (event.event_type === "scan.started") {
       setAssistantRuntime({
@@ -329,7 +320,9 @@ export function useSession(sessionId: string | null) {
       setChatError(null);
     }
 
-    setAssistantDraft("");
+    if (!shouldPreserveAssistantDraft) {
+      setAssistantDraft("");
+    }
   }, [clearOfflineTimer]);
 
   const connectStream = useCallback((
@@ -403,6 +396,7 @@ export function useSession(sessionId: string | null) {
   }, [api, clearOfflineTimer, closeStream, connectStream, sessionId]);
 
   const stage = snapshot?.stage || "idle";
+  const stageView = useMemo(() => getSessionStageView(stage), [stage]);
   const plannerProgress = useMemo(
     () => normalizePlannerProgress(snapshot?.planner_progress),
     [snapshot?.planner_progress],
@@ -415,7 +409,7 @@ export function useSession(sessionId: string | null) {
     () => (snapshot?.messages || []).filter(shouldDisplayMessage),
     [snapshot?.messages],
   );
-  const composerMode = useMemo(() => composerModeForStage(stage), [stage]);
+  const composerMode = stageView.composerMode;
   const composerStatus = useMemo<AssistantRuntimeStatus | null>(() => {
     if (plannerStatus.isRunning && composerMode === "editable") {
       return {
@@ -455,15 +449,15 @@ export function useSession(sessionId: string | null) {
       if (!current) {
         return current;
       }
-      if (current.phase === "scan" && stage !== "scanning") {
+      if (current.phase === "scan" && !stageView.isScanning) {
         return null;
       }
-      if (current.phase === "plan" && stage !== "planning" && stage !== "ready_for_precheck") {
+      if (current.phase === "plan" && !stageView.isPlanningConversation) {
         return null;
       }
       return current;
     });
-  }, [stage]);
+  }, [stageView]);
 
   async function refreshSnapshot() {
     if (!sessionId) {
@@ -580,6 +574,33 @@ export function useSession(sessionId: string | null) {
       setSnapshot(response.session_snapshot);
     } catch (err) {
       setChatError(err instanceof Error ? err.message : "刷新当前任务失败，请重试。");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function confirmTargetDirectories(selectedTargetDirs: string[]) {
+    if (!sessionId) {
+      return;
+    }
+    setLoading(true);
+    setChatError(null);
+    setAssistantDraft("");
+    setAssistantRuntime({
+      phase: "plan",
+      mode: "waiting",
+      label: "正在确认目标目录",
+      detail: "系统会探索目标目录结构，并扫描剩余待整理项",
+    });
+    try {
+      const response = await api.confirmTargetDirectories(sessionId, {
+        selected_target_dirs: selectedTargetDirs,
+      });
+      setSnapshot(response.session_snapshot);
+      setAssistantDraft("");
+    } catch (err) {
+      setAssistantRuntime(null);
+      setChatError(err instanceof Error ? err.message : "确认目标目录失败，请重试。");
     } finally {
       setLoading(false);
     }
@@ -708,7 +729,7 @@ export function useSession(sessionId: string | null) {
     }
   }
 
-  async function updateItem(payload: { item_id: string; target_dir?: string; move_to_review?: boolean }) {
+  async function updateItem(payload: { item_id: string; target_dir?: string; target_slot?: string; move_to_review?: boolean }) {
     if (!sessionId) {
       return;
     }
@@ -746,6 +767,7 @@ export function useSession(sessionId: string | null) {
     resolveUnresolvedChoices,
     scan,
     refreshPlan,
+    confirmTargetDirectories,
     runPrecheck,
     returnToPlanning,
     execute,

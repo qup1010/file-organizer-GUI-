@@ -1,4 +1,5 @@
 import type { ApiClient } from "@/lib/api";
+import { getSessionStageView } from "@/lib/session-view-model";
 import type { CreateSessionResponse, SessionStage, SessionStrategySelection } from "@/types/session";
 
 async function ensureSessionScan(
@@ -39,7 +40,7 @@ export async function startFreshSession(
   strategy: SessionStrategySelection,
   previousStage: SessionStage,
 ): Promise<CreateSessionResponse> {
-  if (previousStage !== "completed") {
+  if (!getSessionStageView(previousStage).isCompleted) {
     await api.abandonSession(previousSessionId);
   }
   const response = await api.createSession(targetDir, false, strategy);

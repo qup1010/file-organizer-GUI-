@@ -316,6 +316,9 @@ export default function SettingsPage() {
   const launchTemplate = getTemplateMeta(draft?.global_config.LAUNCH_DEFAULT_TEMPLATE_ID ?? "general_downloads");
   const launchStrategyPreview = buildStrategySummary({
     template_id: draft?.global_config.LAUNCH_DEFAULT_TEMPLATE_ID ?? "general_downloads",
+    organize_mode: "initial",
+    task_type: "organize_full_directory",
+    destination_index_depth: 2,
     language: draft?.global_config.LAUNCH_DEFAULT_LANGUAGE ?? "zh",
     density: draft?.global_config.LAUNCH_DEFAULT_DENSITY ?? "normal",
     prefix_style: draft?.global_config.LAUNCH_DEFAULT_PREFIX_STYLE ?? "none",

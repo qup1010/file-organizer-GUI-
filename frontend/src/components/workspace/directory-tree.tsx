@@ -225,7 +225,7 @@ function FolderNode({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              onEdit(item.item_id, item.target_relpath || "");
+                              onEdit(item.item_id, node.path || "");
                             }}
                             className="p-1 hover:bg-primary/10 rounded text-on-surface-variant/50 hover:text-primary transition-colors"
                           >

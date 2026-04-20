@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from unittest import mock
 
+from file_organizer.app.models import PendingPlanPayload, PlanSnapshotPayload, TaskState
 from file_organizer.app.session_service import OrganizerSessionService
 from file_organizer.app.session_store import SessionStore
 from file_organizer.organize.models import PendingPlan, PlanMove
@@ -44,6 +45,23 @@ class OrganizerSessionServiceTests(unittest.TestCase):
                     time.sleep(0.1)
             if last_error is not None:
                 raise last_error
+
+    @staticmethod
+    def _plan_item_target_directory(snapshot: dict, source_relpath: str) -> str:
+        plan = snapshot["plan_snapshot"]
+        item = next(entry for entry in plan["items"] if entry["source_relpath"] == source_relpath)
+        slot_id = str(item.get("target_slot_id") or "")
+        if slot_id == "Review" or item.get("status") == "review":
+            return "Review"
+        if not slot_id:
+            return ""
+        slot = next((entry for entry in plan.get("target_slots", []) if entry.get("slot_id") == slot_id), None)
+        return str(slot.get("relpath") or "") if slot else ""
+
+    def _plan_item_target_path(self, snapshot: dict, source_relpath: str) -> str:
+        directory = self._plan_item_target_directory(snapshot, source_relpath)
+        filename = source_relpath.replace("\\", "/").split("/")[-1]
+        return f"{directory}/{filename}" if directory else filename
 
     def test_create_session_returns_created_mode(self):
         result = self.service.create_session(str(self.target_dir), resume_if_exists=False)
@@ -101,6 +119,8 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         self.assertEqual(session.user_constraints, ["项目文件尽量按交付物归档"])
         self.assertEqual(snapshot["strategy"]["template_id"], "project_workspace")
         self.assertEqual(snapshot["strategy"]["template_label"], "项目资料")
+        self.assertEqual(snapshot["strategy"]["task_type"], "organize_full_directory")
+        self.assertEqual(snapshot["strategy"]["task_type_label"], "整理整个目录")
         self.assertEqual(snapshot["strategy"]["language_label"], "英文目录")
         self.assertEqual(snapshot["strategy"]["density_label"], "常规分类")
         self.assertEqual(snapshot["strategy"]["prefix_style_label"], "无前缀")
@@ -128,6 +148,76 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         self.assertEqual(snapshot["strategy"]["template_id"], "personal_archive")
         self.assertEqual(snapshot["strategy"]["template_label"], "个人资料")
         self.assertEqual(snapshot["strategy"]["note"], "证件和账单优先分开")
+
+    def test_create_session_persists_incremental_mode_and_destination_depth(self):
+        created = self.service.create_session(
+            str(self.target_dir),
+            resume_if_exists=False,
+            strategy={
+                "template_id": "general_downloads",
+                "organize_mode": "incremental",
+                "destination_index_depth": 3,
+                "language": "zh",
+                "density": "normal",
+                "prefix_style": "none",
+                "caution_level": "balanced",
+                "note": "",
+            },
+        )
+
+        session = created.session
+        assert session is not None
+        snapshot = self.service.get_snapshot(session.session_id)
+
+        self.assertEqual(session.organize_mode, "incremental")
+        self.assertEqual(session.destination_index_depth, 3)
+        self.assertEqual(snapshot["strategy"]["task_type"], "organize_into_existing")
+        self.assertEqual(snapshot["strategy"]["task_type_label"], "归入已有目录")
+        self.assertEqual(snapshot["strategy"]["organize_mode"], "incremental")
+        self.assertEqual(snapshot["strategy"]["destination_index_depth"], 3)
+        self.assertTrue(snapshot["incremental_selection"]["required"])
+
+    def test_create_session_accepts_task_type_without_organize_mode(self):
+        created = self.service.create_session(
+            str(self.target_dir),
+            resume_if_exists=False,
+            strategy={
+                "template_id": "general_downloads",
+                "task_type": "organize_into_existing",
+                "destination_index_depth": 2,
+                "language": "zh",
+                "density": "normal",
+                "prefix_style": "none",
+                "caution_level": "balanced",
+                "note": "",
+            },
+        )
+
+        session = created.session
+        assert session is not None
+        snapshot = self.service.get_snapshot(session.session_id)
+
+        self.assertEqual(session.organize_mode, "incremental")
+        self.assertEqual(snapshot["strategy"]["task_type"], "organize_into_existing")
+        self.assertEqual(snapshot["strategy"]["organize_mode"], "incremental")
+
+    def test_create_session_rejects_conflicting_task_type_and_organize_mode(self):
+        with self.assertRaisesRegex(ValueError, "TASK_TYPE_CONFLICT"):
+            self.service.create_session(
+                str(self.target_dir),
+                resume_if_exists=False,
+                strategy={
+                    "template_id": "general_downloads",
+                    "task_type": "organize_into_existing",
+                    "organize_mode": "initial",
+                    "destination_index_depth": 2,
+                    "language": "zh",
+                    "density": "normal",
+                    "prefix_style": "none",
+                    "caution_level": "balanced",
+                    "note": "",
+                },
+            )
 
     def test_create_session_requires_abandon_before_replacing_active_session(self):
         self.service.create_session(str(self.target_dir), resume_if_exists=False)
@@ -288,6 +378,129 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         self.assertEqual(scanned.stage, "planning")
         self.assertEqual(scanned.scan_lines, "a.txt | 文档 | A")
         self.assertEqual(scanned.scanner_progress["status"], "completed")
+
+    def test_start_scan_in_incremental_mode_enters_target_selection_without_auto_planning(self):
+        created = self.service.create_session(
+            str(self.target_dir),
+            resume_if_exists=False,
+            strategy={"organize_mode": "incremental", "destination_index_depth": 2},
+        )
+        session = created.session
+        assert session is not None
+        (self.target_dir / "docs").mkdir()
+        (self.target_dir / "docs" / "nested").mkdir()
+        (self.target_dir / "new.txt").write_text("hello", encoding="utf-8")
+
+        self.service.start_scan(
+            session.session_id,
+            scan_runner=lambda path: "docs | dir | 已整理目录 | 保留原结构\nnew.txt | file | 新增文件 | 待归档",
+        )
+        scanned = self.store.load(session.session_id)
+
+        self.assertIsNotNone(scanned)
+        assert scanned is not None
+        self.assertEqual(scanned.stage, "selecting_incremental_scope")
+        self.assertEqual(scanned.incremental_selection["status"], "pending")
+        self.assertEqual(scanned.incremental_selection["root_directory_options"], ["docs"])
+        self.assertEqual(scanned.incremental_selection["target_directories"], [])
+        self.assertFalse(scanned.incremental_selection["source_scan_completed"])
+        self.assertEqual(scanned.planner_items, [])
+
+    def test_confirm_target_directories_builds_planner_items_for_unselected_roots(self):
+        created = self.service.create_session(
+            str(self.target_dir),
+            resume_if_exists=False,
+            strategy={"organize_mode": "incremental", "destination_index_depth": 2},
+        )
+        session = created.session
+        assert session is not None
+        (self.target_dir / "Docs").mkdir()
+        (self.target_dir / "Docs" / "Finance").mkdir(parents=True, exist_ok=True)
+        (self.target_dir / "invoice.pdf").write_text("hello", encoding="utf-8")
+        (self.target_dir / "notes.txt").write_text("note", encoding="utf-8")
+        self.service.start_scan(
+            session.session_id,
+            scan_runner=lambda path: "Docs | dir | 已整理目录 | 保留原结构\ninvoice.pdf | file | 财务票据 | 发票\nnotes.txt | file | 学习笔记 | 笔记",
+        )
+
+        with mock.patch(
+            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            return_value=(
+                "已生成增量方案",
+                {
+                    "pending_plan": PendingPlan(
+                        moves=[
+                            PlanMove(source="invoice.pdf", target="Docs/Finance/invoice.pdf"),
+                            PlanMove(source="notes.txt", target="notes.txt"),
+                        ],
+                        unresolved_items=[],
+                        summary="已分类 2 项，调整 2 项，仍剩 0 项待定",
+                    ),
+                    "assistant_message": {"role": "assistant", "content": "已生成增量方案"},
+                },
+            ),
+        ):
+            result = self.service.confirm_target_directories(
+                session.session_id,
+                ["Docs"],
+                scan_runner=lambda path: "Docs | dir | 已整理目录 | 保留原结构\ninvoice.pdf | file | 财务票据 | 发票\nnotes.txt | file | 学习笔记 | 笔记",
+            )
+
+        self.assertEqual(result.session_snapshot["stage"], "ready_for_precheck")
+        self.assertEqual(result.session_snapshot["incremental_selection"]["target_directories"], ["Docs"])
+        self.assertTrue(result.session_snapshot["incremental_selection"]["source_scan_completed"])
+        self.assertEqual(result.session_snapshot["incremental_selection"]["pending_items_count"], 2)
+        self.assertEqual(
+            [item["source_relpath"] for item in self.store.load(session.session_id).planner_items],
+            ["invoice.pdf", "notes.txt"],
+        )
+
+    def test_run_precheck_blocks_incremental_target_outside_allowed_roots(self):
+        created = self.service.create_session(
+            str(self.target_dir),
+            resume_if_exists=False,
+            strategy={"organize_mode": "incremental", "destination_index_depth": 2},
+        )
+        session = created.session
+        assert session is not None
+        session.stage = "planning"
+        session.scan_lines = "invoice.pdf | file | 财务票据 | 发票"
+        session.planner_items = [
+            {
+                "planner_id": "F001",
+                "source_relpath": "invoice.pdf",
+                "display_name": "invoice.pdf",
+                "suggested_purpose": "财务票据",
+                "summary": "发票",
+                "entry_type": "file",
+                "ext": "pdf",
+                "parent_hint": "",
+            }
+        ]
+        session.pending_plan = self.service._pending_plan_to_dict(
+            PendingPlan(
+                moves=[PlanMove(source="invoice.pdf", target="Archive/invoice.pdf")],
+                unresolved_items=[],
+                summary="已分类 1 项，调整 1 项，仍剩 0 项待定",
+            )
+        )
+        session.incremental_selection = {
+            "required": True,
+            "status": "ready",
+            "root_directory_options": ["Archive", "Docs"],
+            "target_directories": ["Docs"],
+            "target_directory_tree": [{"relpath": "Docs", "name": "Docs", "children": []}],
+            "pending_items_count": 1,
+            "source_scan_completed": True,
+        }
+        self.store.save(session)
+
+        result = self.service.run_precheck(session.session_id)
+
+        self.assertFalse(result.session_snapshot["precheck_summary"]["can_execute"])
+        self.assertTrue(
+            any("“归入已有目录”任务的目标超出允许范围" in item for item in result.session_snapshot["precheck_summary"]["blocking_errors"])
+        )
 
     def test_start_scan_snapshot_includes_complete_source_tree_entries(self):
         created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
@@ -873,7 +1086,10 @@ class OrganizerSessionServiceTests(unittest.TestCase):
 
         snapshot = result.session_snapshot
         self.assertEqual(snapshot["plan_snapshot"]["unresolved_items"], [])
-        targets = {item["source_relpath"]: item["target_relpath"] for item in snapshot["plan_snapshot"]["items"]}
+        targets = {
+            item["source_relpath"]: self._plan_item_target_path(snapshot, item["source_relpath"])
+            for item in snapshot["plan_snapshot"]["items"]
+        }
         self.assertEqual(targets["md"], "学习资料/md")
         self.assertEqual(targets["zip"], "Review/zip")
         self.assertEqual(snapshot["messages"][0]["blocks"][0]["status"], "submitted")
@@ -1015,7 +1231,7 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         )
 
         targets = {
-            item["source_relpath"]: item["target_relpath"]
+            item["source_relpath"]: self._plan_item_target_path(result.session_snapshot, item["source_relpath"])
             for item in result.session_snapshot["plan_snapshot"]["items"]
         }
         self.assertEqual(targets["archive/new_summary_232.bak"], "项目资料/new_summary_232.bak")
@@ -1084,7 +1300,7 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         )
 
         targets = {
-            item["source_relpath"]: item["target_relpath"]
+            item["source_relpath"]: self._plan_item_target_path(result.session_snapshot, item["source_relpath"])
             for item in result.session_snapshot["plan_snapshot"]["items"]
         }
         self.assertEqual(targets["a.txt"], "学习资料/a.txt")
@@ -1148,7 +1364,10 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         self.assertEqual(snapshot["plan_snapshot"]["unresolved_items"], [])
         self.assertEqual(snapshot["plan_snapshot"]["stats"]["unresolved_count"], 0)
         self.assertEqual(
-            [(item["source_relpath"], item["target_relpath"]) for item in snapshot["plan_snapshot"]["items"]],
+            [
+                (item["source_relpath"], self._plan_item_target_path(snapshot, item["source_relpath"]))
+                for item in snapshot["plan_snapshot"]["items"]
+            ],
             [("md", "Review/md")],
         )
         self.assertEqual(reloaded.pending_plan["unresolved_items"], [])
@@ -1426,13 +1645,15 @@ class OrganizerSessionServiceTests(unittest.TestCase):
             session.session_id,
             "md",
             "Study",
+            None,
             False,
         )
 
         updated_item = next(
             item for item in result.session_snapshot["plan_snapshot"]["items"] if item["item_id"] == "md"
         )
-        self.assertEqual(updated_item["target_relpath"], "Study/md")
+        self.assertNotIn("target_relpath", updated_item)
+        self.assertEqual(self._plan_item_target_directory(result.session_snapshot, "md"), "Study")
         self.assertEqual(result.session_snapshot["plan_snapshot"]["unresolved_items"], [])
         self.assertEqual(result.session_snapshot["plan_snapshot"]["stats"]["unresolved_count"], 0)
         self.assertEqual(result.session_snapshot["messages"][-1]["visibility"], "internal")
@@ -1464,17 +1685,183 @@ class OrganizerSessionServiceTests(unittest.TestCase):
             session.session_id,
             "md",
             None,
+            None,
             True,
         )
 
         updated_item = next(
-            item for item in result.session_snapshot["plan_snapshot"]["items"] if item["item_id"] == "md"
+            item for item in result.session_snapshot["plan_snapshot"]["items"] if item["source_relpath"] == "md"
         )
-        self.assertEqual(updated_item["target_relpath"], "Review/md")
+        self.assertNotIn("target_relpath", updated_item)
+        self.assertEqual(updated_item["target_slot_id"], "Review")
+        self.assertEqual(self._plan_item_target_directory(result.session_snapshot, "md"), "Review")
         self.assertEqual(updated_item["status"], "review")
         self.assertEqual(result.session_snapshot["plan_snapshot"]["unresolved_items"], [])
         self.assertEqual(result.session_snapshot["summary"], "已分类 1 项，调整 1 项，仍剩 0 项待定")
         self.assertEqual(result.session_snapshot["plan_snapshot"]["summary"], "已分类 1 项，调整 1 项，仍剩 0 项待定")
+
+    def test_plan_snapshot_uses_empty_target_slot_id_for_keep_in_place_move(self):
+        created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
+        session = created.session
+        assert session is not None
+        session.stage = "planning"
+        session.pending_plan = {
+            "directories": [],
+            "moves": [{"source": "md", "target": "md"}],
+            "unresolved_items": [],
+            "summary": "keep in place",
+        }
+        self.store.save(session)
+
+        snapshot = self.service.get_snapshot(session.session_id)
+        item = snapshot["plan_snapshot"]["items"][0]
+        mapping = snapshot["plan_snapshot"]["mappings"][0]
+
+        self.assertEqual(item["target_slot_id"], "")
+        self.assertEqual(item["mapping_status"], "skipped")
+        self.assertEqual(mapping["target_slot_id"], "")
+        self.assertEqual(mapping["status"], "skipped")
+
+    def test_update_item_target_accepts_target_slot_and_snapshot_exposes_structured_targets(self):
+        created = self.service.create_session(
+            str(self.target_dir),
+            resume_if_exists=False,
+            strategy={"organize_mode": "incremental", "destination_index_depth": 2},
+        )
+        session = created.session
+        assert session is not None
+        session.stage = "planning"
+        session.scan_lines = "md | file | 学习资料 | 笔记"
+        session.incremental_selection = {
+            "required": True,
+            "status": "ready",
+            "destination_index_depth": 2,
+            "root_directory_options": ["Docs", "Inbox"],
+            "target_directories": ["Docs"],
+            "target_directory_tree": [
+                {
+                    "relpath": "Docs",
+                    "name": "Docs",
+                    "children": [{"relpath": "Docs/Notes", "name": "Notes", "children": []}],
+                }
+            ],
+            "pending_items_count": 1,
+            "source_scan_completed": True,
+        }
+        session.pending_plan = {
+            "directories": ["Review"],
+            "moves": [{"source": "md", "target": "Review/md"}],
+            "unresolved_items": ["md"],
+            "summary": "needs review",
+        }
+        session.last_ai_pending_plan = {
+            "directories": ["Review"],
+            "moves": [{"source": "md", "target": "Review/md", "raw": ""}],
+            "user_constraints": [],
+            "unresolved_items": ["md"],
+            "summary": "",
+        }
+        self.store.save(session)
+
+        result = self.service.update_item_target(
+            session.session_id,
+            "md",
+            None,
+            "D002",
+            False,
+        )
+
+        updated_item = next(
+            item for item in result.session_snapshot["plan_snapshot"]["items"] if item["source_relpath"] == "md"
+        )
+        self.assertNotIn("target_relpath", updated_item)
+        self.assertEqual(updated_item["target_slot_id"], "D002")
+        self.assertEqual(self._plan_item_target_directory(result.session_snapshot, "md"), "Docs/Notes")
+        self.assertEqual(
+            [slot["relpath"] for slot in result.session_snapshot["plan_snapshot"]["target_slots"]],
+            ["Docs", "Docs/Notes"],
+        )
+        self.assertEqual(result.session_snapshot["plan_snapshot"]["mappings"][0]["target_slot_id"], "D002")
+        reloaded = self.store.load(session.session_id)
+        assert reloaded is not None
+        self.assertIsInstance(reloaded.task_state, TaskState)
+        self.assertEqual(reloaded.task_state.mappings[0].target_slot_id, "D002")
+
+    def test_run_planner_cycle_stores_structured_last_ai_pending_plan(self):
+        created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
+        session = created.session
+        assert session is not None
+        session.stage = "planning"
+        session.scan_lines = "md | file | 学习资料 | 笔记"
+        self.store.save(session)
+
+        updated_pending = PendingPlan(
+            directories=["Docs"],
+            moves=[PlanMove(source="md", target="Docs/md")],
+            unresolved_items=[],
+            summary="已分类 1 项",
+        )
+
+        with mock.patch(
+            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            return_value=(
+                "已改为 Docs",
+                {
+                    "pending_plan": updated_pending,
+                    "is_valid": False,
+                    "diff_summary": ["调整移动：md -> Docs/md"],
+                    "assistant_message": {"role": "assistant", "content": "已改为 Docs"},
+                },
+            ),
+        ):
+            self.service.submit_user_intent(session.session_id, "改到 Docs")
+
+        reloaded = self.store.load(session.session_id)
+        assert reloaded is not None
+        self.assertIsNotNone(reloaded.last_ai_pending_plan)
+        assert reloaded.last_ai_pending_plan is not None
+        self.assertIsInstance(reloaded.last_ai_pending_plan.pending_plan, PendingPlanPayload)
+        self.assertIsInstance(reloaded.last_ai_pending_plan.plan_snapshot, PlanSnapshotPayload)
+        self.assertIsInstance(reloaded.task_state, TaskState)
+        self.assertEqual(reloaded.task_state.mappings[0].target_slot_id, "D001")
+        self.assertEqual(
+            reloaded.last_ai_pending_plan.plan_snapshot["items"][0]["target_slot_id"],
+            "D001",
+        )
+
+    def test_get_snapshot_normalizes_legacy_last_ai_pending_plan_shape(self):
+        created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
+        session = created.session
+        assert session is not None
+        session.stage = "planning"
+        session.scan_lines = "md | file | 学习资料 | 笔记"
+        session.pending_plan = {
+            "directories": ["Docs"],
+            "moves": [{"source": "md", "target": "Docs/md"}],
+            "unresolved_items": [],
+            "summary": "已分类 1 项",
+        }
+        session.last_ai_pending_plan = {
+            "directories": ["Docs"],
+            "moves": [{"source": "md", "target": "Docs/md", "raw": ""}],
+            "user_constraints": [],
+            "unresolved_items": [],
+            "summary": "已分类 1 项",
+        }
+        self.store.save(session)
+
+        self.service.get_snapshot(session.session_id)
+
+        reloaded = self.store.load(session.session_id)
+        assert reloaded is not None
+        self.assertIsNotNone(reloaded.last_ai_pending_plan)
+        assert reloaded.last_ai_pending_plan is not None
+        self.assertEqual(reloaded.last_ai_pending_plan.schema_version, 1)
+        self.assertEqual(
+            reloaded.last_ai_pending_plan.pending_plan["moves"][0]["target"],
+            "Docs/md",
+        )
+        self.assertIn("plan_snapshot", reloaded.last_ai_pending_plan.to_dict())
 
     def test_submit_user_intent_clears_previous_manual_sync_message_after_ai_plan(self):
         created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
@@ -1552,7 +1939,8 @@ class OrganizerSessionServiceTests(unittest.TestCase):
             "items": [
                 {"item_id": "a.txt", "display_name": "a.txt", "source_relpath": "a.txt", "target_relpath": "Docs/a.txt", "status": "planned"},
                 {"item_id": "b.txt", "display_name": "b.txt", "source_relpath": "b.txt", "target_relpath": "Review/b.txt", "status": "review"},
-            ]
+            ],
+            "change_highlights": ["保留旧高亮"],
         }
         self.store.save(session)
 
@@ -1567,7 +1955,20 @@ class OrganizerSessionServiceTests(unittest.TestCase):
             [item["item_id"] for item in result.session_snapshot["plan_snapshot"]["invalidated_items"]],
             ["b.txt"],
         )
+        self.assertEqual(
+            result.session_snapshot["plan_snapshot"]["invalidated_items"][0]["mapping_status"],
+            "invalidated",
+        )
+        self.assertNotIn(
+            "target_relpath",
+            result.session_snapshot["plan_snapshot"]["invalidated_items"][0],
+        )
+        self.assertEqual(
+            result.session_snapshot["plan_snapshot"]["change_highlights"],
+            ["保留旧高亮"],
+        )
         reloaded = self.store.load(session.session_id)
+        self.assertIsInstance(reloaded.pending_plan, PendingPlanPayload)
         self.assertEqual(
             [move["source"] for move in reloaded.pending_plan["moves"]],
             ["a.txt"],
@@ -1649,6 +2050,7 @@ class OrganizerSessionServiceTests(unittest.TestCase):
             [item["status"] for item in snapshot["plan_snapshot"]["items"]],
             ["planned", "planned"],
         )
+        self.assertTrue(all("target_relpath" not in item for item in snapshot["plan_snapshot"]["items"]))
 
     def test_plan_snapshot_items_include_scan_purpose_and_summary(self):
         created = self.service.create_session(str(self.target_dir), resume_if_exists=False)

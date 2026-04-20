@@ -13,6 +13,7 @@ import {
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
+import { getSessionStageView } from "@/lib/session-view-model";
 import type {
   AssistantRuntimeStatus,
   AssistantMessage,
@@ -95,6 +96,7 @@ export function ConversationPanel({
   progressPercent = 0,
   plannerStatus,
 }: ConversationPanelProps) {
+  const stageView = getSessionStageView(stage);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isPinnedToBottom, setIsPinnedToBottom] = useState(true);
   const [resolutionDrafts, setResolutionDrafts] = useState<Record<string, ResolutionDraftMap>>({});
@@ -238,7 +240,7 @@ export function ConversationPanel({
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
       <div ref={scrollContainerRef} onScroll={handleScroll} className="relative min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5 scroll-smooth lg:px-6 lg:py-6">
-        {(stage === "idle" || stage === "draft") && messages.length === 0 && !notice && (
+        {stageView.isDraftLike && !notice && (
           <motion.div 
             initial={{ opacity: 0, scale: 0.98 }} 
             animate={{ opacity: 1, scale: 1 }} 
@@ -277,7 +279,7 @@ export function ConversationPanel({
           </motion.div>
         )}
         
-        {stage === "scanning" && (
+        {stageView.isScanning && (
           <motion.div
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}

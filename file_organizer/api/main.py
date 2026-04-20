@@ -35,9 +35,14 @@ class MessagePayload(BaseModel):
     content: str
 
 
+class ConfirmTargetsPayload(BaseModel):
+    selected_target_dirs: list[str] = Field(default_factory=list)
+
+
 class UpdateItemPayload(BaseModel):
     item_id: str
     target_dir: str | None = None
+    target_slot: str | None = None
     move_to_review: bool = False
 
 
@@ -422,6 +427,10 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
                 payload.resume_if_exists,
                 payload.strategy,
             )
+        except ValueError as exc:
+            if str(exc) == "TASK_TYPE_CONFLICT":
+                return JSONResponse(status_code=400, content={"error_code": "TASK_TYPE_CONFLICT"})
+            raise
         except RuntimeError as exc:
             if str(exc) == "SESSION_LOCKED":
                 return _error_response(app.state.service, None, "SESSION_LOCKED", 409)
@@ -513,6 +522,28 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
         except RuntimeError:
             return _error_response(app.state.service, session_id, "SESSION_STAGE_CONFLICT", 409)
 
+    @app.post("/api/sessions/{session_id}/confirm-targets")
+    def confirm_target_directories(session_id: str, payload: ConfirmTargetsPayload):
+        try:
+            result = app.state.service.confirm_target_directories(session_id, payload.selected_target_dirs)
+            return {
+                "session_id": session_id,
+                "assistant_message": result.assistant_message,
+                "session_snapshot": result.session_snapshot,
+            }
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="SESSION_NOT_FOUND")
+        except RuntimeError as exc:
+            code = str(exc)
+            if code in {
+                "INCREMENTAL_TARGET_DIR_NOT_FOUND",
+                "INCREMENTAL_TARGETS_EMPTY",
+                "INCREMENTAL_SOURCE_EMPTY",
+                "SESSION_STAGE_CONFLICT",
+            }:
+                return _error_response(app.state.service, session_id, code, 409)
+            raise
+
     @app.post("/api/sessions/{session_id}/update-item")
     def update_item(session_id: str, payload: UpdateItemPayload):
         try:
@@ -520,6 +551,7 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
                 session_id,
                 payload.item_id,
                 payload.target_dir,
+                payload.target_slot,
                 payload.move_to_review,
             )
             return {"session_id": session_id, "session_snapshot": result.session_snapshot}
@@ -528,6 +560,10 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
         except RuntimeError as exc:
             if str(exc) == "ITEM_NOT_FOUND":
                 raise HTTPException(status_code=404, detail="ITEM_NOT_FOUND")
+            if str(exc) == "TARGET_SLOT_NOT_FOUND":
+                raise HTTPException(status_code=404, detail="TARGET_SLOT_NOT_FOUND")
+            if str(exc) == "INCREMENTAL_TARGET_NOT_ALLOWED":
+                return _error_response(app.state.service, session_id, "INCREMENTAL_TARGET_NOT_ALLOWED", 409)
             return _error_response(app.state.service, session_id, "SESSION_STAGE_CONFLICT", 409)
 
     @app.post("/api/sessions/{session_id}/unresolved-resolutions")

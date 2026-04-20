@@ -6,8 +6,9 @@ import { AnimatePresence, motion } from "motion/react";
 import { MarkdownProse } from "./markdown-prose";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose } from "@/components/ui/dialog";
 
+import { getSessionStageView } from "@/lib/session-view-model";
 import { cn } from "@/lib/utils";
-import type { PlanItem, PlanSnapshot, SessionStage, SourceTreeEntry } from "@/types/session";
+import type { IncrementalSelectionSnapshot, OrganizeMode, PlanItem, PlanSnapshot, PlanTargetSlot, SessionStage, SourceTreeEntry, TargetDirectoryNode } from "@/types/session";
 
 export type PreviewFilter = "all" | "changed" | "unresolved" | "review" | "invalidated";
 
@@ -20,6 +21,7 @@ export interface PreviewFocusRequest {
 interface PreviewPanelProps {
   plan: PlanSnapshot;
   stage: SessionStage;
+  organizeMode?: OrganizeMode;
   isBusy: boolean;
   isPlanSyncing?: boolean;
   plannerStatus?: {
@@ -29,10 +31,11 @@ interface PreviewPanelProps {
   plannerRunKey?: string | null;
   readOnly?: boolean;
   onRunPrecheck: () => void;
-  onUpdateItem: (itemId: string, payload: { target_dir?: string; move_to_review?: boolean }) => Promise<void> | void;
+  onUpdateItem: (itemId: string, payload: { target_dir?: string; target_slot?: string; move_to_review?: boolean }) => Promise<void> | void;
   precheckSummary?: { mkdir_preview?: string[] } | null;
   focusRequest?: PreviewFocusRequest | null;
   sourceTreeEntries?: SourceTreeEntry[];
+  incrementalSelection?: IncrementalSelectionSnapshot | null;
 }
 
 interface TreeNode {
@@ -44,13 +47,17 @@ interface TreeNode {
   children: TreeNode[];
 }
 
-function normalizePath(path: string | null | undefined): string {
-  return String(path || "").replace(/\\/g, "/").replace(/^\/+|\/+$/g, "").trim();
+interface AvailableTargetOption {
+  key: string;
+  label: string;
+  directory: string;
+  targetSlotId?: string;
 }
 
-function targetDir(item: Pick<PlanItem, "target_relpath">): string {
-  const value = normalizePath(item.target_relpath);
-  return value.includes("/") ? value.slice(0, value.lastIndexOf("/")) : "";
+type TargetSlotLookup = Map<string, PlanTargetSlot>;
+
+function normalizePath(path: string | null | undefined): string {
+  return String(path || "").replace(/\\/g, "/").replace(/^\/+|\/+$/g, "").trim();
 }
 
 function normalizeEntryKind(entryType: string | null | undefined): "directory" | "file" {
@@ -71,9 +78,48 @@ function statusMeta(status: PlanItem["status"]) {
   return { label: "已规划", tone: "border-success/20 bg-success/10 text-success-dim" };
 }
 
-function matchesFilter(item: PlanItem, filter: PreviewFilter) {
+function mappingStatusLabel(status: string | undefined): string {
+  if (status === "review") return "待核对";
+  if (status === "unresolved") return "待决策";
+  if (status === "assigned") return "已分配";
+  if (status === "skipped") return "保留原位";
+  return "已规划";
+}
+
+function resolveItemDirectory(item: PlanItem, targetSlotById: TargetSlotLookup): string {
+  if (item.status === "review" || item.target_slot_id === "Review") return "Review";
+  if (item.target_slot_id) {
+    const slot = targetSlotById.get(item.target_slot_id);
+    if (slot?.relpath) return slot.relpath;
+  }
+  return "当前目录";
+}
+
+function resolveItemTargetPath(item: PlanItem, targetSlotById: TargetSlotLookup): string {
+  const directoryLabel = resolveItemDirectory(item, targetSlotById);
+  const filename = item.display_name || item.source_relpath.split("/").pop() || item.source_relpath;
+  return directoryLabel && directoryLabel !== "当前目录" ? `${directoryLabel}/${filename}` : filename;
+}
+
+function isItemChanged(item: PlanItem, targetSlotById: TargetSlotLookup) {
+  return normalizePath(item.source_relpath) !== normalizePath(resolveItemTargetPath(item, targetSlotById));
+}
+
+function groupItemsByTargetSlot(items: PlanItem[], targetSlotById: TargetSlotLookup) {
+  const groups = new Map<string, PlanItem[]>();
+  items.forEach((item) => {
+    const directory = resolveItemDirectory(item, targetSlotById);
+    if (!directory || directory === "当前目录") return;
+    const existing = groups.get(directory) || [];
+    existing.push(item);
+    groups.set(directory, existing);
+  });
+  return groups;
+}
+
+function matchesFilter(item: PlanItem, filter: PreviewFilter, targetSlotById: TargetSlotLookup) {
   if (filter === "all") return true;
-  if (filter === "changed") return normalizePath(item.source_relpath) !== normalizePath(item.target_relpath);
+  if (filter === "changed") return isItemChanged(item, targetSlotById);
   if (filter === "unresolved") return item.status === "unresolved";
   if (filter === "review") return item.status === "review";
   return item.status === "invalidated";
@@ -91,7 +137,24 @@ function sortTree(root: TreeNode) {
   return root.children;
 }
 
-function buildPlanTree(items: PlanItem[], mkdirPreview: string[]): TreeNode[] {
+function flattenTargetDirectoryTree(nodes: TargetDirectoryNode[]): string[] {
+  const result: string[] = [];
+  const walk = (items: TargetDirectoryNode[]) => {
+    items.forEach((item) => {
+      const relpath = normalizePath(item.relpath);
+      if (relpath) {
+        result.push(relpath);
+      }
+      if (Array.isArray(item.children) && item.children.length > 0) {
+        walk(item.children);
+      }
+    });
+  };
+  walk(nodes);
+  return result;
+}
+
+function buildPlanTree(items: PlanItem[], mkdirPreview: string[], resolveItemPath: (item: PlanItem) => string): TreeNode[] {
   const root: TreeNode = { name: "", path: "", kind: "directory", children: [] };
   const ensureDir = (parts: string[]) => {
     let current = root;
@@ -112,7 +175,7 @@ function buildPlanTree(items: PlanItem[], mkdirPreview: string[]): TreeNode[] {
     if (parts.length) ensureDir(parts);
   });
   items.forEach((item) => {
-    const rawPath = item.target_relpath || item.source_relpath;
+    const rawPath = resolveItemPath(item) || item.source_relpath;
     const parts = normalizePath(rawPath).split("/").filter(Boolean);
     if (parts.length === 0) return;
     if (normalizeEntryKind(item.entry_type) === "directory") {
@@ -273,6 +336,7 @@ function QueueCard({
   onSelectItem,
   onShowAll,
   tone,
+  resolveTargetLabel,
 }: {
   title: string;
   items: PlanItem[];
@@ -280,6 +344,7 @@ function QueueCard({
   onSelectItem: (itemId: string) => void;
   onShowAll: () => void;
   tone: string;
+  resolveTargetLabel: (item: PlanItem) => string;
 }) {
   if (items.length === 0) return null;
   return (
@@ -309,7 +374,7 @@ function QueueCard({
           >
             <div className="min-w-0">
               <p className="truncate text-[12px] font-semibold text-on-surface">{item.display_name}</p>
-              <p className="truncate text-[11px] text-ui-muted">{targetDir(item) || "当前目录"}</p>
+              <p className="truncate text-[11px] text-ui-muted">{resolveTargetLabel(item)}</p>
             </div>
             <span className="text-[11px] text-ui-muted">{fileExtension(item)}</span>
           </button>
@@ -404,10 +469,106 @@ function QueuePanel({
   );
 }
 
+function IncrementalMappingPanel({
+  items,
+  selectedItemId,
+  onSelectItem,
+  onEditItem,
+  resolveTargetLabel,
+}: {
+  items: PlanItem[];
+  selectedItemId: string | null;
+  onSelectItem: (itemId: string) => void;
+  onEditItem: (itemId: string) => void;
+  resolveTargetLabel: (item: PlanItem) => string;
+}) {
+  if (items.length === 0) return null;
+
+  const assignmentCounts = new Map<string, number>();
+  items.forEach((item) => {
+    const label = resolveTargetLabel(item);
+    assignmentCounts.set(label, (assignmentCounts.get(label) || 0) + 1);
+  });
+
+  return (
+    <section className="rounded-[10px] border border-on-surface/8 bg-surface p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-[13px] font-bold text-on-surface">归属映射</h3>
+          <p className="text-[12px] text-ui-muted">清楚显示每个待整理项将被归到哪个目标目录。</p>
+        </div>
+        <span className="rounded-full border border-on-surface/8 bg-on-surface/[0.02] px-2 py-0.5 text-[10px] font-bold text-ui-muted">
+          {items.length} 项
+        </span>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        {Array.from(assignmentCounts.entries())
+          .sort((a, b) => a[0].localeCompare(b[0], "zh-CN"))
+          .slice(0, 6)
+          .map(([label, count]) => (
+            <span key={label} className="rounded-full border border-primary/10 bg-primary/[0.045] px-2.5 py-1 text-[11px] font-semibold text-on-surface">
+              {label} · {count}
+            </span>
+          ))}
+      </div>
+
+      <div className="mt-3 space-y-2">
+        {items.map((item) => {
+          const status = statusMeta(item.status);
+          const targetLabel = resolveTargetLabel(item);
+          const slotLabel = item.target_slot_id && item.target_slot_id !== "Review" ? item.target_slot_id : "";
+          return (
+            <button
+              key={item.item_id}
+              type="button"
+              onClick={() => onSelectItem(item.item_id)}
+              className={cn(
+                "group flex w-full items-center gap-3 rounded-[8px] border px-3 py-2.5 text-left transition-colors",
+                selectedItemId === item.item_id
+                  ? "border-primary/22 bg-primary/6"
+                  : "border-on-surface/8 bg-surface hover:border-on-surface/14 hover:bg-on-surface/[0.02]",
+              )}
+            >
+              <FileText className="h-4 w-4 shrink-0 text-on-surface-variant/60" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[13px] font-semibold text-on-surface">{item.display_name}</p>
+                <p className="mt-0.5 truncate text-[11px] text-ui-muted">
+                  {item.source_relpath} {"->"} {targetLabel}
+                </p>
+              </div>
+              {slotLabel ? (
+                <span className="shrink-0 rounded-full border border-primary/10 bg-primary/[0.045] px-2 py-0.5 text-[10px] font-bold text-primary">
+                  {slotLabel}
+                </span>
+              ) : null}
+              <span className={cn("shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold", status.tone)}>{status.label}</span>
+              <div
+                role="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onEditItem(item.item_id);
+                }}
+                className={cn(
+                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] border border-on-surface/10 bg-surface shadow-sm transition-opacity hover:bg-on-surface/[0.02] active:scale-95",
+                  selectedItemId === item.item_id ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus:opacity-100",
+                )}
+              >
+                <Edit2 className="h-3.5 w-3.5 text-on-surface-variant" />
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 export function PreviewPanel(props: PreviewPanelProps) {
   const {
     plan,
     stage,
+    organizeMode = "initial",
     isBusy,
     isPlanSyncing = false,
     plannerStatus = null,
@@ -418,7 +579,9 @@ export function PreviewPanel(props: PreviewPanelProps) {
     precheckSummary,
     focusRequest,
     sourceTreeEntries = [],
+    incrementalSelection = null,
   } = props;
+  const stageView = getSessionStageView(stage);
   const allItems = useMemo(() => {
     const merged = new Map<string, PlanItem>();
     [...(plan.items || []), ...(plan.invalidated_items || [])].forEach((item) => {
@@ -428,7 +591,7 @@ export function PreviewPanel(props: PreviewPanelProps) {
     });
     return Array.from(merged.values());
   }, [plan.invalidated_items, plan.items]);
-  const isPlanningRun = stage === "planning" && Boolean(plannerStatus?.isRunning);
+  const isPlanningRun = stageView.isPlanning && Boolean(plannerStatus?.isRunning);
   const [viewMode, setViewMode] = useState<"before" | "after">(isPlanningRun ? "before" : "after");
   const [filter, setFilter] = useState<PreviewFilter>("all");
   const [search, setSearch] = useState("");
@@ -463,47 +626,110 @@ export function PreviewPanel(props: PreviewPanelProps) {
     ],
     [allItems, sourceTreeEntries],
   );
+  const targetSlotById = useMemo<TargetSlotLookup>(
+    () => new Map((plan.target_slots || []).map((slot) => [slot.slot_id, slot])),
+    [plan.target_slots],
+  );
+  const resolveTargetLabel = (item: PlanItem) => resolveItemDirectory(item, targetSlotById);
+  const resolveTargetMeta = (item: PlanItem) => {
+    const directoryLabel = resolveTargetLabel(item);
+    const fullTargetPath = resolveItemTargetPath(item, targetSlotById);
+    const slotLabel = item.target_slot_id && item.target_slot_id !== "Review" ? item.target_slot_id : "";
+    const mappingLabel = mappingStatusLabel(item.mapping_status || item.status);
+    return { directoryLabel, fullTargetPath, slotLabel, mappingLabel };
+  };
   const filteredItems = useMemo(() => {
     const keyword = search.trim().toLowerCase();
     return allItems.filter((item) => {
-      if (!matchesFilter(item, filter)) return false;
+      if (!matchesFilter(item, filter, targetSlotById)) return false;
       if (extensionFilter !== "all" && fileExtension(item) !== extensionFilter) return false;
       if (!keyword) return true;
-      return [item.display_name, item.source_relpath, item.target_relpath || "", item.suggested_purpose || "", item.content_summary || ""]
+      return [item.display_name, item.source_relpath, resolveItemTargetPath(item, targetSlotById), resolveTargetLabel(item), item.suggested_purpose || "", item.content_summary || ""]
         .some((value) => value.toLowerCase().includes(keyword));
     });
-  }, [allItems, extensionFilter, filter, search]);
+  }, [allItems, extensionFilter, filter, search, targetSlotById]);
   const filteredSourceEntries = useMemo(() => {
     const keyword = search.trim().toLowerCase();
     return sourceTreeEntries.filter((entry) => {
       const linkedItem = itemBySource.get(normalizePath(entry.source_relpath));
-      if (filter !== "all" && (!linkedItem || !matchesFilter(linkedItem, filter))) return false;
+      if (filter !== "all" && (!linkedItem || !matchesFilter(linkedItem, filter, targetSlotById))) return false;
       if (extensionFilter !== "all" && fileExtension(entry) !== extensionFilter) return false;
       if (!keyword) return true;
       return [
         entry.display_name,
         entry.source_relpath,
-        linkedItem?.target_relpath || "",
+        linkedItem ? resolveTargetLabel(linkedItem) : "",
         linkedItem?.suggested_purpose || "",
         linkedItem?.content_summary || "",
       ].some((value) => value.toLowerCase().includes(keyword));
     });
-  }, [extensionFilter, filter, itemBySource, search, sourceTreeEntries]);
+  }, [extensionFilter, filter, itemBySource, search, sourceTreeEntries, targetSlotById]);
   const selectedItem = useMemo(() => allItems.find((item) => item.item_id === selectedItemId) || null, [allItems, selectedItemId]);
   const mkdirPreview = precheckSummary?.mkdir_preview || [];
   const beforeTree = useMemo(() => buildSourceTree(filteredSourceEntries, itemBySource), [filteredSourceEntries, itemBySource]);
-  const afterTree = useMemo(() => buildPlanTree(filteredItems, mkdirPreview), [filteredItems, mkdirPreview]);
+  const afterTree = useMemo(
+    () => buildPlanTree(filteredItems, mkdirPreview, (item) => resolveItemTargetPath(item, targetSlotById)),
+    [filteredItems, mkdirPreview, targetSlotById],
+  );
   const currentTree = viewMode === "before" ? beforeTree : afterTree;
-  const availableDirectories = useMemo(() => {
-    const dirs = new Set<string>(["Review"]);
-    plan.groups.forEach((group) => group.directory && dirs.add(group.directory));
-    allItems.forEach((item) => {
-      const dir = targetDir(item);
-      if (dir) dirs.add(dir);
+  const flattenedTargetDirectories = useMemo(
+    () => flattenTargetDirectoryTree(incrementalSelection?.target_directory_tree || []),
+    [incrementalSelection?.target_directory_tree],
+  );
+  const groupedByTargetSlot = useMemo(() => groupItemsByTargetSlot(allItems, targetSlotById), [allItems, targetSlotById]);
+  const availableTargetOptions = useMemo<AvailableTargetOption[]>(() => {
+    const options = new Map<string, AvailableTargetOption>();
+    options.set("Review", { key: "review", label: "Review", directory: "Review" });
+    (plan.target_slots || []).forEach((slot: PlanTargetSlot) => {
+      const directory = normalizePath(slot.relpath);
+      if (!directory) return;
+      options.set(directory, {
+        key: `slot:${slot.slot_id}`,
+        label: directory,
+        directory,
+        targetSlotId: slot.slot_id,
+      });
     });
-    return Array.from(dirs).sort((a, b) => a.localeCompare(b, "zh-CN"));
-  }, [allItems, plan.groups]);
-  const canRunPrecheck = stage === "ready_for_precheck" && plan.readiness.can_precheck && !isPlanSyncing;
+    if (organizeMode === "incremental") {
+      (incrementalSelection?.target_directories || []).forEach((directory) => {
+        const normalized = normalizePath(directory);
+        if (normalized && !options.has(normalized)) {
+          options.set(normalized, { key: `dir:${normalized}`, label: normalized, directory: normalized });
+        }
+      });
+      flattenedTargetDirectories.forEach((directory) => {
+        const normalized = normalizePath(directory);
+        if (normalized && !options.has(normalized)) {
+          options.set(normalized, { key: `dir:${normalized}`, label: normalized, directory: normalized });
+        }
+      });
+    }
+    plan.groups.forEach((group) => {
+      const normalized = normalizePath(group.directory);
+      if (normalized && !options.has(normalized)) {
+        options.set(normalized, { key: `dir:${normalized}`, label: normalized, directory: normalized });
+      }
+    });
+    Array.from(groupedByTargetSlot.keys()).forEach((directory) => {
+      const dir = normalizePath(directory);
+      if (dir && !options.has(dir)) {
+        options.set(dir, { key: `dir:${dir}`, label: dir, directory: dir });
+      }
+    });
+    return Array.from(options.values()).sort((a, b) => a.directory.localeCompare(b.directory, "zh-CN"));
+  }, [flattenedTargetDirectories, groupedByTargetSlot, incrementalSelection?.target_directories, organizeMode, plan.groups, plan.target_slots, targetSlotById]);
+  const availableDirectories = useMemo(() => availableTargetOptions.map((item) => item.directory), [availableTargetOptions]);
+  const canRunPrecheck = stageView.isAwaitingPrecheck && plan.readiness.can_precheck && !isPlanSyncing;
+  const incrementalSummary = useMemo(() => {
+    if (organizeMode !== "incremental" || !incrementalSelection) {
+      return null;
+    }
+    return {
+      targetCount: incrementalSelection.target_directories.length,
+      pendingCount: incrementalSelection.pending_items_count,
+      targetDirectories: incrementalSelection.target_directories,
+    };
+  }, [incrementalSelection, organizeMode]);
 
   useEffect(() => {
     if (!selectedItem && filteredItems[0]?.item_id) {
@@ -518,7 +744,7 @@ export function PreviewPanel(props: PreviewPanelProps) {
   }, [focusRequest]);
 
   useEffect(() => {
-    setManualTarget(targetDir(editingItem || { target_relpath: "" }));
+    setManualTarget(editingItem ? (resolveTargetLabel(editingItem) === "当前目录" ? "" : resolveTargetLabel(editingItem)) : "");
   }, [editingItem]);
 
   useEffect(() => {
@@ -533,11 +759,11 @@ export function PreviewPanel(props: PreviewPanelProps) {
     }
   }, [focusRequest]);
 
-  const applyItemTarget = async (itemId: string, payload: { target_dir?: string; move_to_review?: boolean }) => {
+  const applyItemTarget = async (itemId: string, payload: { target_dir?: string; target_slot?: string; move_to_review?: boolean }) => {
     await Promise.resolve(onUpdateItem(itemId, payload));
   };
 
-  const applyBatch = async (items: PlanItem[], payload: { target_dir?: string; move_to_review?: boolean }) => {
+  const applyBatch = async (items: PlanItem[], payload: { target_dir?: string; target_slot?: string; move_to_review?: boolean }) => {
     for (const item of items) {
       await applyItemTarget(item.item_id, payload);
     }
@@ -545,7 +771,8 @@ export function PreviewPanel(props: PreviewPanelProps) {
 
   const currentExt = editingItem ? fileExtension(editingItem) : null;
   const extMatchedItems = currentExt ? allItems.filter((item) => fileExtension(item) === currentExt) : [];
-  const sameSuggestedDirItems = editingItem ? unresolvedItems.filter((item) => targetDir(item) === targetDir(editingItem) && targetDir(item)) : [];
+  const sameSuggestedDirItems = editingItem ? unresolvedItems.filter((item) => resolveTargetLabel(item) === resolveTargetLabel(editingItem) && resolveTargetLabel(item) !== "当前目录") : [];
+  const editingTargetMeta = editingItem ? resolveTargetMeta(editingItem) : null;
   const blockingQueueCount = invalidatedItems.length + unresolvedItems.length;
   const precheckNotice = canRunPrecheck
     ? "待处理队列已经清空，可以开始预检。"
@@ -620,6 +847,22 @@ export function PreviewPanel(props: PreviewPanelProps) {
                   <MarkdownProse content={plan.summary} />
                 </div>
               )}
+              {incrementalSummary ? (
+                <div className="mt-3 flex flex-wrap items-center gap-2 rounded-[10px] border border-primary/10 bg-primary/[0.045] px-3 py-2">
+                  <span className="rounded-full bg-surface px-2 py-0.5 text-[10px] font-bold text-primary">
+                    归入已有目录
+                  </span>
+                  <span className="text-[11px] font-semibold text-on-surface">
+                    已选目标目录 {incrementalSummary.targetCount} 个
+                  </span>
+                  <span className="text-[11px] text-ui-muted">
+                    待整理项 {incrementalSummary.pendingCount} 个
+                  </span>
+                  <span className="truncate text-[11px] text-ui-muted">
+                    目标池：{incrementalSummary.targetDirectories.join("、") || "未设置"}
+                  </span>
+                </div>
+              ) : null}
             </div>
 
             <div className="border-b border-on-surface/6 bg-on-surface/[0.01] px-4 py-2 @lg:px-5">
@@ -657,11 +900,24 @@ export function PreviewPanel(props: PreviewPanelProps) {
 
           <div data-testid="preview-scroll-region" className="flex-1 min-h-0 overflow-y-auto">
             <div className="flex min-w-0 flex-col gap-4 p-4">
+              {organizeMode === "incremental" && viewMode === "after" ? (
+                <IncrementalMappingPanel
+                  items={filteredItems}
+                  selectedItemId={selectedItemId}
+                  onSelectItem={setSelectedItemId}
+                  onEditItem={setEditingItemId}
+                  resolveTargetLabel={resolveTargetLabel}
+                />
+              ) : null}
               <section className="min-w-0 min-h-[280px] @4xl:min-h-[340px] rounded-[10px] border border-on-surface/8 bg-surface p-3">
                 <div className="mb-3 shrink-0 flex items-center justify-between">
                   <div>
-                    <h3 className="text-[13px] font-bold text-on-surface">结构预览</h3>
-                    <p className="text-[12px] text-ui-muted">点击编辑图标或队列条目即可确认方案。</p>
+                    <h3 className="text-[13px] font-bold text-on-surface">{organizeMode === "incremental" && viewMode === "after" ? "结构参考" : "结构预览"}</h3>
+                    <p className="text-[12px] text-ui-muted">
+                      {organizeMode === "incremental" && viewMode === "after"
+                        ? "映射列表负责说明归属，下面的树用于核对整体结构。"
+                        : "点击编辑图标或队列条目即可确认方案。"}
+                    </p>
                   </div>
                   <div className="flex items-center gap-1">
                     <button
@@ -755,9 +1011,9 @@ export function PreviewPanel(props: PreviewPanelProps) {
                 onToggle={() => setQueueCollapsed((current) => !current)}
               >
                 <div className="space-y-3">
-                  <QueueCard title="需重新确认" items={invalidatedItems} selectedItemId={editingItemId || selectedItemId} onSelectItem={(id) => { setSelectedItemId(id); setEditingItemId(id); }} onShowAll={() => setFilter("invalidated")} tone="border-error/12 bg-error-container/20" />
-                  <QueueCard title="待决策" items={unresolvedItems} selectedItemId={editingItemId || selectedItemId} onSelectItem={(id) => { setSelectedItemId(id); setEditingItemId(id); }} onShowAll={() => setFilter("unresolved")} tone="border-warning/12 bg-warning-container/25" />
-                  <QueueCard title="待核对" items={reviewItems} selectedItemId={editingItemId || selectedItemId} onSelectItem={(id) => { setSelectedItemId(id); setEditingItemId(id); }} onShowAll={() => setFilter("review")} tone="border-primary/12 bg-primary/5" />
+                  <QueueCard title="需重新确认" items={invalidatedItems} selectedItemId={editingItemId || selectedItemId} onSelectItem={(id) => { setSelectedItemId(id); setEditingItemId(id); }} onShowAll={() => setFilter("invalidated")} tone="border-error/12 bg-error-container/20" resolveTargetLabel={resolveTargetLabel} />
+                  <QueueCard title="待决策" items={unresolvedItems} selectedItemId={editingItemId || selectedItemId} onSelectItem={(id) => { setSelectedItemId(id); setEditingItemId(id); }} onShowAll={() => setFilter("unresolved")} tone="border-warning/12 bg-warning-container/25" resolveTargetLabel={resolveTargetLabel} />
+                  <QueueCard title="待核对" items={reviewItems} selectedItemId={editingItemId || selectedItemId} onSelectItem={(id) => { setSelectedItemId(id); setEditingItemId(id); }} onShowAll={() => setFilter("review")} tone="border-primary/12 bg-primary/5" resolveTargetLabel={resolveTargetLabel} />
                 </div>
               </QueuePanel>
             </div>
@@ -795,8 +1051,26 @@ export function PreviewPanel(props: PreviewPanelProps) {
                 </div>
                 <div className="min-w-0 flex-1 rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-4 py-3 shadow-sm relative overflow-hidden">
                   <div className="absolute -top-4 -right-2 p-4 opacity-[0.03] pointer-events-none"><Folder className="w-24 h-24" /></div>
-                  <div className="text-[11px] font-bold tracking-wider text-ui-muted flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-success-dim" /> 目标路径</div>
-                  <div className="mt-1 break-all text-[14px] font-bold text-primary">{editingItem.target_relpath || "当前目录"}</div>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-[11px] font-bold tracking-wider text-ui-muted flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-success-dim" /> 目标目录</div>
+                      <div className="mt-1 break-all text-[14px] font-bold text-primary">{editingTargetMeta?.directoryLabel}</div>
+                    </div>
+                    <div className="flex flex-wrap justify-end gap-2">
+                      {editingTargetMeta?.slotLabel ? (
+                        <span className="rounded-full border border-primary/10 bg-primary/[0.045] px-2 py-1 text-[10px] font-bold text-primary">
+                          {editingTargetMeta.slotLabel}
+                        </span>
+                      ) : null}
+                      <span className="rounded-full border border-on-surface/8 bg-surface px-2 py-1 text-[10px] font-bold text-ui-muted">
+                        {editingTargetMeta?.mappingLabel}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="mt-3 border-t border-on-surface/6 pt-3">
+                    <div className="text-[11px] font-bold tracking-wider text-ui-muted">完整目标路径</div>
+                    <div className="mt-1 break-all text-[13px] font-medium text-on-surface">{editingTargetMeta?.fullTargetPath}</div>
+                  </div>
                 </div>
               </div>
 
@@ -833,20 +1107,32 @@ export function PreviewPanel(props: PreviewPanelProps) {
                       <Layers className="w-4 h-4 text-primary" /> 快速调整目标
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      {availableDirectories.slice(0, 12).map((directory) => (
+                      {availableTargetOptions.slice(0, 12).map((option) => (
                         <button
-                          key={`${editingItem.item_id}-${directory}`}
+                          key={`${editingItem.item_id}-${option.key}`}
                           type="button"
                           onClick={() => {
-                            void applyItemTarget(editingItem.item_id, directory === "Review" ? { move_to_review: true } : { target_dir: directory });
+                            void applyItemTarget(
+                              editingItem.item_id,
+                              option.directory === "Review"
+                                ? { move_to_review: true }
+                                : option.targetSlotId
+                                  ? { target_slot: option.targetSlotId }
+                                  : { target_dir: option.directory },
+                            );
                             setEditingItemId(null);
                           }}
                           className={cn(
                             "rounded-[8px] border px-4 py-2 text-[12px] font-semibold transition-all active:scale-95",
-                            targetDir(editingItem) === directory ? "border-primary/30 bg-primary/10 text-primary shadow-sm" : "border-on-surface/10 bg-surface text-on-surface hover:border-primary/20 hover:bg-surface-container",
+                            (
+                              (option.targetSlotId && editingItem.target_slot_id === option.targetSlotId) ||
+                              (!option.targetSlotId && resolveTargetLabel(editingItem) === option.directory)
+                            )
+                              ? "border-primary/30 bg-primary/10 text-primary shadow-sm"
+                              : "border-on-surface/10 bg-surface text-on-surface hover:border-primary/20 hover:bg-surface-container",
                           )}
                         >
-                          {directory}
+                          {option.label}
                         </button>
                       ))}
                     </div>

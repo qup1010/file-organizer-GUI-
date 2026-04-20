@@ -32,6 +32,8 @@ describe("PreviewPanel", () => {
     summary: "",
     items: [],
     groups: [],
+    target_slots: [],
+    mappings: [],
     display_plan: null,
     unresolved_items: [],
     review_items: [],
@@ -78,8 +80,9 @@ describe("PreviewPanel", () => {
               item_id: "item-review-1",
               display_name: "important_invoice_301.exe",
               source_relpath: "incoming/important_invoice_301.exe",
-              target_relpath: "Review/important_invoice_301.exe",
+              target_slot_id: "Review",
               status: "review",
+              mapping_status: "review",
               suggested_purpose: "Review",
               content_summary: "待人工核对",
               reason: "用途不够稳定",
@@ -193,5 +196,149 @@ describe("PreviewPanel", () => {
 
     expect(scrollRegion.contains(footer)).toBe(false);
     expect(screen.getByRole("button", { name: "等待方案同步完成" })).toBeInTheDocument();
+  });
+
+  it("shows incremental mapping rows before the structure reference", () => {
+    render(
+      <PreviewPanel
+        plan={{
+          ...createPlan(),
+          items: [
+            {
+              item_id: "F001",
+              display_name: "contract.pdf",
+              source_relpath: "contract.pdf",
+              target_slot_id: "D001",
+              status: "planned",
+              mapping_status: "assigned",
+              suggested_purpose: "财务合同",
+              content_summary: "付款协议",
+              reason: "归入合同目录",
+              confidence: 0.9,
+            },
+          ],
+          target_slots: [
+            {
+              slot_id: "D001",
+              display_name: "合同",
+              relpath: "Finance/合同",
+              depth: 1,
+              is_new: false,
+            },
+          ],
+          mappings: [
+            {
+              item_id: "F001",
+              source_ref_id: "F001",
+              target_slot_id: "D001",
+              status: "assigned",
+              reason: "归入合同目录",
+              confidence: 0.9,
+              user_overridden: false,
+            },
+          ],
+          stats: {
+            directory_count: 1,
+            move_count: 1,
+            unresolved_count: 0,
+          },
+          readiness: {
+            can_precheck: true,
+          },
+        }}
+        stage="ready_for_precheck"
+        organizeMode="incremental"
+        isBusy={false}
+        incrementalSelection={{
+          required: true,
+          status: "ready",
+          destination_index_depth: 2,
+          root_directory_options: ["Finance", "Inbox"],
+          target_directories: ["Finance"],
+          target_directory_tree: [],
+          pending_items_count: 1,
+          source_scan_completed: true,
+        }}
+        onRunPrecheck={() => {}}
+        onUpdateItem={() => {}}
+      />,
+    );
+
+    expect(screen.getByText("归属映射")).toBeInTheDocument();
+    expect(screen.getByText("contract.pdf -> Finance/合同")).toBeInTheDocument();
+    expect(screen.getByText("结构参考")).toBeInTheDocument();
+  });
+
+  it("builds the after-tree from target slots without target_relpath", () => {
+    render(
+      <PreviewPanel
+        plan={{
+          ...createPlan(),
+          items: [
+            {
+              item_id: "F001",
+              display_name: "contract.pdf",
+              source_relpath: "contract.pdf",
+              target_slot_id: "D001",
+              status: "planned",
+              mapping_status: "assigned",
+              suggested_purpose: "财务合同",
+              content_summary: "付款协议",
+              reason: "归入合同目录",
+              confidence: 0.9,
+            },
+          ],
+          target_slots: [
+            {
+              slot_id: "D001",
+              display_name: "合同",
+              relpath: "Finance/合同",
+              depth: 1,
+              is_new: false,
+            },
+          ],
+          mappings: [
+            {
+              item_id: "F001",
+              source_ref_id: "F001",
+              target_slot_id: "D001",
+              status: "assigned",
+              reason: "归入合同目录",
+              confidence: 0.9,
+              user_overridden: false,
+            },
+          ],
+          stats: {
+            directory_count: 1,
+            move_count: 1,
+            unresolved_count: 0,
+          },
+          readiness: {
+            can_precheck: true,
+          },
+        }}
+        stage="ready_for_precheck"
+        organizeMode="incremental"
+        isBusy={false}
+        incrementalSelection={{
+          required: true,
+          status: "ready",
+          destination_index_depth: 2,
+          root_directory_options: ["Finance", "Inbox"],
+          target_directories: ["Finance"],
+          target_directory_tree: [],
+          pending_items_count: 1,
+          source_scan_completed: true,
+        }}
+        onRunPrecheck={() => {}}
+        onUpdateItem={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: "后" })[0]);
+
+    expect(screen.getByText("Finance")).toBeInTheDocument();
+    expect(screen.getByText("合同")).toBeInTheDocument();
+    expect(screen.getByText("contract.pdf")).toBeInTheDocument();
   });
 });

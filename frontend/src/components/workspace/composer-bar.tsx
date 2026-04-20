@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { AlertTriangle, Loader2, Send, Sparkles } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { getSessionStageView } from "@/lib/session-view-model";
 import { cn } from "@/lib/utils";
 import { AssistantRuntimeStatus, ComposerMode, SessionStage } from "@/types/session";
 
@@ -40,9 +41,10 @@ export function ComposerBar({
   onSendMessage,
 }: ComposerBarProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const stageView = getSessionStageView(stage);
   const canShowPrecheckHint =
     unresolvedCount === 0 &&
-    stage === "ready_for_precheck" &&
+    stageView.isAwaitingPrecheck &&
     composerMode === "editable" &&
     !isBusy &&
     !composerStatus;

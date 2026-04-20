@@ -2,6 +2,7 @@ export type SessionStage =
   | "idle"
   | "draft"
   | "scanning"
+  | "selecting_incremental_scope"
   | "planning"
   | "ready_for_precheck"
   | "ready_to_execute"
@@ -27,11 +28,16 @@ export type StrategyTemplateId =
 export type StrategyLanguage = "zh" | "en";
 export type StrategyDensity = "normal" | "minimal";
 export type StrategyPrefixStyle = "none" | "numeric" | "category";
-
 export type StrategyCautionLevel = "conservative" | "balanced";
+export type OrganizeMode = "initial" | "incremental";
+export type TaskType = "organize_full_directory" | "organize_into_existing";
+export type DestinationIndexDepth = 1 | 2 | 3;
 
 export interface SessionStrategySelection {
   template_id: StrategyTemplateId;
+  organize_mode: OrganizeMode;
+  task_type?: TaskType;
+  destination_index_depth: DestinationIndexDepth;
   language: StrategyLanguage;
   density: StrategyDensity;
   prefix_style: StrategyPrefixStyle;
@@ -42,6 +48,9 @@ export interface SessionStrategySelection {
 export interface SessionStrategySummary extends SessionStrategySelection {
   template_label: string;
   template_description?: string;
+  task_type: TaskType;
+  task_type_label: string;
+  organize_mode_label: string;
   language_label: string;
   density_label: string;
   prefix_style_label: string;
@@ -108,19 +117,55 @@ export interface PlanItem {
   item_id: string;
   display_name: string;
   source_relpath: string;
-  target_relpath: string | null;
+  target_slot_id: string;
   entry_type?: string;
   suggested_purpose?: string;
   content_summary?: string;
   reason?: string;
   confidence?: number | null;
+  mapping_status: string;
   status: "planned" | "unresolved" | "review" | "invalidated" | string;
+}
+
+export interface PlanTargetSlot {
+  slot_id: string;
+  display_name: string;
+  relpath: string;
+  depth: number;
+  is_new: boolean;
+}
+
+export interface PlanMappingEntry {
+  item_id: string;
+  source_ref_id: string;
+  target_slot_id: string;
+  status: string;
+  reason?: string;
+  confidence?: number | null;
+  user_overridden?: boolean;
 }
 
 export interface SourceTreeEntry {
   source_relpath: string;
   display_name: string;
   entry_type: "file" | "directory" | string;
+}
+
+export interface TargetDirectoryNode {
+  relpath: string;
+  name: string;
+  children: TargetDirectoryNode[];
+}
+
+export interface IncrementalSelectionSnapshot {
+  required: boolean;
+  status: "pending" | "scanning" | "ready" | string;
+  destination_index_depth: DestinationIndexDepth;
+  root_directory_options: string[];
+  target_directories: string[];
+  target_directory_tree: TargetDirectoryNode[];
+  pending_items_count: number;
+  source_scan_completed: boolean;
 }
 
 export interface PlanGroup {
@@ -133,6 +178,8 @@ export interface PlanSnapshot {
   summary: string;
   items: PlanItem[];
   groups: PlanGroup[];
+  target_slots: PlanTargetSlot[];
+  mappings: PlanMappingEntry[];
   display_plan?: any;
   unresolved_items: string[];
   review_items: PlanItem[];
@@ -254,6 +301,7 @@ export interface SessionSnapshot {
   planner_progress: PlannerProgress;
   plan_snapshot: PlanSnapshot;
   source_tree_entries?: SourceTreeEntry[];
+  incremental_selection?: IncrementalSelectionSnapshot;
   precheck_summary: PrecheckSummary | null;
   execution_report: ExecutionReport | null;
   rollback_report: RollbackReport | null;
@@ -309,6 +357,16 @@ export interface ResolveUnresolvedChoicesResponse {
   session_snapshot: SessionSnapshot;
 }
 
+export interface ConfirmTargetsRequest {
+  selected_target_dirs: string[];
+}
+
+export interface ConfirmTargetsResponse {
+  session_id: string;
+  assistant_message: AssistantMessage | null;
+  session_snapshot: SessionSnapshot;
+}
+
 export interface HistoryItem {
   execution_id: string;
   target_dir: string;
@@ -322,6 +380,7 @@ export interface HistoryItem {
 export interface UpdateItemRequest {
   item_id: string;
   target_dir?: string;
+  target_slot?: string;
   move_to_review?: boolean;
 }
 
