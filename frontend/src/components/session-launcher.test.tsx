@@ -43,6 +43,7 @@ vi.mock("@/lib/runtime", () => ({
   getApiBaseUrl: () => "http://127.0.0.1:8765",
   getApiToken: () => "",
   isTauriDesktop: () => false,
+  inspectPathsWithTauri: vi.fn(),
   pickDirectoryWithTauri: vi.fn(),
   pickDirectoriesWithTauri: vi.fn(),
   pickFilesWithTauri: vi.fn(),
@@ -65,6 +66,27 @@ vi.mock("@/lib/session-launcher-actions", () => ({
   firstSourcePath: (sources: Array<{ path: string }>) => sources[0]?.path || "",
 }));
 
+function openManualSourceInput() {
+  if (screen.queryByPlaceholderText("输入完整绝对路径...")) {
+    return;
+  }
+  fireEvent.click(screen.getByRole("button", { name: /手动输入路径|手填路径|收起手动输入/ }));
+}
+
+function openManualTargetInput() {
+  fireEvent.click(screen.getByRole("button", { name: /手填路径/ }));
+}
+
+function addSource(path: string, sourceType: "directory" | "file" = "directory") {
+  openManualSourceInput();
+  const selectorButtons = screen.getAllByRole("button", { name: sourceType === "file" ? "文件" : "目录" });
+  fireEvent.click(selectorButtons[selectorButtons.length - 1]);
+  fireEvent.change(screen.getByPlaceholderText("输入完整绝对路径..."), {
+    target: { value: path },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "添加" }));
+}
+
 describe("SessionLauncher", () => {
   beforeEach(() => {
     pushMock.mockReset();
@@ -78,7 +100,9 @@ describe("SessionLauncher", () => {
     selectDirMock.mockReset();
 
     getSettingsMock.mockResolvedValue({
-      global_config: {},
+      global_config: {
+        LAUNCH_REVIEW_FOLLOWS_NEW_ROOT: true,
+      },
       status: {
         text_configured: true,
       },
@@ -119,28 +143,16 @@ describe("SessionLauncher", () => {
   it("supports multiple file and directory sources and submits a full-categorize payload", async () => {
     render(<SessionLauncher />);
 
-    await screen.findByText("待整理文件集");
+    await screen.findByText("本次整理对象");
+    addSource("D:/incoming");
+    addSource("D:/incoming/readme.txt", "file");
 
-    fireEvent.change(screen.getByPlaceholderText("手动输入目录路径"), {
-      target: { value: "D:/incoming" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /^添加$/ }));
-
-    fireEvent.change(screen.getByRole("combobox"), {
-      target: { value: "file" },
-    });
-    fireEvent.change(screen.getByPlaceholderText("手动输入文件路径"), {
-      target: { value: "D:/incoming/readme.txt" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /^添加$/ }));
-
-    expect(screen.getAllByText("目录来源").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("文件来源").length).toBeGreaterThan(0);
-
-    fireEvent.click(screen.getByRole("button", { name: "下一步：定义目标" }));
-
-    expect(screen.getAllByText("输出目录").length).toBeGreaterThan(0);
-    fireEvent.change(screen.getByPlaceholderText("整体分类生成的新目录会写入这里"), {
+    expect(screen.getByText("D:/incoming")).toBeInTheDocument();
+    expect(screen.getByText("D:/incoming/readme.txt")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "下一步：选择整理方式" }));
+    fireEvent.click(screen.getByRole("button", { name: "下一步：填写必要信息" }));
+    fireEvent.click(screen.getByRole("button", { name: "修改放置规则" }));
+    fireEvent.change(screen.getAllByRole("textbox")[0], {
       target: { value: "D:/sorted" },
     });
     fireEvent.click(screen.getByRole("button", { name: "开始扫描与分析" }));
@@ -166,33 +178,33 @@ describe("SessionLauncher", () => {
     });
   });
 
-  it("blocks full categorize submission when output_dir is missing", async () => {
+  it("falls back to the source workspace when full categorize output_dir is not manually overridden", async () => {
     render(<SessionLauncher />);
 
-    await screen.findByText("待整理文件集");
-
-    fireEvent.change(screen.getByPlaceholderText("手动输入目录路径"), {
-      target: { value: "D:/incoming" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /^添加$/ }));
-    fireEvent.click(screen.getByRole("button", { name: "下一步：定义目标" }));
+    await screen.findByText("本次整理对象");
+    addSource("D:/incoming");
+    fireEvent.click(screen.getByRole("button", { name: "下一步：选择整理方式" }));
+    fireEvent.click(screen.getByRole("button", { name: "下一步：填写必要信息" }));
     fireEvent.click(screen.getByRole("button", { name: "开始扫描与分析" }));
 
-    expect(await screen.findByText("整体分类必须先指定输出目录。")).toBeInTheDocument();
-    expect(createSessionAndStartScanMock).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(createSessionAndStartScanMock).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          output_dir: "D:/incoming",
+        }),
+      );
+    });
   });
 
   it("fills target directories from a profile and submits assign-existing payload", async () => {
     render(<SessionLauncher />);
 
-    await screen.findByText("待整理文件集");
-
-    fireEvent.click(screen.getByRole("button", { name: /归入现有分类/ }));
-    fireEvent.change(screen.getByPlaceholderText("手动输入目录路径"), {
-      target: { value: "D:/downloads" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /^添加$/ }));
-    fireEvent.click(screen.getByRole("button", { name: "下一步：定义目标" }));
+    await screen.findByText("本次整理对象");
+    addSource("D:/downloads");
+    fireEvent.click(screen.getByRole("button", { name: "下一步：选择整理方式" }));
+    fireEvent.click(screen.getByRole("button", { name: /归入现有目录/ }));
+    fireEvent.click(screen.getByRole("button", { name: "下一步：填写必要信息" }));
 
     const profileSelect = screen.getByRole("combobox");
     fireEvent.change(profileSelect, { target: { value: "profile-1" } });
@@ -200,10 +212,11 @@ describe("SessionLauncher", () => {
     expect(await screen.findByText("D:/archive/docs")).toBeInTheDocument();
     expect(screen.getByText("D:/archive/media")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByPlaceholderText("手动输入目标目录路径"), {
+    openManualTargetInput();
+    fireEvent.change(screen.getByPlaceholderText("手动输入目标目录完整绝对路径"), {
       target: { value: "D:/archive/misc" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "添加目录" }));
+    fireEvent.click(screen.getByRole("button", { name: "添加" }));
     fireEvent.click(screen.getByRole("button", { name: "开始扫描并进入目标确认" }));
 
     await waitFor(() => {
@@ -228,40 +241,35 @@ describe("SessionLauncher", () => {
   it("blocks assign-existing submission when no target profile or target directories are provided", async () => {
     render(<SessionLauncher />);
 
-    await screen.findByText("待整理文件集");
-
-    fireEvent.click(screen.getByRole("button", { name: /归入现有分类/ }));
-    fireEvent.change(screen.getByPlaceholderText("手动输入目录路径"), {
-      target: { value: "D:/downloads" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /^添加$/ }));
-    fireEvent.click(screen.getByRole("button", { name: "下一步：定义目标" }));
+    await screen.findByText("本次整理对象");
+    addSource("D:/downloads");
+    fireEvent.click(screen.getByRole("button", { name: "下一步：选择整理方式" }));
+    fireEvent.click(screen.getByRole("button", { name: /归入现有目录/ }));
+    fireEvent.click(screen.getByRole("button", { name: "下一步：填写必要信息" }));
     fireEvent.click(screen.getByRole("button", { name: "开始扫描并进入目标确认" }));
 
-    expect(await screen.findByText("归入已有分类时，至少需要选择一个目录配置或手动添加目标目录。")).toBeInTheDocument();
+    expect(await screen.findByText("归入现有目录时，至少需要选择一个目录配置或手动添加目标目录。")).toBeInTheDocument();
     expect(createSessionAndStartScanMock).not.toHaveBeenCalled();
   });
 
-  it("can save the current target directory set as a new profile", async () => {
+  it("can save the current target directory set as a reusable profile from the secondary section", async () => {
     render(<SessionLauncher />);
 
-    await screen.findByText("待整理文件集");
+    await screen.findByText("本次整理对象");
+    addSource("D:/downloads");
+    fireEvent.click(screen.getByRole("button", { name: "下一步：选择整理方式" }));
+    fireEvent.click(screen.getByRole("button", { name: /归入现有目录/ }));
+    fireEvent.click(screen.getByRole("button", { name: "下一步：填写必要信息" }));
 
-    fireEvent.click(screen.getByRole("button", { name: /归入现有分类/ }));
-    fireEvent.change(screen.getByPlaceholderText("手动输入目录路径"), {
-      target: { value: "D:/downloads" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /^添加$/ }));
-    fireEvent.click(screen.getByRole("button", { name: "下一步：定义目标" }));
-
-    fireEvent.change(screen.getByPlaceholderText("手动输入目标目录路径"), {
+    openManualTargetInput();
+    fireEvent.change(screen.getByPlaceholderText("手动输入目标目录完整绝对路径"), {
       target: { value: "D:/archive/docs" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "添加目录" }));
-    fireEvent.change(screen.getByPlaceholderText("例如：工作资料库 / 个人归档库"), {
+    fireEvent.click(screen.getByRole("button", { name: "添加" }));
+    fireEvent.change(screen.getByPlaceholderText("配置名称（例：工作资料库）"), {
       target: { value: "新的配置" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "保存当前目录集合" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
 
     await waitFor(() => {
       expect(createTargetProfileMock).toHaveBeenCalledWith({
@@ -269,5 +277,48 @@ describe("SessionLauncher", () => {
         directories: [{ path: "D:/archive/docs", label: undefined }],
       });
     });
+  });
+
+  it("opens advanced settings in a dialog instead of expanding inline", async () => {
+    render(<SessionLauncher />);
+
+    await screen.findByText("本次整理对象");
+    addSource("D:/incoming");
+    fireEvent.click(screen.getByRole("button", { name: "下一步：选择整理方式" }));
+    fireEvent.click(screen.getByRole("button", { name: "下一步：填写必要信息" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "展开高级面板" }));
+
+    expect(await screen.findByText("更多设置")).toBeInTheDocument();
+    expect(screen.getByText("默认模板")).toBeInTheDocument();
+  });
+
+  it("uses global placement defaults and lets review follow the new-directory root", async () => {
+    getSettingsMock.mockResolvedValueOnce({
+      global_config: {
+        LAUNCH_DEFAULT_NEW_DIRECTORY_ROOT: "D:/sorted-default",
+        LAUNCH_REVIEW_FOLLOWS_NEW_ROOT: true,
+      },
+      status: {
+        text_configured: true,
+      },
+    });
+
+    render(<SessionLauncher />);
+
+    await screen.findByText("本次整理对象");
+    addSource("D:/incoming");
+    fireEvent.click(screen.getByRole("button", { name: "下一步：选择整理方式" }));
+    fireEvent.click(screen.getByRole("button", { name: "下一步：填写必要信息" }));
+
+    expect(await screen.findByText("D:/sorted-default")).toBeInTheDocument();
+    expect(screen.getByText("D:/sorted-default/Review")).toBeInTheDocument();
+  });
+
+  it("does not advance to step two when there are no sources", async () => {
+    render(<SessionLauncher />);
+
+    await screen.findByText("本次整理对象");
+    expect(screen.getByRole("button", { name: "下一步：选择整理方式" })).toBeDisabled();
   });
 });

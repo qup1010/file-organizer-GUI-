@@ -15,6 +15,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `扫描目录 -> AI 分析 -> 增量整理对话 -> 执行预检 -> 明确确认 (YES) -> 执行文件移动 -> 写执行日志 -> 支持最近一次回退`
 
+当前前端启动流已经开始切换到新的任务壳模型：
+
+`先选来源 (files / folders / mixed sources) -> 决定去向 (归入已有目录 / 生成新的分类结构) -> 按需展开 placement 与策略 -> 进入工作区扫描态`
+
+其中 placement 已经成为会话级显式输入：
+
+- `new_directory_root`
+- `review_root`
+
+并遵循：
+
+- 设置页提供全局默认值
+- 启动页允许单次任务覆盖
+- `Review` 默认跟随 `new_directory_root/Review`
+
 图标工坊链路为：
 
 `扫描目录 -> 语义分析 -> 图标提示生成 -> 图标生图/抠图 -> 应用或恢复文件夹图标`
@@ -99,6 +114,20 @@ cd frontend
 npm run typecheck
 ```
 
+前端测试：
+
+```bash
+cd frontend
+npm test
+
+# 单测单文件
+npm test -- src/components/session-launcher.test.tsx
+```
+
+说明：
+
+- 当前仓库没有单独的前端 lint 脚本；前端改动默认以 `npm run typecheck` + `npm test` 作为主要校验。
+
 运行时地址解析优先级（见 `frontend/src/lib/runtime.ts`）：
 
 1. `window.__FILE_ORGANIZER_RUNTIME__.base_url`
@@ -178,6 +207,19 @@ logs/               后端运行日志与调试日志
 - `file_organizer/app/session_service.py`
 - `file_organizer/app/session_store.py`（持久化）
 
+补充：
+
+- 当前 `OrganizerSessionService` 更像一个门面 / 编排器，具体职责已开始拆给：
+  - `SessionLifecycleService`：创建、恢复、放弃、阶段合法性
+  - `ScanWorkflowService`：扫描入口、增量范围确认、扫描后流转
+  - `PlanningConversationService`：对话与规划推进
+  - `SnapshotBuilder`：前端消费的 `session_snapshot` 装配
+  - `TargetResolver`：placement、Review、slot 与真实路径解析
+- 改会话行为时，通常不要只盯 `session_service.py` 单文件；先确认逻辑属于哪个委托服务，再改对应测试。
+- placement / target_dir / Review / slot 的主规则已经不应继续分散实现。
+
+这意味着：如果你看到 `session_service.py` 很大，先找它委托出去的服务，而不是继续把新规则塞回主类里。
+
 ### 2. 会话持久化与锁
 
 会话不是一次性内存对象，而是持久化状态机：
@@ -187,7 +229,23 @@ logs/               后端运行日志与调试日志
 - 特点：
   - 每个目标目录同一时间只允许一个可写会话（目录锁也在此目录下）
   - 会话支持恢复、失效标记、放弃、只读历史查看
-  - 很多行为是“可恢复的工作会话”，而不是单次 CLI 调用
+- 很多行为是“可恢复的工作会话”，而不是单次 CLI 调用
+
+当前目录锁语义补充：
+
+- 锁 key 仍然基于 `session.target_dir`
+- `completed / abandoned / stale` 的锁允许后续新会话回收
+- `interrupted` 默认继续保留锁，视为用户可能恢复的活动会话
+- 损坏的 lock file 会在重新获取/释放时做本地容错清理
+
+会话创建的关键输入现在包括：
+
+- `sources[]`
+- `organize_method`
+- `output_dir`
+- `target_directories[]`
+- `new_directory_root`
+- `review_root`
 
 涉及会话锁、并发、恢复逻辑时务必查阅 `session_store` 与相关测试。
 
@@ -232,6 +290,12 @@ logs/               后端运行日志与调试日志
 
 - `organize` 层 & `session_snapshot` 的生成方式
 - 而不是直接动 `execution`
+
+补充：
+
+- `request_unresolved_choices` 已经移除
+- 不确定项统一通过 `unresolved + Review` 表达
+- 模型不再负责生成交互式待确认泡泡；前端主预览区负责手动改目标
 
 ### 5. 执行层：只认结构化最终计划
 
@@ -348,6 +412,7 @@ FastAPI 主入口：
 - `src/lib/api.ts`：REST client
 - `src/lib/use-session.ts`：会话加载、SSE 订阅、工作台状态同步
 - `src/components/workspace-client.tsx`：整理工作台主容器
+- `src/components/session-launcher-shell.tsx`：新的任务启动壳子
 - `src/types/session.ts`：与后端共享的 `session_snapshot` 类型
 
 设计原则：
@@ -357,6 +422,23 @@ FastAPI 主入口：
   - 优先工具栏/侧栏/主工作区/详情区结构
   - 避免 hero 区、营销大横幅、漂浮卡片堆叠等网页式形态
 - 详情见根目录 `DESIGN.md`
+
+启动流的当前产品方向：
+
+- 先交来源
+- 再决定去向
+- 再按需展开 placement / 输出目录 / 目标目录池 / 风格参数
+- 扫描过程在工作区中展示，而不是停留在启动前遮罩
+
+前端与设置页关于 placement 的规则：
+
+- 全局默认值放在 `global_config`
+- 任务页可覆盖
+- `review_root` 默认跟随 `new_directory_root/Review`
+- 当前桌面端来源选择仍保留两个显式按钮：
+  - `选择文件`
+  - `选择文件夹`
+  不要假设 Tauri 已有单次原生混选文件和文件夹的能力
 
 运行时发现与 Tauri 接线：
 
@@ -387,6 +469,13 @@ FastAPI 主入口：
 - 注入 `window.__FILE_ORGANIZER_RUNTIME__`
 - 提供图标应用/恢复、抠图测试、目录选择等原生命令
 - 保证单实例桌面应用（重复启动时激活已有窗口）
+
+当前原生命令中，来源选择仍是两套能力：
+
+- `pick_files`
+- `pick_directories`
+
+它们都基于 `rfd::FileDialog`。当前版本不要把“统一入口文案”误解成“桌面端已经支持真正的原生混选文件/文件夹”。
 
 ## 配置、输出与日志
 
@@ -428,7 +517,13 @@ FastAPI 主入口：
 
 主链路阶段：
 
-`draft -> scanning -> planning / ready_for_precheck -> ready_to_execute -> executing -> completed`
+- 初次整理常见流：`draft -> scanning -> planning -> ready_for_precheck -> ready_to_execute -> executing -> completed`
+- 增量归档常见流：`draft -> scanning -> selecting_incremental_scope -> planning -> ready_for_precheck -> ready_to_execute -> executing -> completed`
+
+补充说明：
+
+- `selecting_incremental_scope` 是当前真实阶段名，不是历史文档遗留字段；增量模式扫描后会先停在这里等待用户确认本轮处理范围。
+- `planning` 之前的阶段也会影响前端工作区展示与可操作按钮，不要只把它当后端内部状态。
 
 重要分组：
 
@@ -451,6 +546,15 @@ Python 与前端/桌面共享的契约包括：
 - unresolved choices block 结构
 - 前端 `RuntimeConfig` 中的 `base_url` / `api_token`
 
+补充：
+
+- `plan_snapshot.placement`
+- `target_slots[*].real_path`
+- `strategy.new_directory_root`
+- `strategy.review_root`
+
+现在也已经是前后端共享的重要消费字段
+
 **只改一端通常会把工作台打坏**。涉及这些字段时，至少同步检查：
 
 - `file_organizer/app/session_service.py`
@@ -465,8 +569,18 @@ Python 与前端/桌面共享的契约包括：
 
 ```bash
 python -m unittest tests.test_session_service -v
+python -m unittest tests.test_session_lifecycle_service -v
+python -m unittest tests.test_scan_workflow_service -v
+python -m unittest tests.test_planning_conversation_service -v
 python -m unittest tests.test_api_sessions -v
 python -m unittest tests.test_main_flow -v
+```
+
+单个 Python 测试类：
+
+```bash
+python -m unittest tests.test_session_service.OrganizerSessionServiceTests -v
+python -m unittest tests.test_target_resolver.TargetResolverTests -v
 ```
 
 运行时发现 / API 启动：

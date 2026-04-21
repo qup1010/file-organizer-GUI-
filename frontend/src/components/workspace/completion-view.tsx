@@ -127,10 +127,11 @@ export function CompletionView({
   };
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden @container bg-surface">
-      <div className="shrink-0 px-4 py-4 lg:px-6">
-        <section className="overflow-hidden rounded-[12px] border border-on-surface/8 bg-surface-container-lowest shadow-[0_8px_32px_rgba(0,0,0,0.06)]">
-          <div className="border-b border-on-surface/6 bg-on-surface/[0.01] px-5 py-3.5 lg:px-6">
+    <div className="flex h-full w-full flex-col overflow-hidden @container bg-surface pb-4">
+      <div className="flex-1 overflow-y-auto min-h-0 scrollbar-thin">
+      <div className="shrink-0 px-2 py-4 lg:px-4">
+        <section className="space-y-4 px-1">
+          <div className="border-b border-on-surface/10 pb-4 mb-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="space-y-0.5">
                 <div className="flex items-center gap-2">
@@ -155,7 +156,7 @@ export function CompletionView({
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-8 bg-surface-container-lowest px-5 py-3 lg:px-6">
+          <div className="flex flex-wrap items-center gap-8 mt-2">
             {[
               { label: "成功移动", count: journal.success_count || 0, icon: CheckCircle2, color: "text-primary", bg: "bg-primary/5" },
               { label: "执行失败", count: journal.failure_count || 0, icon: AlertTriangle, color: isPartial ? "text-error" : "text-ui-muted", bg: isPartial ? "bg-error/10" : "bg-on-surface/5" },
@@ -176,9 +177,9 @@ export function CompletionView({
         </section>
       </div>
 
-      <div className="flex-1 min-h-0 flex flex-col px-4 pb-4 lg:px-6 gap-4">
-        <section className="flex-1 flex flex-col min-h-0 overflow-hidden rounded-[12px] border border-on-surface/8 bg-surface-container-lowest shadow-[0_4px_16px_rgba(0,0,0,0.02)]">
-          <div className="shrink-0 flex items-center justify-between border-b border-on-surface/6 bg-on-surface/[0.01] px-4 py-2.5">
+      <div className="shrink-0 flex flex-col px-4 lg:px-6 pt-2 pb-4 gap-6">
+        <section className="flex flex-col">
+          <div className="shrink-0 flex items-center justify-between border-b border-on-surface/10 pb-3 mb-2">
             <h3 className="text-[13px] font-bold font-headline text-on-surface flex items-center gap-2">
               <History className="h-4 w-4 opacity-40" />
               执行前后结构变化
@@ -204,13 +205,13 @@ export function CompletionView({
               ))}
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto min-h-0 bg-surface">
+          <div className="pb-2">
             <DirectoryTreeDiff before={beforeTree} after={afterTree} filter={filter} />
           </div>
         </section>
 
         {(failedItems.length > 0 || reviewItems.length > 0) ? (
-          <section className="shrink-0 max-h-[35%] overflow-hidden flex flex-col gap-3">
+          <section className="shrink-0 flex flex-col gap-3 pb-6">
             <div className={cn("grid gap-4", (failedItems.length > 0 && reviewItems.length > 0) ? "lg:grid-cols-2" : "grid-cols-1")}>
               {failedItems.length > 0 && (
                 <div className="flex flex-col rounded-[12px] border border-error/12 bg-error-container/10 overflow-hidden">
@@ -218,7 +219,7 @@ export function CompletionView({
                     <AlertTriangle className="h-4 w-4 text-error" />
                     <h3 className="text-[13px] font-bold text-error">异常项整理失败 ({failedItems.length})</h3>
                   </div>
-                  <div className="flex-1 overflow-y-auto p-2 max-h-[180px] scrollbar-thin">
+                  <div className="p-2">
                     <div className="grid grid-cols-1 @[800px]:grid-cols-2 @[1200px]:grid-cols-3 gap-1.5 focus:outline-none">
                       {failedItems.map((item, idx) => (
                         <div key={idx} className="flex items-center justify-between gap-3 px-3 py-1.5 rounded-[6px] hover:bg-error/5 transition-colors border border-transparent hover:border-error/10">
@@ -243,7 +244,7 @@ export function CompletionView({
                     <Info className="h-4 w-4 text-warning" />
                     <h3 className="text-[13px] font-bold text-warning-dim">归档至 Review 目录 ({reviewItems.length})</h3>
                   </div>
-                  <div className="flex-1 overflow-y-auto p-2 max-h-[180px] scrollbar-thin">
+                  <div className="p-2">
                     <div className="grid grid-cols-1 @[800px]:grid-cols-2 @[1200px]:grid-cols-3 gap-1.5 focus:outline-none">
                       {reviewItems.map((item, idx) => (
                         <div key={idx} className="flex items-center justify-between gap-3 px-3 py-1.5 rounded-[6px] hover:bg-warning/5 transition-colors border border-transparent hover:border-warning/10">
@@ -265,8 +266,9 @@ export function CompletionView({
           </section>
         ) : null}
       </div>
+      </div>
 
-      <div className="shrink-0 border-t border-on-surface/8 bg-surface-container-lowest px-4 py-3 lg:px-6">
+      <div className="shrink-0 border-t border-on-surface/10 pt-4 px-4 lg:px-6 mt-2 relative z-10">
         <div className={cn("flex items-center justify-between gap-4", readOnly ? "flex-row-reverse" : "")}>
           <div className="flex items-center gap-3">
             <button

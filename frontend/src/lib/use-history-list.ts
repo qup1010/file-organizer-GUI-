@@ -4,12 +4,64 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { createApiClient } from "@/lib/api";
 import { getApiBaseUrl, getApiToken } from "@/lib/runtime";
+import { getFriendlyStage, getFriendlyStatus } from "@/lib/utils";
 import type { HistoryItem } from "@/types/session";
 
-export type HistoryFilter = "all" | "active" | "completed" | "rolled_back";
+export type HistoryFilter = "all" | "active" | "completed" | "partial_failure" | "rolled_back" | "rollback_partial_failure";
+
+const SUCCESS_EXECUTION_STATUSES = new Set(["success", "completed"]);
+const FAILED_EXECUTION_STATUSES = new Set(["partial_failure"]);
+const ROLLED_BACK_EXECUTION_STATUSES = new Set(["rolled_back"]);
+const FAILED_ROLLBACK_STATUSES = new Set(["rollback_partial_failure"]);
+const FINAL_EXECUTION_STATUSES = new Set([
+  ...SUCCESS_EXECUTION_STATUSES,
+  ...FAILED_EXECUTION_STATUSES,
+  ...ROLLED_BACK_EXECUTION_STATUSES,
+  ...FAILED_ROLLBACK_STATUSES,
+]);
+
+function normalizedHistoryStatus(entry: HistoryItem): string {
+  return String(entry.status || "").trim().toLowerCase();
+}
 
 export function isHistorySessionEntry(entry: HistoryItem): boolean {
-  return entry.is_session || !["success", "completed", "rolled_back", "partial_failure"].includes(entry.status);
+  return Boolean(entry.is_session) || !FINAL_EXECUTION_STATUSES.has(normalizedHistoryStatus(entry));
+}
+
+export function isHistoryExecutionEntry(entry: HistoryItem): boolean {
+  return !isHistorySessionEntry(entry);
+}
+
+export function isHistoryCompletedEntry(entry: HistoryItem): boolean {
+  return isHistoryExecutionEntry(entry) && SUCCESS_EXECUTION_STATUSES.has(normalizedHistoryStatus(entry));
+}
+
+export function isHistoryPartialFailureEntry(entry: HistoryItem): boolean {
+  return isHistoryExecutionEntry(entry) && FAILED_EXECUTION_STATUSES.has(normalizedHistoryStatus(entry));
+}
+
+export function isHistoryRolledBackEntry(entry: HistoryItem): boolean {
+  return isHistoryExecutionEntry(entry) && ROLLED_BACK_EXECUTION_STATUSES.has(normalizedHistoryStatus(entry));
+}
+
+export function isHistoryRollbackPartialFailureEntry(entry: HistoryItem): boolean {
+  return isHistoryExecutionEntry(entry) && FAILED_ROLLBACK_STATUSES.has(normalizedHistoryStatus(entry));
+}
+
+export function getHistoryEntrySummary(entry: HistoryItem): string {
+  return isHistorySessionEntry(entry) ? getFriendlyStage(entry.status) : getFriendlyStatus(entry.status);
+}
+
+export function getHistoryEntryHref(entry: HistoryItem): string {
+  return isHistorySessionEntry(entry)
+    ? `/workspace?session_id=${entry.execution_id}`
+    : `/history?entry_id=${entry.execution_id}`;
+}
+
+export function getHistoryEntryReadonlyHref(entry: HistoryItem): string {
+  return isHistorySessionEntry(entry)
+    ? `/workspace?session_id=${entry.execution_id}&readonly=1`
+    : `/history?entry_id=${entry.execution_id}`;
 }
 
 export function getHistoryEntryName(entry: HistoryItem): string {
@@ -27,8 +79,12 @@ function filterHistoryEntries(history: HistoryItem[], query: string, filter: His
         : filter === "active"
           ? isSession
           : filter === "completed"
-            ? !isSession && entry.status !== "rolled_back"
-            : entry.status === "rolled_back";
+            ? isHistoryCompletedEntry(entry)
+            : filter === "partial_failure"
+              ? isHistoryPartialFailureEntry(entry)
+              : filter === "rolled_back"
+                ? isHistoryRolledBackEntry(entry)
+                : isHistoryRollbackPartialFailureEntry(entry);
 
     if (!matchesFilter) {
       return false;

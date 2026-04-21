@@ -120,6 +120,134 @@ describe("PreviewPanel", () => {
     expect(screen.getByText("点击条目后，右侧会显示更详细的检查信息。")).toBeInTheDocument();
   });
 
+  it("shows pending-review state instead of syncing when review items still need checking", () => {
+    render(
+      <PreviewPanel
+        plan={{
+          ...createPlan(),
+          summary: "方案摘要",
+          items: [
+            {
+              item_id: "item-review-1",
+              display_name: "important_invoice_301.exe",
+              source_relpath: "incoming/important_invoice_301.exe",
+              target_slot_id: "Review",
+              status: "review",
+              mapping_status: "review",
+              suggested_purpose: "Review",
+              content_summary: "待人工核对",
+              reason: "用途不够稳定",
+              confidence: 0.62,
+            },
+          ],
+          stats: {
+            directory_count: 1,
+            move_count: 1,
+            unresolved_count: 0,
+          },
+          readiness: {
+            can_precheck: false,
+          },
+        }}
+        stage="planning"
+        isBusy={false}
+        plannerStatus={{
+          isRunning: false,
+          preservingPreviousPlan: false,
+        }}
+        onRunPrecheck={() => {}}
+        onUpdateItem={() => {}}
+      />,
+    );
+
+    expect(screen.getAllByText("待处理 1").length).toBeGreaterThan(0);
+    expect(screen.getByText("仍有 1 项待核对。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "先处理待处理队列" })).toBeInTheDocument();
+    expect(screen.queryByText("同步中")).not.toBeInTheDocument();
+  });
+
+  it("allows dismissing review items from the pending queue for later review", () => {
+    render(
+      <PreviewPanel
+        plan={{
+          ...createPlan(),
+          items: [
+            {
+              item_id: "item-review-1",
+              display_name: "important_invoice_301.exe",
+              source_relpath: "incoming/important_invoice_301.exe",
+              target_slot_id: "Review",
+              status: "review",
+              mapping_status: "review",
+              suggested_purpose: "Review",
+              content_summary: "待人工核对",
+              reason: "用途不够稳定",
+              confidence: 0.62,
+            },
+          ],
+          readiness: {
+            can_precheck: false,
+          },
+        }}
+        stage="planning"
+        isBusy={false}
+        plannerStatus={{
+          isRunning: false,
+          preservingPreviousPlan: false,
+        }}
+        onRunPrecheck={() => {}}
+        onUpdateItem={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "全部保留在 Review，稍后查看" }));
+
+    expect(screen.queryByText("待处理队列")).not.toBeInTheDocument();
+    expect(screen.getByText("已保留")).toBeInTheDocument();
+    expect(screen.queryAllByText("待核对").length).toBe(0);
+  });
+
+  it("lets users click the footer notice to jump back to the pending queue", () => {
+    render(
+      <PreviewPanel
+        plan={{
+          ...createPlan(),
+          items: [
+            {
+              item_id: "item-review-1",
+              display_name: "important_invoice_301.exe",
+              source_relpath: "incoming/important_invoice_301.exe",
+              target_slot_id: "Review",
+              status: "review",
+              mapping_status: "review",
+              suggested_purpose: "Review",
+              content_summary: "待人工核对",
+              reason: "用途不够稳定",
+              confidence: 0.62,
+            },
+          ],
+          readiness: {
+            can_precheck: false,
+          },
+        }}
+        stage="planning"
+        isBusy={false}
+        plannerStatus={{
+          isRunning: false,
+          preservingPreviousPlan: false,
+        }}
+        onRunPrecheck={() => {}}
+        onUpdateItem={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "收起" }));
+    expect(screen.queryByText("点击条目后，右侧会显示更详细的检查信息。")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "仍有 1 项待核对。 点击查看" }));
+    expect(screen.getByText("点击条目后，右侧会显示更详细的检查信息。")).toBeInTheDocument();
+  });
+
   it("shows the before tree by default while planning is running", () => {
     render(
       <PreviewPanel
@@ -171,6 +299,56 @@ describe("PreviewPanel", () => {
     expect(screen.getByText("先切回“前”查看原始目录，方案稳定后这里会自动出现整理后结构。")).toBeInTheDocument();
   });
 
+  it("keeps review items under a logical Review branch instead of expanding absolute placement paths", () => {
+    render(
+      <PreviewPanel
+        plan={{
+          ...createPlan(),
+          placement: {
+            new_directory_root: "D:/download/incoming-copy",
+            review_root: "D:/download/incoming-copy/Review",
+          },
+          items: [
+            {
+              item_id: "F011",
+              display_name: "important_invoice_301.exe",
+              source_relpath: "important_invoice_301.exe",
+              target_slot_id: "Review",
+              status: "review",
+              mapping_status: "review",
+              suggested_purpose: "待判断",
+              content_summary: "扩展名与用途描述不符",
+              reason: "先进入 Review",
+              confidence: 0.4,
+            },
+          ],
+          stats: {
+            directory_count: 1,
+            move_count: 1,
+            unresolved_count: 0,
+          },
+          readiness: {
+            can_precheck: false,
+          },
+        }}
+        stage="planning"
+        isBusy={false}
+        plannerStatus={{
+          isRunning: false,
+          preservingPreviousPlan: false,
+        }}
+        onRunPrecheck={() => {}}
+        onUpdateItem={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: "后" })[0]);
+
+    expect(screen.getAllByText("Review").length).toBeGreaterThan(0);
+    expect(screen.queryByText("D:")).not.toBeInTheDocument();
+    expect(screen.queryByText("download")).not.toBeInTheDocument();
+  });
+
   it("keeps the footer outside the scrollable middle region", () => {
     render(
       <PreviewPanel
@@ -195,7 +373,7 @@ describe("PreviewPanel", () => {
     const footer = screen.getByTestId("preview-footer");
 
     expect(scrollRegion.contains(footer)).toBe(false);
-    expect(screen.getByRole("button", { name: "等待方案同步完成" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "等待进入预检阶段" })).toBeInTheDocument();
   });
 
   it("shows incremental mapping rows before the structure reference", () => {

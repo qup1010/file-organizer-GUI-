@@ -11,7 +11,9 @@ export function cn(...inputs: ClassValue[]) {
 export const FRIENDLY_STATUS_MAP: Record<string, string> = {
   completed: "已完成",
   success: "已执行完成",
+  partial_failure: "部分失败",
   rolled_back: "已回退",
+  rollback_partial_failure: "回退部分失败",
   scanning: "正在扫描",
   selecting_incremental_scope: "选择目标目录",
   planning: "正在调整方案",
@@ -59,6 +61,8 @@ export const FRIENDLY_STAGE_MAP: Record<string, string> = {
   abandoned: "已结束",
   stale: "方案过期",
   interrupted: "已中断",
+  partial_failure: "部分失败",
+  rollback_partial_failure: "回退部分失败",
 };
 
 export function getFriendlyStage(stage: string | undefined): string {

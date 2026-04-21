@@ -1,11 +1,11 @@
 "use client";
 
 import React from "react";
-import { CheckCircle2, FolderDown, Info, LoaderCircle, Sparkles } from "lucide-react";
+import { FolderDown, Info, LoaderCircle, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { BackgroundRemovalBatchProgress } from "./use-background-removal";
+import type { BackgroundRemovalBatchProgress } from "@/types/icon-workbench";
 
 interface IconWorkbenchFooterBarProps {
   targetCount: number;

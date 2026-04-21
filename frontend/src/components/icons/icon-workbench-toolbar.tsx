@@ -30,7 +30,7 @@ export function IconWorkbenchToolbar({
     : "支持一次选择多个目标文件夹，并在工作区里继续添加。";
 
   return (
-    <div className="glass-surface flex min-h-[64px] shrink-0 items-center justify-between border-b border-on-surface/6 px-6 py-2.5">
+    <div className="glass-surface flex min-h-[54px] shrink-0 items-center justify-between border-b border-on-surface/6 px-5 py-1.5">
       <div className="flex items-center gap-3 overflow-hidden">
         {targetCount > 0 && (
           <Button
@@ -72,14 +72,14 @@ export function IconWorkbenchToolbar({
       <div className="flex items-center gap-2">
         <button
           onClick={onOpenStylePanel}
-          className="group flex items-center gap-2 rounded-[8px] border border-on-surface/7 bg-surface-container-lowest px-3.5 py-2 transition-all hover:border-primary/18 hover:bg-surface-container-lowest hover:shadow-[0_8px_18px_rgba(0,0,0,0.05)] active:scale-95"
+          className="group flex items-center gap-2 rounded-[6px] border border-on-surface/7 bg-surface-container-lowest px-2.5 py-1.5 transition-all hover:border-primary/18 hover:bg-surface-container-lowest hover:shadow-[0_4px_12px_rgba(0,0,0,0.05)] active:scale-95"
         >
-          <div className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-white">
-            <Sparkles className="h-3.5 w-3.5" />
+          <div className="flex h-7 w-7 items-center justify-center rounded-[8px] bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-white">
+            <Sparkles className="h-3 w-3" />
           </div>
-          <div className="flex flex-col items-start pr-1 text-left">
-            <span className="text-[10px] font-bold text-ui-muted opacity-80">当前模板</span>
-            <span className="max-w-[140px] truncate text-[13px] font-bold tracking-tight text-on-surface">
+          <div className="flex flex-col items-start pr-0.5 text-left">
+            <span className="text-[9px] font-bold text-ui-muted opacity-80 uppercase tracking-tighter">当前模板</span>
+            <span className="max-w-[125px] truncate text-[12.5px] font-black tracking-tight text-on-surface">
               {selectedTemplateName}
             </span>
           </div>

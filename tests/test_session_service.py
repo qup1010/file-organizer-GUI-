@@ -281,6 +281,28 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         self.assertEqual(resumed.stage, "stale")
         self.assertEqual(resumed.stale_reason, "directory_changed")
 
+    def test_create_session_allows_replacement_after_latest_session_becomes_stale(self):
+        created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
+        session = created.session
+        assert session is not None
+        session.stage = "stale"
+        self.store.save(session)
+
+        replacement = self.service.create_session(str(self.target_dir), resume_if_exists=False)
+
+        self.assertEqual(replacement.mode, "created")
+        self.assertNotEqual(replacement.session.session_id, session.session_id)
+
+    def test_create_session_still_blocks_when_latest_session_is_interrupted(self):
+        created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
+        session = created.session
+        assert session is not None
+        session.stage = "interrupted"
+        self.store.save(session)
+
+        with self.assertRaisesRegex(RuntimeError, "SESSION_LOCKED"):
+            self.service.create_session(str(self.target_dir), resume_if_exists=False)
+
     def test_run_precheck_sets_ready_to_execute_for_valid_pending_plan(self):
         (self.target_dir / "a.txt").write_text("hello", encoding="utf-8")
         created = self.service.create_session(str(self.target_dir), resume_if_exists=False)

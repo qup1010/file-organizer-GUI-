@@ -10,6 +10,7 @@ import SettingsPage from "./page";
 
 const getSettings = vi.fn<() => Promise<SettingsSnapshot>>();
 const createSettingsPreset = vi.fn();
+const updateSettings = vi.fn();
 
 vi.mock("framer-motion", () => ({
   AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -34,7 +35,7 @@ vi.mock("@/lib/api", () => ({
       getSettings,
       createSettingsPreset,
       getSettingsRuntime: vi.fn(),
-      updateSettings: vi.fn(),
+      updateSettings,
       activateSettingsPreset: vi.fn(),
       deleteSettingsPreset: vi.fn(),
       testSettings: vi.fn(),
@@ -151,7 +152,15 @@ describe("SettingsPage preset flow", () => {
   beforeEach(() => {
     getSettings.mockReset();
     createSettingsPreset.mockReset();
+    updateSettings.mockReset();
     getSettings.mockResolvedValue(createSnapshot());
+    updateSettings.mockImplementation(async (payload) => ({
+      ...createSnapshot(),
+      global_config: {
+        ...createSnapshot().global_config,
+        ...(payload?.global_config || {}),
+      },
+    }));
   });
 
   it("shows an empty-state prompt instead of editing the default text preset", async () => {
@@ -249,5 +258,17 @@ describe("SettingsPage preset flow", () => {
       IMAGE_ANALYSIS_MODEL: "gpt-4o-mini",
     });
     expect(payload.preset).not.toHaveProperty("IMAGE_ANALYSIS_NAME");
+  });
+
+  it("shows launch placement default controls in the launch settings tab", async () => {
+    render(<SettingsPage />);
+
+    const launchTab = await screen.findByRole("button", { name: "启动默认值" });
+    await userEvent.click(launchTab);
+
+    expect(await screen.findByText("默认放置规则")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("例如：D:/archive/sorted")).toBeInTheDocument();
+    expect(screen.getByText("Review 默认跟随新目录位置")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("新目录生成位置/Review")).toBeDisabled();
   });
 });

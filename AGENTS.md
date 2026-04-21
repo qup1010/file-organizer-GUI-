@@ -10,6 +10,9 @@
 
 - 这是一个本地文件整理项目，当前包含 FastAPI、本地前端工作台和 Tauri 桌面壳。
 - 当前主链路覆盖：
+  - 启动页来源选择（多文件 / 多文件夹 / 混合来源）
+  - 启动页去向分流（归入已有目录 / 生成新的分类结构）
+  - 全局默认放置规则（`new_directory_root` / `review_root`）与单次任务覆盖
   - 扫描目录
   - AI 分析
   - 增量整理对话
@@ -28,6 +31,26 @@
 - `file_organizer/api`：FastAPI 本地 API 与运行时发现
 - `frontend/`：Next.js 工作台前端
 - `desktop/`：Tauri 宿主
+
+## 当前实现补充
+
+- 会话创建已支持：
+  - `sources[]`
+  - `target_directories[]`
+  - `new_directory_root`
+  - `review_root`
+- `Review` 目录是特殊落点：
+  - 默认跟随 `new_directory_root/Review`
+  - 当前版本不支持 `Review` 子目录
+- 前端启动流已经从“先填一堆配置”转向“先选来源，再决定去向，再按需展开配置”
+- 设置页 `启动默认值` 已开始承接 placement 默认值：
+  - `LAUNCH_DEFAULT_NEW_DIRECTORY_ROOT`
+  - `LAUNCH_DEFAULT_REVIEW_ROOT`
+  - `LAUNCH_REVIEW_FOLLOWS_NEW_ROOT`
+- 桌面端当前仍保留两个原生来源选择能力：
+  - `选择文件`
+  - `选择文件夹`
+  目前不要假设 Tauri / rfd 已经支持单次原生混选文件和文件夹
 
 ## 常用命令
 
@@ -135,6 +158,11 @@ cargo check
   - 优先考虑窗口化使用场景，包括小窗口、分栏、状态栏、工具栏和高频任务切换
   - 避免网页式 hero、大横幅、居中窄栏、宣传感文案和漂浮卡片堆叠
   - 如无明确理由，不要引入偏官网化、营销化或 SaaS dashboard 风格的布局
+- 改动启动页 / 新任务入口时，优先遵守这条产品方向：
+  - 先收集用户最确定的信息（来源）
+  - 再决定去向（归入已有目录 / 生成新结构）
+  - 再按需展开 placement 和风格等高级配置
+- 改动 placement 相关逻辑时，保持“设置页配默认，任务页可覆盖，Review 默认跟随新目录根”的规则一致
 - 改动运行时发现机制时，保持以下契约稳定：
   - `output/runtime/backend.json`
   - `window.__FILE_ORGANIZER_RUNTIME__.base_url`

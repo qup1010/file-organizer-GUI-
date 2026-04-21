@@ -24,7 +24,7 @@ class ExecutionAppService:
 
     def _build_mapped_execution_plan(self, session, final_plan, task, registry) -> MappedExecutionPlan:
         base_dir = Path(session.target_dir).resolve()
-        placement = self.helpers._placement_payload(session.placement)
+        placement = self.helpers.target_resolver.placement_payload(session.placement)
         source_by_id = {item.ref_id: item for item in task.sources}
         target_by_id = {item.slot_id: item for item in task.targets}
         planner_by_source = self.helpers._planner_items_by_source(session)
@@ -43,7 +43,10 @@ class ExecutionAppService:
             filename = Path(source.relpath).name
             display_name = str(source.display_name or filename)
             if mapping.target_slot_id == "Review":
-                review_root = Path(placement.review_root or self.helpers._default_review_root(placement.new_directory_root or session.target_dir)).resolve()
+                review_root = Path(
+                    placement.review_root
+                    or self.helpers.target_resolver.default_review_root(placement.new_directory_root or session.target_dir)
+                ).resolve()
                 if str(review_root) not in known_mkdir_targets and not review_root.exists():
                     known_mkdir_targets.add(str(review_root))
                     raw_target_dir = self._display_path(review_root, base_dir)

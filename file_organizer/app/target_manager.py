@@ -83,33 +83,7 @@ class TargetManager:
         return "\n".join(filtered_lines)
 
     def validate_incremental_target_dir(self, target_dir: str, selection: dict | None) -> bool:
-        normalized = self.helpers._normalize_relpath(target_dir)
-        if not normalized or normalized == "Review":
-            return True
-
-        incremental_selection = selection or {}
-        selected_roots = {
-            self.helpers._normalize_relpath(path)
-            for path in (incremental_selection.get("target_directories") or [])
-            if self.helpers._normalize_relpath(path)
-        }
-        existing_roots = {
-            self.helpers._normalize_relpath(path)
-            for path in (incremental_selection.get("root_directory_options") or [])
-            if self.helpers._normalize_relpath(path)
-        }
-
-        def is_within(candidate: str, roots: set[str]) -> bool:
-            for root in roots:
-                if candidate == root or candidate.startswith(f"{root}/"):
-                    return True
-            return False
-
-        if is_within(normalized, selected_roots):
-            return True
-        if is_within(normalized, existing_roots):
-            return False
-        return True
+        return self.helpers.target_resolver.validate_incremental_target_dir(target_dir, selection)
 
     def set_incremental_selection_pending(self, session: "OrganizerSession", scan_lines: str) -> None:
         if self.helpers._normalize_organize_mode(session.organize_mode) != "incremental":

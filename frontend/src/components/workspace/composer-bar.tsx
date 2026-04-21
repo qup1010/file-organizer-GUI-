@@ -1,9 +1,8 @@
 import { useRef } from "react";
 import { AlertTriangle, Loader2, Send, Sparkles } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { getSessionStageView } from "@/lib/session-view-model";
 import { cn } from "@/lib/utils";
-import { AssistantRuntimeStatus, ComposerMode, SessionStage } from "@/types/session";
+import { AssistantRuntimeStatus, ComposerMode } from "@/types/session";
 
 export interface ComposerBarProps {
   composerMode: ComposerMode;
@@ -19,7 +18,7 @@ export interface ComposerBarProps {
     isRunning: boolean;
   } | null;
   unresolvedCount: number;
-  stage: SessionStage;
+  canRunPrecheck: boolean;
   isBusy: boolean;
   isComposerLocked: boolean;
   messageInput: string;
@@ -33,7 +32,7 @@ export function ComposerBar({
   composerStatus,
   plannerStatus,
   unresolvedCount,
-  stage,
+  canRunPrecheck,
   isBusy,
   isComposerLocked,
   messageInput,
@@ -41,10 +40,9 @@ export function ComposerBar({
   onSendMessage,
 }: ComposerBarProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const stageView = getSessionStageView(stage);
   const canShowPrecheckHint =
     unresolvedCount === 0 &&
-    stageView.isAwaitingPrecheck &&
+    canRunPrecheck &&
     composerMode === "editable" &&
     !isBusy &&
     !composerStatus;
@@ -61,7 +59,7 @@ export function ComposerBar({
   }
 
   return (
-    <div className="flex shrink-0 flex-col justify-center border-t border-on-surface/8 bg-surface-container-low px-5 py-4 lg:px-6">
+    <div className="flex shrink-0 flex-col justify-center border-t border-on-surface/8 bg-surface-container-low px-6 py-3">
       <AnimatePresence>
         {error && (
           <motion.div
@@ -138,7 +136,7 @@ export function ComposerBar({
             initial={{ opacity: 0, x: 10 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 10 }}
-            className="mb-2 flex items-center gap-2 rounded-full border border-warning/15 bg-warning-container/10 px-2.5 py-1 text-[11px] font-bold text-warning-dim shadow-sm"
+            className="mb-3 flex items-center gap-2 rounded-full border border-warning/15 bg-warning-container/10 px-2.5 py-1 text-[11px] font-bold text-warning-dim shadow-sm"
           >
             <AlertTriangle className="h-3 w-3" />
             还有 {unresolvedCount} 项归类需要你确认
@@ -148,7 +146,7 @@ export function ComposerBar({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="mb-2 flex items-center gap-2 px-1 text-[11px] font-bold text-success-dim/70"
+            className="mb-3 flex items-center gap-2 px-1 text-[11px] font-bold text-success-dim/70"
           >
             <Sparkles className="h-3 w-3" />
             <p>方案已就绪，可以点击右侧底部的“开始预检”继续。</p>
@@ -158,7 +156,7 @@ export function ComposerBar({
 
       {composerMode === "editable" ? (
         <div className={cn(
-          "relative flex items-end rounded-[4px] border px-3 pb-1.5 pt-1.5 transition-all duration-300",
+          "relative flex items-end rounded-[4px] border px-2.5 pb-1 pt-1 transition-all duration-300",
           isComposerLocked 
             ? "cursor-not-allowed border-on-surface/[0.06] bg-on-surface/[0.02] grayscale-[0.2]" 
             : "border-on-surface/[0.08] bg-surface-container-lowest focus-within:border-primary/30 focus-within:ring-4 focus-within:ring-primary/[0.015]"
@@ -167,7 +165,7 @@ export function ComposerBar({
             ref={inputRef}
             rows={1}
             className={cn(
-              "min-h-[44px] w-full resize-none border-none bg-transparent px-4 py-3 text-[14px] text-on-surface outline-none scrollbar-none transition-opacity placeholder:text-on-surface-variant/35",
+              "min-h-[36px] w-full resize-none border-none bg-transparent px-3 py-2 text-[13.5px] text-on-surface outline-none scrollbar-none transition-opacity placeholder:text-on-surface-variant/35",
               isComposerLocked && "opacity-40 select-none overflow-hidden"
             )}
             placeholder={isComposerLocked ? "系统正在更新方案，完成后会自动恢复输入" : "输入调整意见，或说明你希望修改的地方..."}
@@ -185,9 +183,9 @@ export function ComposerBar({
             onClick={onSendMessage}
             disabled={isComposerLocked || !messageInput.trim()}
             className={cn(
-              "mb-1.5 mr-1.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-[4px] transition-all active:scale-90",
+              "mb-1 mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-[4px] transition-all active:scale-90",
               messageInput.trim() && !isComposerLocked
-                ? "bg-primary text-white shadow-[0_4px_12px_rgba(0,120,212,0.16)]"
+                ? "bg-primary text-white shadow-[0_2px_8px_rgba(0,120,212,0.12)]"
                 : "text-on-surface-variant/20 bg-on-surface/[0.03]"
             )}
           >

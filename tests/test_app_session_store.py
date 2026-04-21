@@ -69,6 +69,48 @@ class SessionStoreTests(unittest.TestCase):
         self.assertTrue(reclaimed.acquired)
         self.assertEqual(reclaimed.reason, "reclaimed_stale_lock")
 
+    def test_stale_owner_lock_can_be_reclaimed(self):
+        stale_session = OrganizerSession(session_id="sess-1", target_dir=canonical_target_dir(self.target_dir), stage="stale")
+        self.store.save(stale_session)
+        self.store.acquire_directory_lock(self.target_dir, stale_session.session_id)
+
+        reclaimed = self.store.acquire_directory_lock(self.target_dir, "sess-2")
+
+        self.assertTrue(reclaimed.acquired)
+        self.assertEqual(reclaimed.reason, "reclaimed_stale_lock")
+
+    def test_interrupted_owner_lock_is_not_reclaimed(self):
+        interrupted = OrganizerSession(session_id="sess-1", target_dir=canonical_target_dir(self.target_dir), stage="interrupted")
+        self.store.save(interrupted)
+        self.store.acquire_directory_lock(self.target_dir, interrupted.session_id)
+
+        blocked = self.store.acquire_directory_lock(self.target_dir, "sess-2")
+
+        self.assertFalse(blocked.acquired)
+        self.assertEqual(blocked.lock_owner_session_id, "sess-1")
+        self.assertEqual(blocked.reason, "active_lock")
+
+    def test_invalid_lock_file_is_deleted_and_reacquired(self):
+        lock_path = self.store._lock_path(self.target_dir)
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path.write_text("{not-json", encoding="utf-8")
+
+        acquired = self.store.acquire_directory_lock(self.target_dir, "sess-2")
+
+        self.assertTrue(acquired.acquired)
+        self.assertEqual(acquired.reason, "reclaimed_invalid_lock")
+        payload = json.loads(lock_path.read_text(encoding="utf-8"))
+        self.assertEqual(payload["owner_session_id"], "sess-2")
+
+    def test_release_directory_lock_tolerates_invalid_lock_file(self):
+        lock_path = self.store._lock_path(self.target_dir)
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path.write_text("{not-json", encoding="utf-8")
+
+        self.store.release_directory_lock(self.target_dir, "sess-1")
+
+        self.assertFalse(lock_path.exists())
+
     def test_write_latest_index_is_atomic_json(self):
         session = self.store.create(self.target_dir)
         self.store.save(session)

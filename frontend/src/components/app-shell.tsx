@@ -29,10 +29,24 @@ function readStoredContext(key: string) {
     return null;
   }
   try {
-    return JSON.parse(raw) as { title?: string; detail?: string; dirName?: string; stage?: string };
+    return JSON.parse(raw) as {
+      title?: string;
+      detail?: string;
+      dirName?: string;
+      stage?: string;
+      sessionId?: string;
+      hasTargetPath?: boolean;
+    };
   } catch {
     return null;
   }
+}
+
+function getWorkspaceLoadingLabel() {
+  return {
+    title: "当前任务",
+    detail: "正在载入任务",
+  };
 }
 
 function getBaseModuleLabel(pathname: string, searchParams: URLSearchParams) {
@@ -56,6 +70,10 @@ function getBaseModuleLabel(pathname: string, searchParams: URLSearchParams) {
   }
   if (pathname.startsWith("/workspace")) {
     const dirParam = searchParams.get("dir");
+    const sessionId = searchParams.get("session_id");
+    if (sessionId && !dirParam) {
+      return getWorkspaceLoadingLabel();
+    }
     const dirName = dirParam
       ? decodeURIComponent(dirParam).replace(/[\\/]$/, "").split(/[\\/]/).pop() || "当前任务"
       : "当前任务";
@@ -92,9 +110,25 @@ function getStoredModuleLabel(pathname: string, searchParams: URLSearchParams) {
   if (pathname.startsWith("/workspace")) {
     const stored = readStoredContext(WORKSPACE_CONTEXT_KEY);
     const dirParam = searchParams.get("dir");
-    const dirName = dirParam ? decodeURIComponent(dirParam).replace(/[\\/]$/, "").split(/[\\/]/).pop() || "当前任务" : stored?.dirName || "当前任务";
+    const sessionId = searchParams.get("session_id");
+    if (dirParam) {
+      const dirName = decodeURIComponent(dirParam).replace(/[\\/]$/, "").split(/[\\/]/).pop() || "当前任务";
+      return {
+        title: dirName,
+        detail: stored?.stage || "当前整理任务",
+      };
+    }
+    if (sessionId) {
+      if (stored?.sessionId === sessionId && stored?.hasTargetPath && stored?.dirName) {
+        return {
+          title: stored.dirName,
+          detail: stored.stage || "当前整理任务",
+        };
+      }
+      return getWorkspaceLoadingLabel();
+    }
     return {
-      title: dirName,
+      title: stored?.dirName || "当前任务",
       detail: stored?.stage || "当前整理任务",
     };
   }
@@ -199,27 +233,27 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="premium-bg" aria-hidden="true" />
       <header 
         data-tauri-drag-region
-        className="z-50 grid h-[46px] shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center border-b border-on-surface/5 bg-surface-container-lowest px-2 backdrop-blur sm:px-3"
+        className="z-50 grid h-[40px] shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center border-b border-on-surface/5 bg-surface-container-lowest px-2 backdrop-blur sm:px-3"
       >
-        <div className="flex shrink-0 items-center gap-2.5 pr-4 select-none">
-           <div className="flex h-6 w-6 items-center justify-center rounded-[7px] bg-primary/10 ring-1 ring-primary/20 shadow-sm">
-              <img src="/app-icon.png" alt="FilePilot" className="h-[15px] w-[15px] object-contain" />
+        <div className="flex shrink-0 items-center gap-2 pr-3 select-none">
+           <div className="flex h-5.5 w-5.5 items-center justify-center rounded-[6px] bg-primary/10 ring-1 ring-primary/20 shadow-sm">
+              <img src="/app-icon.png" alt="FilePilot" className="h-[14px] w-[14px] object-contain" />
            </div>
            
            <div className="flex items-center tracking-[-0.03em] pointer-events-none">
-              <span className="text-[13.5px] font-black text-on-surface">File</span>
-              <span className="text-[13.5px] font-black text-primary ml-0.5">Pilot</span>
+              <span className="text-[13px] font-black text-on-surface">File</span>
+              <span className="text-[13px] font-black text-primary ml-0.5">Pilot</span>
            </div>
            
            <div className="ml-3 h-3.5 w-[1.5px] bg-on-surface/10 rounded-full" />
         </div>
 
-        <div className="flex min-w-0 flex-1 items-center gap-2.5 border-none px-1 overflow-hidden pointer-events-none">
-          <p className="truncate text-[13.5px] font-bold tracking-tight text-on-surface/85">
+        <div className="flex min-w-0 flex-1 items-center gap-2 border-none px-1 overflow-hidden pointer-events-none">
+          <p className="truncate text-[13px] font-bold tracking-tight text-on-surface/85">
             {moduleCopy.title}
           </p>
-          <span className="text-[14px] leading-none text-on-surface/15 select-none font-thin mt-0.5">/</span>
-          <p className="truncate text-[11.5px] font-medium text-on-surface/45 tracking-normal">
+          <span className="text-[12px] leading-none text-on-surface/15 select-none font-thin mt-0.5">/</span>
+          <p className="truncate text-[11px] font-medium text-on-surface/40 tracking-normal">
             {moduleCopy.detail}
           </p>
         </div>
@@ -233,14 +267,14 @@ export function AppShell({ children }: { children: ReactNode }) {
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "inline-flex items-center gap-2.5 rounded-[4px] px-3.5 py-1.5 text-[12px] font-black tracking-tight transition-all duration-200",
+                    "inline-flex items-center gap-2 rounded-[4px] px-2.5 py-1 text-[11.5px] font-black tracking-tight transition-all duration-200",
                     isActive
                       ? "bg-surface-container-lowest text-on-surface shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04),inset_0_0_0_1px_rgba(0,0,0,0.04)]"
                       : "text-on-surface/40 hover:bg-on-surface/5 hover:text-on-surface",
                   )}
                 >
-                  <item.icon className={cn("h-3.5 w-3.5", isActive ? "text-primary" : "text-current")} />
-                  <span className="hidden md:inline">{item.label}</span>
+                  <item.icon className={cn("h-3 w-3", isActive ? "text-primary" : "text-current")} />
+                  <span className="hidden lg:inline">{item.label}</span>
                 </Link>
               );
             })}

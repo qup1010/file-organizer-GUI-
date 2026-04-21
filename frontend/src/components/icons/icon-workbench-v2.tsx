@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, FolderOpen, LoaderCircle } from "lucide-react";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -11,7 +11,8 @@ import { ErrorAlert } from "@/components/ui/error-alert";
 import { createApiClient } from "@/lib/api";
 import { createIconWorkbenchApiClient } from "@/lib/icon-workbench-api";
 import { createIconWorkbenchEventStream, type IconWorkbenchEventStream } from "@/lib/icon-workbench-sse";
-import { getApiBaseUrl, getApiToken, invokeTauriCommand, isTauriDesktop, openDirectoryWithTauri, pickDirectoriesWithTauri } from "@/lib/runtime";
+import { getApiBaseUrl, getApiToken, inspectPathsWithTauri, invokeTauriCommand, isTauriDesktop, openDirectoryWithTauri, pickDirectoriesWithTauri } from "@/lib/runtime";
+import { findDropZoneForPosition, listenToTauriDragDrop } from "@/lib/tauri-drag-drop";
 import { cn } from "@/lib/utils";
 import type {
   ApplyIconResult,
@@ -54,6 +55,48 @@ interface NoticeState {
   detail: string | null;
 }
 
+function inferDroppedItemType(
+  path: string,
+  entry: { isDirectory?: boolean; isFile?: boolean } | null,
+): "directory" | "file" {
+  if (entry?.isDirectory) return "directory";
+  if (entry?.isFile) return "file";
+  return /\.[^./\\]+$/.test(path) ? "file" : "directory";
+}
+
+function extractDroppedDirectoryPaths(dataTransfer: DataTransfer): string[] {
+  const directories = new Set<string>();
+  const items = Array.from(dataTransfer.items || []);
+  const fallbackFiles = Array.from(dataTransfer.files || []);
+
+  for (const item of items) {
+    if (item.kind !== "file") continue;
+    const file = item.getAsFile();
+    const entry = (
+      item as DataTransferItem & {
+        webkitGetAsEntry?: () => { isDirectory?: boolean; isFile?: boolean } | null;
+      }
+    ).webkitGetAsEntry?.() || null;
+    const path = String((file as File & { path?: string })?.path || "").trim();
+    if (!path) continue;
+    if (inferDroppedItemType(path, entry) === "directory") {
+      directories.add(path);
+    }
+  }
+
+  if (directories.size === 0) {
+    for (const file of fallbackFiles) {
+      const path = String((file as File & { path?: string })?.path || "").trim();
+      if (!path) continue;
+      if (!/\.[^./\\]+$/.test(path)) {
+        directories.add(path);
+      }
+    }
+  }
+
+  return Array.from(directories);
+}
+
 export default function IconWorkbenchV2() {
   const baseUrl = getApiBaseUrl();
   const apiToken = getApiToken();
@@ -90,6 +133,9 @@ export default function IconWorkbenchV2() {
   const hasConnectedRef = useRef(false);
   const [streamStatus, setStreamStatus] = useState<IconWorkbenchStreamStatus>("offline");
   const [isNoticeFading, setIsNoticeFading] = useState(false);
+  const [isTargetDropActive, setIsTargetDropActive] = useState(false);
+  const [isDraggingGlobal, setIsDraggingGlobal] = useState(false);
+  const targetDropZoneRef = useRef<HTMLDivElement | null>(null);
 
   const clearNoticeTimers = useCallback(() => {
     if (noticeFadeTimerRef.current !== null) {
@@ -389,20 +435,11 @@ export default function IconWorkbenchV2() {
           ? "正在生成，请稍候"
           : null;
 
-  const handleChooseTargets = useCallback(async () => {
+  const appendTargetPaths = useCallback(async (nextTargetPaths: string[]) => {
     setError(null);
-    try {
-      let nextTargetPaths: string[] = [];
-      if (desktopReady) {
-        nextTargetPaths = (await pickDirectoriesWithTauri()) || [];
-      } else {
-        const selectedDir = (await systemApi.selectDir()).path;
-        if (selectedDir) {
-          nextTargetPaths = [selectedDir];
-        }
-      }
-      if (nextTargetPaths.length === 0) return;
+    if (nextTargetPaths.length === 0) return;
 
+    try {
       setActionLabel(session ? "正在添加目标文件夹..." : "正在创建目标集合...");
       const nextSession = session
         ? await iconApi.updateTargets(session.session_id, { target_paths: nextTargetPaths, mode: "append" })
@@ -416,7 +453,117 @@ export default function IconWorkbenchV2() {
     } finally {
       setActionLabel(null);
     }
-  }, [applySession, desktopReady, iconApi, session, showNotice, systemApi]);
+  }, [applySession, iconApi, session, showNotice]);
+
+  const resolveNativeDirectoryPaths = useCallback(async (paths: string[]) => {
+    const normalizedPaths = paths.map((path) => path.trim()).filter(Boolean);
+    if (!normalizedPaths.length) return [] as string[];
+    if (!desktopReady) {
+      return normalizedPaths.filter((path) => !/\.[^./\\]+$/.test(path));
+    }
+
+    const inspected = await inspectPathsWithTauri(normalizedPaths);
+    const resolved = inspected
+      .filter((item) => item.is_dir)
+      .map((item) => item.path.trim())
+      .filter(Boolean);
+    const fallback = normalizedPaths.filter((path) => !/\.[^./\\]+$/.test(path));
+    const unique = new Map<string, string>();
+    for (const path of (resolved.length ? resolved : fallback)) {
+      unique.set(path.toLowerCase(), path);
+    }
+    return Array.from(unique.values());
+  }, [desktopReady]);
+
+  const handleChooseTargets = useCallback(async () => {
+    setError(null);
+    try {
+      let nextTargetPaths: string[] = [];
+      if (desktopReady) {
+        nextTargetPaths = (await pickDirectoriesWithTauri()) || [];
+      } else {
+        const selectedDir = (await systemApi.selectDir()).path;
+        if (selectedDir) {
+          nextTargetPaths = [selectedDir];
+        }
+      }
+      await appendTargetPaths(nextTargetPaths);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "选择目标文件夹失败");
+    }
+  }, [appendTargetPaths, desktopReady, systemApi]);
+
+  const handleTargetDrop = useCallback(async (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsTargetDropActive(false);
+    const nextTargetPaths = extractDroppedDirectoryPaths(event.dataTransfer);
+    if (nextTargetPaths.length === 0) {
+      setError("当前环境暂时无法从拖拽内容里读取本地文件夹路径。你可以改用“选择目标文件夹”。");
+      return;
+    }
+    await appendTargetPaths(nextTargetPaths);
+  }, [appendTargetPaths]);
+
+  const handleTargetDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsTargetDropActive(true);
+  }, []);
+
+  const handleTargetDragLeave = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsTargetDropActive(false);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
+
+    void listenToTauriDragDrop((event) => {
+      const payload = event.payload;
+      if (payload.type === "leave") {
+        setIsTargetDropActive(false);
+        setIsDraggingGlobal(false);
+        return;
+      }
+
+      const zone = findDropZoneForPosition(payload.position, [
+        { key: "target", element: targetDropZoneRef.current },
+      ]);
+
+      if (payload.type === "over") {
+        setIsDraggingGlobal(true);
+        setIsTargetDropActive(zone === "target");
+        return;
+      }
+
+      setIsDraggingGlobal(false);
+      setIsTargetDropActive(false);
+      if (zone !== "target") {
+        return;
+      }
+
+      void resolveNativeDirectoryPaths(payload.paths).then((nextTargetPaths) => {
+        if (cancelled) return;
+        if (!nextTargetPaths.length) {
+          setError("当前环境暂时无法从拖拽内容里读取本地文件夹路径。你可以改用“选择目标文件夹”。");
+          return;
+        }
+        void appendTargetPaths(nextTargetPaths);
+      });
+    }).then((dispose) => {
+      if (cancelled) {
+        dispose?.();
+        return;
+      }
+      unlisten = dispose;
+    });
+
+    return () => {
+      cancelled = true;
+      setIsTargetDropActive(false);
+      unlisten?.();
+    };
+  }, [appendTargetPaths, resolveNativeDirectoryPaths]);
 
   const runGenerateFlow = async (folderIds: string[]) => {
     if (!session || folderIds.length === 0) return;
@@ -936,79 +1083,94 @@ export default function IconWorkbenchV2() {
     </div>
   ) : null;
 
-  if (!templatesInitialized && templatesLoading) {
-    return (
-      <div className="flex flex-1 items-center justify-center bg-surface">
-        <div className="flex flex-col items-center gap-4">
-          <LoaderCircle className="h-10 w-10 animate-spin text-primary/40" />
-          <p className="text-[14px] font-bold text-on-surface">正在加载图标工作区...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (restoringSession) {
-    return (
-      <div className="flex flex-1 items-center justify-center bg-surface">
-        <div className="flex flex-col items-center gap-4">
-          <LoaderCircle className="h-10 w-10 animate-spin text-primary/40" />
-          <p className="text-[14px] font-bold text-on-surface">正在恢复图标工作区...</p>
-        </div>
-      </div>
-    );
-  }
+  const isLoading = (!templatesInitialized && templatesLoading) || restoringSession;
 
   return (
-    <div className="relative flex h-full w-full antialiased bg-surface overflow-hidden">
-      <div className="flex flex-1 flex-col overflow-hidden bg-surface">
-        <IconWorkbenchToolbar
-          targetCount={targetCount}
-          latestTargetPath={latestTargetPath}
-          onAddTargets={handleChooseTargets}
-          onClearTargets={() => setResetConfirmOpen(true)}
-          onOpenStylePanel={() => setStylePanelOpen(true)}
-          onOpenTemplateDrawer={() => setTemplateDrawerOpen(true)}
-          selectedTemplateName={selectedTemplate?.name || "请选择风格"}
-        />
+    <div className="flex-1 min-h-0 overflow-hidden bg-surface">
+      <div className="ui-page flex h-full min-h-0 flex-col overflow-hidden antialiased">
+        <AnimatePresence mode="wait">
+          {isLoading ? (
+            <motion.div
+              key="loading"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="flex flex-1 items-center justify-center"
+            >
+              <div className="flex flex-col items-center gap-4">
+                <LoaderCircle className="h-10 w-10 animate-spin text-primary/40" />
+                <p className="text-[14px] font-bold text-on-surface">
+                  {templatesLoading ? "正在加载图标工作区..." : "正在恢复图标工作区..."}
+                </p>
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="main"
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+              className="flex flex-1 flex-col overflow-hidden"
+            >
+              <div className="flex flex-1 flex-col overflow-hidden rounded-[12px] border border-on-surface/8 bg-surface shadow-sm">
+                <IconWorkbenchToolbar
+                  targetCount={targetCount}
+                  latestTargetPath={latestTargetPath}
+                  onAddTargets={handleChooseTargets}
+                  onClearTargets={() => setResetConfirmOpen(true)}
+                  onOpenStylePanel={() => setStylePanelOpen(true)}
+                  onOpenTemplateDrawer={() => setTemplateDrawerOpen(true)}
+                  selectedTemplateName={selectedTemplate?.name || "请选择风格"}
+                />
 
-        {statusRail}
-        {processingBanner}
+                {statusRail}
+                {processingBanner}
 
-        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-             <IconWorkbenchFolderList
-                folders={session?.folders || []}
-                expandedFolderId={expandedFolderId}
-                onToggleExpand={setExpandedFolderId}
-                onSelectVersion={async (folderId, versionId) => {
-                  if (!session) return;
-                  applySession(await iconApi.selectVersion(session.session_id, folderId, versionId));
-                }}
-                onZoom={setPreviewVersion}
-                onApplyVersion={handleApplyVersion}
-                onRegenerate={(folderId) => void runGenerateFlow([folderId])}
-                onRestore={(folderId) => {
-                  const folder = session?.folders.find((item) => item.folder_id === folderId);
-                  if (folder) {
-                    setFolderToRestore(folder);
-                    setRestoreConfirmOpen(true);
-                  }
-                }}
-                onRemoveTarget={(folderId) => void handleRemoveTarget(folderId)}
-                onRemoveBg={(folderId, version) => void handleRemoveBg(folderId, version)}
-                onDeleteVersion={(folderId, versionId) => void handleDeleteVersion(folderId, versionId)}
-                processingBgVersionIds={processingBgVersionIds}
-                baseUrl={baseUrl}
-                apiToken={apiToken}
-                isApplyingId={isApplyingId}
-                activeProcessingId={activeProcessingId}
-                desktopReady={desktopReady}
-                hasSelectedStyle={hasSelectedStyle}
-                generateBlockedReason={generationConfigBlockedReason}
-                isProcessing={isBusy}
-                processingFolderId={generateProgress?.currentFolderId ?? null}
-                onAddTargets={handleChooseTargets}
-             />
-        </div>
+                <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                     <IconWorkbenchFolderList
+                        folders={session?.folders || []}
+                        expandedFolderId={expandedFolderId}
+                        onToggleExpand={setExpandedFolderId}
+                        onSelectVersion={async (folderId, versionId) => {
+                          if (!session) return;
+                          applySession(await iconApi.selectVersion(session.session_id, folderId, versionId));
+                        }}
+                        onZoom={setPreviewVersion}
+                        onApplyVersion={handleApplyVersion}
+                        onRegenerate={(folderId) => void runGenerateFlow([folderId])}
+                        onRestore={(folderId) => {
+                          const folder = session?.folders.find((item) => item.folder_id === folderId);
+                          if (folder) {
+                            setFolderToRestore(folder);
+                            setRestoreConfirmOpen(true);
+                          }
+                        }}
+                        onRemoveTarget={(folderId) => void handleRemoveTarget(folderId)}
+                        onRemoveBg={(folderId, version) => void handleRemoveBg(folderId, version)}
+                        onDeleteVersion={(folderId, versionId) => void handleDeleteVersion(folderId, versionId)}
+                        processingBgVersionIds={processingBgVersionIds}
+                        baseUrl={baseUrl}
+                        apiToken={apiToken}
+                        isApplyingId={isApplyingId}
+                        activeProcessingId={activeProcessingId}
+                        desktopReady={desktopReady}
+                        hasSelectedStyle={hasSelectedStyle}
+                        generateBlockedReason={generationConfigBlockedReason}
+                        isProcessing={isBusy}
+                        processingFolderId={generateProgress?.currentFolderId ?? null}
+                        onAddTargets={handleChooseTargets}
+                        isTargetDropActive={isTargetDropActive}
+                        onTargetDrop={handleTargetDrop}
+                        onTargetDragOver={handleTargetDragOver}
+                        onTargetDragLeave={handleTargetDragLeave}
+                        dropZoneRef={targetDropZoneRef}
+                     />
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {hasTargets && (hasSelectedStyle || canApplyBatch || canRemoveBgBatch) ? (

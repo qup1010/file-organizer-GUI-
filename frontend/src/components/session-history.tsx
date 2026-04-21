@@ -17,8 +17,18 @@ import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { getSessionStageView } from "@/lib/session-view-model";
 import { HistoryItem, SessionStage } from "@/types/session";
-import { cn, getFriendlyStatus, formatDisplayDate, getFriendlyStage } from "@/lib/utils";
-import { getHistoryEntryName, isHistorySessionEntry, useHistoryList } from "@/lib/use-history-list";
+import { cn, formatDisplayDate } from "@/lib/utils";
+import {
+  getHistoryEntryHref,
+  getHistoryEntryName,
+  getHistoryEntrySummary,
+  isHistoryCompletedEntry,
+  isHistoryPartialFailureEntry,
+  isHistoryRollbackPartialFailureEntry,
+  isHistoryRolledBackEntry,
+  isHistorySessionEntry,
+  useHistoryList,
+} from "@/lib/use-history-list";
 
 import { EmptyState } from "@/components/ui/empty-state";
 
@@ -39,11 +49,7 @@ export function SessionHistory({ maxItems }: { maxItems?: number }) {
   } = useHistoryList();
 
   const handleContinue = (item: HistoryItem) => {
-    if (!isHistorySessionEntry(item)) {
-      router.push(`/workspace?execution_id=${item.execution_id}`);
-    } else {
-      router.push(`/workspace?session_id=${item.execution_id}`);
-    }
+    router.push(getHistoryEntryHref(item));
   };
 
   return (
@@ -93,7 +99,9 @@ export function SessionHistory({ maxItems }: { maxItems?: number }) {
                 { id: "all", label: "全部" },
                 { id: "active", label: "进行中" },
                 { id: "completed", label: "已完成" },
+                { id: "partial_failure", label: "部分失败" },
                 { id: "rolled_back", label: "已回退" },
+                { id: "rollback_partial_failure", label: "回退部分失败" },
               ].map((item) => (
                 <button
                   key={item.id}
@@ -125,14 +133,15 @@ export function SessionHistory({ maxItems }: { maxItems?: number }) {
         ) : (
           <div className="space-y-2.5">
           {(maxItems ? filteredHistory.slice(0, maxItems) : filteredHistory).map((item, idx) => {
-            const isRolledBack = item.status === 'rolled_back';
             const isSession = isHistorySessionEntry(item);
             const sessionStageView = isSession ? getSessionStageView(item.status as SessionStage) : null;
-            const isCompleted = isSession ? Boolean(sessionStageView?.isCompleted) : item.status === 'success' || item.status === 'completed';
+            const isCompleted = isSession ? Boolean(sessionStageView?.isCompleted) : isHistoryCompletedEntry(item);
+            const isRolledBack = isHistoryRolledBackEntry(item);
+            const isPartialFailure = isHistoryPartialFailureEntry(item) || isHistoryRollbackPartialFailureEntry(item);
             const dirName = getHistoryEntryName(item);
             
-            const actionLabel = isSession ? "查看任务" : "查看结果";
-            const statusLabel = isSession ? getFriendlyStage(item.status) : getFriendlyStatus(item.status);
+            const actionLabel = isSession ? "查看任务" : isRolledBack ? "查看回退" : "查看结果";
+            const statusLabel = getHistoryEntrySummary(item);
             const hasFailures = (item.failure_count || 0) > 0;
 
             return (
@@ -157,11 +166,13 @@ export function SessionHistory({ maxItems }: { maxItems?: number }) {
                     "flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] transition-colors",
                     isRolledBack 
                       ? "bg-surface-container text-on-surface-variant/70" 
+                      : isPartialFailure
+                        ? "bg-warning-container/30 text-warning"
                       : isCompleted
                         ? "bg-success/10 text-success-dim"
                         : "bg-primary/10 text-primary"
                   )}>
-                    {isRolledBack ? <Undo2 className="h-4 w-4" /> : isCompleted ? <CheckCircle2 className="h-4 w-4" /> : <Activity className="h-4 w-4" />}
+                    {isRolledBack ? <Undo2 className="h-4 w-4" /> : isPartialFailure ? <Activity className="h-4 w-4" /> : isCompleted ? <CheckCircle2 className="h-4 w-4" /> : <Activity className="h-4 w-4" />}
                   </div>
 
                   <div className="min-w-0 flex-1 space-y-2">
@@ -173,7 +184,13 @@ export function SessionHistory({ maxItems }: { maxItems?: number }) {
                           </h4>
                           <span className={cn(
                             "rounded-[8px] px-2 py-0.5 text-[12px] font-semibold",
-                            isRolledBack ? "bg-on-surface/5 text-ui-muted" : "bg-primary/8 text-primary"
+                            isRolledBack
+                              ? "bg-on-surface/5 text-ui-muted"
+                              : isPartialFailure
+                                ? "bg-warning-container/35 text-warning"
+                                : isCompleted
+                                  ? "bg-success/10 text-success-dim"
+                                  : "bg-primary/8 text-primary"
                           )}>
                             {statusLabel}
                           </span>

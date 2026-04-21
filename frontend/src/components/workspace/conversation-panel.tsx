@@ -57,6 +57,7 @@ interface ConversationPanelProps {
   onSendMessage: () => void;
   onStartScan: () => void;
   unresolvedCount: number;
+  canRunPrecheck: boolean;
   notice?: ConversationNotice | null;
   scanner?: ScannerProgress;
   progressPercent?: number;
@@ -86,6 +87,7 @@ export function ConversationPanel({
   onSendMessage,
   onStartScan,
   unresolvedCount,
+  canRunPrecheck,
   notice,
   scanner,
   progressPercent = 0,
@@ -163,7 +165,7 @@ export function ConversationPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
-      <div ref={scrollContainerRef} onScroll={handleScroll} className="relative min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5 scroll-smooth lg:px-6 lg:py-6">
+      <div ref={scrollContainerRef} onScroll={handleScroll} className="relative min-h-0 flex-1 space-y-6 overflow-y-auto px-6 pt-3 pb-6 scroll-smooth">
         {stageView.isDraftLike && !notice && (
           <motion.div 
             initial={{ opacity: 0, scale: 0.98 }} 
@@ -254,6 +256,9 @@ export function ConversationPanel({
             const isPrevSystemLog = prevMessage?.role === "assistant" && !prevMessage.content?.trim();
             const isGrouped = prevMessage && prevMessage.role === message.role && !isPrevSystemLog;
             const isSystemLog = isAssistant && !message.content?.trim();
+            const isFirstVisibleMessage = !messages
+              .slice(0, idx)
+              .some((candidate) => candidate.role !== "assistant" || candidate.content?.trim());
 
             if (isSystemLog) {
               return (
@@ -270,10 +275,10 @@ export function ConversationPanel({
                 initial={{ opacity: 0, x: -5 }}
                 animate={{ opacity: 1, x: 0 }}
                 className={cn(
-                  "relative flex gap-4", 
-                  isAssistant ? "flex-row" : "flex-row-reverse justify-start",
-                  isGrouped ? "mt-2" : "mt-8",
-                  isGrouped ? "pb-0" : "pb-1"
+                  "relative flex gap-4 max-w-full", 
+                  isAssistant ? "flex-row" : "flex-row-reverse",
+                  isGrouped ? "mt-1.5" : isFirstVisibleMessage ? "mt-2" : "mt-6",
+                  isGrouped ? "pb-0" : "pb-0.5"
                 )}
               >
                 {isAssistant && (
@@ -294,13 +299,13 @@ export function ConversationPanel({
                   {message.content && (
                     <div
                       className={cn(
-                        "transition-all",
+                        "transition-all leading-relaxed",
                         isAssistant
                           ? "text-on-surface pt-0.5"
-                          : "text-[14.5px] font-medium text-on-surface/80 whitespace-pre-wrap ml-auto max-w-[85%] pt-1 text-right leading-relaxed"
+                          : "ml-auto max-w-[85%] rounded-[12px] bg-primary/[0.045] border border-primary/8 px-4 py-2.5 text-[13.5px] font-medium text-on-surface/90 shadow-sm"
                       )}
                     >
-                      {isAssistant ? <MarkdownProse content={message.content} /> : message.content}
+                      {isAssistant ? <MarkdownProse content={message.content} /> : <span>{message.content}</span>}
                     </div>
                   )}
                 </div>
@@ -320,16 +325,16 @@ export function ConversationPanel({
               </div>
               <div className="flex-1 pt-0.5 text-on-surface">
                 <div className="mb-2 flex items-center gap-2 text-primary/70">
-                  <div className="flex gap-0.5">
+                  <div className="flex gap-1">
                     {[0, 0.2, 0.4].map((delay) => (
-                      <motion.span key={delay} animate={{ scale: [1, 1.2, 1], opacity: [0.4, 1, 0.4] }} transition={{ repeat: Infinity, duration: 2, delay }} className="w-1.5 h-1.5 bg-current rounded-full" />
+                      <motion.span key={delay} animate={{ scale: [1, 1.3, 1], opacity: [0.4, 1, 0.4] }} transition={{ repeat: Infinity, duration: 1.8, delay }} className="w-1 h-1 bg-current rounded-full" />
                     ))}
                   </div>
-                  <span className="ml-0 text-[11.5px] font-semibold uppercase tracking-wider">系统思考中</span>
+                  <span className="ml-1 text-[11px] font-bold uppercase tracking-widest opacity-80">系统正在思考解决方案</span>
                 </div>
-                <div className="relative">
+                <div className="relative border-l-2 border-primary/10 pl-4 py-1">
                   <MarkdownProse content={assistantDraft} />
-                  <motion.span initial={{ opacity: 0 }} animate={{ opacity: [0, 1, 0] }} transition={{ repeat: Infinity, duration: 0.8 }} className="inline-block w-1.5 h-4 bg-primary/40 ml-1 translate-y-0.5" />
+                  <motion.span initial={{ opacity: 0 }} animate={{ opacity: [0, 1, 0] }} transition={{ repeat: Infinity, duration: 0.8 }} className="inline-block w-1.5 h-4 bg-primary/30 ml-1 translate-y-0.5" />
                 </div>
               </div>
             </motion.div>
@@ -356,7 +361,7 @@ export function ConversationPanel({
         composerStatus={composerStatus}
         plannerStatus={plannerStatus}
         unresolvedCount={unresolvedCount}
-        stage={stage}
+        canRunPrecheck={canRunPrecheck}
         isBusy={isBusy}
         isComposerLocked={isComposerLocked}
         messageInput={messageInput}

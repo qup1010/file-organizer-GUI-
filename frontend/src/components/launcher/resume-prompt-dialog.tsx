@@ -71,14 +71,14 @@ export function ResumePromptDialog({
                 onClick={onConfirmResume}
                 className="w-full py-4 text-sm"
               >
-                {isCompletedResume ? "查看之前的结果" : "继续上一次整理"}
+                {isCompletedResume ? "只读查看结果" : "继续上一次整理"}
               </Button>
               <div className="rounded-[10px] border border-on-surface/8 bg-surface px-5 py-4 text-ui-section font-medium leading-relaxed text-ui-muted">
                 {isCompletedResume
                   ? "重新开始会按当前选择的预设重新扫描这个目录。"
                   : "重新开始会结束上一次未完成的状态，并按当前选择的预设重新扫描。"}
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className={isCompletedResume ? "grid grid-cols-2 gap-3" : "grid grid-cols-3 gap-3"}>
                 <Button
                   variant="secondary"
                   onClick={onStartFresh}
@@ -86,13 +86,15 @@ export function ResumePromptDialog({
                 >
                   重新开始
                 </Button>
-                <Button
-                  variant="secondary"
-                  onClick={onReadOnlyView}
-                  className="py-3.5"
-                >
-                  只读打开
-                </Button>
+                {!isCompletedResume ? (
+                  <Button
+                    variant="secondary"
+                    onClick={onReadOnlyView}
+                    className="py-3.5"
+                  >
+                    只读打开
+                  </Button>
+                ) : null}
                 <Button
                   variant="ghost"
                   onClick={onCancel}

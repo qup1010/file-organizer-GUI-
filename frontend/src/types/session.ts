@@ -91,6 +91,9 @@ export interface LaunchStrategyConfig {
   LAUNCH_DEFAULT_PREFIX_STYLE?: StrategyPrefixStyle;
   LAUNCH_DEFAULT_CAUTION_LEVEL?: StrategyCautionLevel;
   LAUNCH_DEFAULT_NOTE?: string;
+  LAUNCH_DEFAULT_NEW_DIRECTORY_ROOT?: string;
+  LAUNCH_DEFAULT_REVIEW_ROOT?: string;
+  LAUNCH_REVIEW_FOLLOWS_NEW_ROOT?: boolean;
   LAUNCH_SKIP_STRATEGY_PROMPT?: boolean;
 }
 

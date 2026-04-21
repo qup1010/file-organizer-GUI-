@@ -178,7 +178,7 @@ class SnapshotBuilder:
                 depth=max(0, len([part for part in normalized_target_dir.split("/") if part]) - 1),
                 is_new=is_new,
                 real_path=(
-                    str(self.helpers._resolve_target_real_path(session, raw_target_dir))
+                    str(self.helpers.target_resolver.resolve_target_real_path(session, raw_target_dir))
                     if session is not None
                     else ""
                 ),

@@ -44,30 +44,30 @@ export function SettingsSection({
   return (
     <section
       className={cn(
-        "overflow-hidden rounded-[12px] border border-on-surface/8 bg-surface-container-lowest p-5 shadow-[0_18px_44px_rgba(0,0,0,0.04)]",
+        "overflow-hidden rounded-[8px] border border-on-surface/10 bg-surface-container-lowest shadow-sm shadow-black/[0.01]",
         disabled && "opacity-55",
       )}
     >
-      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-on-surface/6 bg-surface px-4 py-4 -mx-5 -mt-5 mb-4">
-        <div className="flex min-w-0 items-start gap-3.5">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-on-surface/8 bg-surface px-5 py-3.5">
+        <div className="flex min-w-0 items-start gap-3">
           <div
             className={cn(
-              "flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] border",
+              "flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] border",
               disabled
                 ? "border-on-surface/6 bg-surface-container-low text-on-surface-variant/30"
                 : "border-primary/12 bg-primary/10 text-primary",
             )}
           >
-            <Icon className="h-4.5 w-4.5" />
+            <Icon className="h-4 w-4" />
           </div>
-          <div className="min-w-0 space-y-1">
-            <h2 className="text-base font-black tracking-tight text-on-surface">{title}</h2>
-            <p className="text-[12px] leading-5 text-on-surface-variant/75">{description}</p>
+          <div className="min-w-0 space-y-0.5 mt-0.5">
+            <h2 className="text-[14.5px] font-black tracking-tight text-on-surface leading-none">{title}</h2>
+            <p className="text-[11.5px] font-medium leading-relaxed text-on-surface-variant/70">{description}</p>
           </div>
         </div>
         {actions ? <div className="shrink-0">{actions}</div> : null}
       </div>
-      <div className="mt-4 space-y-4">{children}</div>
+      <div className="px-5 py-5 space-y-6">{children}</div>
     </section>
   );
 }
@@ -88,12 +88,12 @@ export function InputShell({ icon: Icon, children, className }: InputShellProps)
   return (
     <div
       className={cn(
-        "ui-field-shell group min-h-[52px] bg-surface-container-lowest px-3 py-2",
+        "ui-field-shell group min-h-[42px] bg-surface-container-lowest border border-on-surface/10 rounded-[6px] px-2.5 transition-colors focus-within:border-primary/40 focus-within:ring-1 focus-within:ring-primary/10",
         className,
       )}
     >
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-surface-container-low text-on-surface-variant/45 transition-colors group-focus-within:text-primary">
-        <Icon className="h-4 w-4" />
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center text-on-surface-variant/40 transition-colors group-focus-within:text-primary">
+        <Icon className="h-3.5 w-3.5" />
       </div>
       {children}
     </div>
@@ -116,14 +116,14 @@ export function StrategyOptionButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "w-full rounded-[10px] border px-4 py-3 text-left transition-colors",
+        "w-full rounded-[6px] border px-3.5 py-2.5 text-left transition-colors",
         active 
-          ? "border-primary/25 bg-primary/10 shadow-[0_8px_20px_rgba(0,0,0,0.12)] selection-active" 
-          : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
+          ? "border-primary/40 bg-primary/[0.04] shadow-sm shadow-primary/5 select-active" 
+          : "border-on-surface/10 bg-surface-container-lowest hover:border-primary/25 hover:bg-surface-container-low",
       )}
     >
-      <p className={cn("text-[14px] font-semibold tracking-tight", active ? "text-primary" : "text-on-surface")}>{label}</p>
-      <p className="mt-1 text-[13px] leading-6 text-ui-muted">{description}</p>
+      <p className={cn("text-[13px] font-black tracking-tight", active ? "text-primary" : "text-on-surface")}>{label}</p>
+      <p className="mt-0.5 text-[12px] font-medium leading-relaxed text-ui-muted">{description}</p>
     </button>
   );
 }
@@ -287,19 +287,19 @@ export function PresetSelector({
             aria-haspopup="listbox"
             aria-controls={`${label}-preset-list`}
             className={cn(
-              "flex min-h-[54px] w-full items-center justify-between gap-4 rounded-[14px] border px-4 py-3 text-left transition-[border-color,background-color,box-shadow] duration-180",
+              "flex min-h-[46px] w-full items-center justify-between gap-4 rounded-[6px] border px-3 py-2 text-left transition-[border-color,background-color] duration-150",
               open
-                ? "border-primary/40 bg-surface-container-low shadow-[0_0_0_4px_rgba(0,120,212,0.12)]"
-                : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/25 hover:bg-surface-container-low",
+                ? "border-primary/30 bg-primary/[0.02]"
+                : "border-on-surface/10 bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
               disabled && "cursor-not-allowed opacity-55",
             )}
           >
             <div className="min-w-0">
-              <p className="truncate text-[14px] font-semibold tracking-tight text-on-surface">
+              <p className="truncate text-[13.5px] font-bold tracking-tight text-on-surface">
                 {activePreset?.name || "选择预设..."}
               </p>
-              <p className="mt-0.5 text-[12px] text-on-surface-variant/58">
-                {activePreset ? "切换后会替换这一类模型的地址、模型和密钥。" : "当前还没有可用预设。"}
+              <p className="mt-0.5 text-[11px] font-medium text-on-surface-variant/60">
+                {activePreset ? "切换后会应用此预设的连接信息。" : "当前还没有可用预设。"}
               </p>
             </div>
             <ChevronDown className={cn("h-4 w-4 shrink-0 text-on-surface-variant/55 transition-transform", open && "rotate-180")} />
@@ -308,13 +308,12 @@ export function PresetSelector({
 
         <Button
           variant="secondary"
-          size="lg"
           onClick={onAdd}
           disabled={disabled}
-          className="min-h-[54px] shrink-0 rounded-[14px] px-5"
+          className="min-h-[46px] shrink-0 rounded-[6px] px-5 font-bold"
           aria-label={`新建${label}`}
         >
-          <Plus className="h-4 w-4" />
+          <Plus className="h-4 w-4 mr-1" />
           新建预设
         </Button>
       </div>
@@ -323,45 +322,45 @@ export function PresetSelector({
         id={`${label}-preset-list`}
         role="listbox"
         className={cn(
-          "overflow-hidden rounded-[14px] border border-on-surface/8 bg-surface transition-[max-height,opacity,margin] duration-200",
-          open ? "max-h-[420px] opacity-100" : "max-h-0 border-transparent opacity-0",
+          "overflow-hidden rounded-[8px] border border-on-surface/8 bg-surface shadow-md shadow-black/[0.04] transition-[max-height,opacity,margin] duration-200",
+          open ? "max-h-[320px] opacity-100 mt-1" : "max-h-0 border-transparent opacity-0 mt-0",
         )}
       >
-        <div className="max-h-[320px] overflow-y-auto px-2 py-2 scrollbar-thin">
+        <div className="max-h-[320px] overflow-y-auto p-1.5 scrollbar-thin">
           {presets.map((preset) => {
             const active = preset.id === activeId;
             return (
               <div
                 key={preset.id}
                 className={cn(
-                  "group flex items-center gap-3 rounded-[10px] px-3 py-2.5 transition-all",
+                  "group flex items-center gap-3 rounded-[6px] px-2 py-2 transition-all",
                   active 
-                    ? "bg-primary/10 ring-1 ring-inset ring-primary/20" 
+                    ? "bg-primary/10 text-primary" 
                     : "hover:bg-on-surface/[0.04] active:scale-[0.98]",
                 )}
               >
                 <button
                   type="button"
                   onClick={() => onSwitch(preset.id)}
-                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                  className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
                 >
                   <span
                     className={cn(
-                      "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors",
-                      active ? "border-primary bg-primary text-white" : "border-on-surface/14 bg-surface-container-lowest text-transparent",
+                      "flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-sm transition-colors",
+                      active ? "bg-primary text-white" : "border border-on-surface/14 bg-surface-container-lowest text-transparent",
                     )}
                   >
                     <Check className="h-3 w-3" />
                   </span>
                   <div className="min-w-0">
-                    <p className="truncate text-[14px] font-semibold tracking-tight text-on-surface">{preset.name}</p>
-                    <p className="mt-0.5 text-[11px] text-on-surface-variant/45">{preset.id}</p>
+                    <p className={cn("truncate text-[13px] font-bold tracking-tight", active ? "text-primary" : "text-on-surface")}>{preset.name}</p>
+                    <p className="mt-0.5 text-[10.5px] font-mono text-on-surface-variant/60">{preset.id}</p>
                   </div>
                 </button>
                 <button
                   type="button"
                   onClick={() => onDelete(preset)}
-                  className="rounded-[10px] p-2 text-on-surface-variant/35 transition-colors hover:bg-error/6 hover:text-error"
+                  className="rounded-[6px] p-1.5 text-on-surface-variant/40 transition-colors hover:bg-error/10 hover:text-error"
                   aria-label={`删除预设 ${preset.name}`}
                 >
                   <Trash2 className="h-4 w-4" />

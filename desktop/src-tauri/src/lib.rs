@@ -10,6 +10,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use tauri::{App, Manager, RunEvent};
+use serde::Serialize;
 
 use crate::icon_apply::{
     apply_folder_icon,
@@ -45,6 +46,31 @@ fn pick_files() -> Option<Vec<String>> {
             .map(|path| path.to_string_lossy().into_owned())
             .collect()
     })
+}
+
+#[derive(Serialize)]
+struct InspectedPath {
+    path: String,
+    is_dir: bool,
+    is_file: bool,
+}
+
+#[tauri::command]
+fn inspect_paths(paths: Vec<String>) -> Vec<InspectedPath> {
+    paths
+        .into_iter()
+        .map(|path| {
+            let metadata = fs::metadata(&path).ok();
+            let is_dir = metadata.as_ref().is_some_and(|item| item.is_dir());
+            let is_file = metadata.as_ref().is_some_and(|item| item.is_file());
+
+            InspectedPath {
+                path,
+                is_dir,
+                is_file,
+            }
+        })
+        .collect()
 }
 
 #[tauri::command]
@@ -314,6 +340,7 @@ pub fn run() {
             pick_directory,
             pick_directories,
             pick_files,
+            inspect_paths,
             open_directory,
             save_file_as,
             get_runtime_config,

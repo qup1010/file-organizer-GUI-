@@ -6,6 +6,7 @@ import { AlertTriangle, FolderTree, Layers, Loader2, LogOut, RefreshCw } from "l
 import { motion, AnimatePresence } from "framer-motion";
 import { getSessionStageView } from "@/lib/session-view-model";
 import { cn } from "@/lib/utils";
+import { canRunPrecheck as deriveCanRunPrecheck } from "@/lib/workspace-precheck";
 
 import { useSession } from "@/lib/use-session";
 import { getFriendlyStage } from "@/lib/utils";
@@ -23,6 +24,14 @@ import { PreviewFilter, PreviewFocusRequest, PreviewPanel } from "./workspace/pr
 
 const DEFAULT_LEFT_WIDTH = 50;
 const SCAN_PREVIEW_GRACE_MS = 1200;
+
+function getSessionIdFromWorkspaceRoute(route: string | null): string | null {
+  if (!route?.startsWith("/workspace")) {
+    return null;
+  }
+  const query = route.split("?")[1] || "";
+  return new URLSearchParams(query).get("session_id");
+}
 
 function summarizeItemNames(names: string[], limit = 3): string {
   const visible = names.filter(Boolean).slice(0, limit);
@@ -185,7 +194,7 @@ export default function WorkspaceClient() {
   const stageView = useMemo(() => getSessionStageView(stage), [stage]);
   const isBusy = stageView.isBusyStage || loading;
   const isPlanSyncing = plannerStatus.isRunning;
-  const canRunPrecheck = stageView.isAwaitingPrecheck && plan.readiness.can_precheck && !isPlanSyncing;
+  const canRunPrecheck = deriveCanRunPrecheck(stage, plan.readiness, isPlanSyncing);
   const progressPercent = scanner.total_count > 0 ? (scanner.processed_count / scanner.total_count) * 100 : 0;
   const showConversationPane = true;
   const effectiveComposerMode = isReadOnly ? "hidden" : composerMode;
@@ -217,9 +226,7 @@ export default function WorkspaceClient() {
       return "先选择目标目录，系统会把剩余根级条目作为待整理项，再生成归入已有目录方案。";
     }
     if (stageView.isPlanning) {
-      return canRunPrecheck
-        ? "建议运行预检，核实移动范围。"
-        : "可以继续调整要求，直到方案可预检。";
+      return isPlanSyncing ? "方案正在同步，完成后会更新是否可预检。" : "可以继续调整要求，等待方案进入预检阶段。";
     }
     if (stageView.isAwaitingPrecheck) {
       return canRunPrecheck ? "方案已就绪，建议开始运行预检。" : "方案同步中，完成后即可预检。";
@@ -325,6 +332,12 @@ export default function WorkspaceClient() {
   const handleExitWorkbench = () => {
     setShowExitMenu(false);
     if (isReadOnly || stageView.isCompleted) {
+      if (typeof window !== "undefined" && sessionIdParam) {
+        const storedRoute = window.localStorage.getItem(ACTIVE_WORKSPACE_ROUTE_KEY);
+        if (getSessionIdFromWorkspaceRoute(storedRoute) === sessionIdParam) {
+          window.localStorage.removeItem(ACTIVE_WORKSPACE_ROUTE_KEY);
+        }
+      }
       router.push("/");
       return;
     }
@@ -538,23 +551,34 @@ export default function WorkspaceClient() {
       return;
     }
     const targetPath = snapshot?.target_dir || dirParam || "";
-    const dirName = targetPath ? targetPath.replace(/[\\/]$/, "").split(/[\\/]/).pop() || "当前任务" : "当前任务";
+    const hasTargetPath = Boolean(targetPath);
+    const dirName = hasTargetPath ? targetPath.replace(/[\\/]$/, "").split(/[\\/]/).pop() || "当前任务" : "当前任务";
     window.localStorage.setItem(
       WORKSPACE_CONTEXT_KEY,
       JSON.stringify({
         dirName,
         stage: getFriendlyStage(stage),
+        sessionId: sessionIdParam || undefined,
+        hasTargetPath,
       }),
     );
     window.dispatchEvent(new Event(APP_CONTEXT_EVENT));
-  }, [APP_CONTEXT_EVENT, WORKSPACE_CONTEXT_KEY, dirParam, snapshot?.target_dir, stage]);
+  }, [APP_CONTEXT_EVENT, WORKSPACE_CONTEXT_KEY, dirParam, sessionIdParam, snapshot?.target_dir, stage]);
 
   React.useEffect(() => {
     if (typeof window === "undefined" || !sessionIdParam) {
       return;
     }
-    window.localStorage.setItem(ACTIVE_WORKSPACE_ROUTE_KEY, `/workspace${window.location.search}`);
-  }, [ACTIVE_WORKSPACE_ROUTE_KEY, dirParam, isReadOnly, sessionIdParam]);
+    const canRememberWorkspaceRoute = !isReadOnly && !stageView.isCompleted;
+    if (canRememberWorkspaceRoute) {
+      window.localStorage.setItem(ACTIVE_WORKSPACE_ROUTE_KEY, `/workspace${window.location.search}`);
+      return;
+    }
+    const storedRoute = window.localStorage.getItem(ACTIVE_WORKSPACE_ROUTE_KEY);
+    if (getSessionIdFromWorkspaceRoute(storedRoute) === sessionIdParam) {
+      window.localStorage.removeItem(ACTIVE_WORKSPACE_ROUTE_KEY);
+    }
+  }, [ACTIVE_WORKSPACE_ROUTE_KEY, isReadOnly, sessionIdParam, stageView.isCompleted]);
 
   const focusPreviewItems = React.useCallback((itemIds: string[], filter?: PreviewFilter) => {
     setPreviewFocusRequest({
@@ -773,6 +797,7 @@ export default function WorkspaceClient() {
       onSendMessage={handleSendMessage}
       onStartScan={handleStartScan}
       unresolvedCount={plan.unresolved_items.length}
+      canRunPrecheck={canRunPrecheck}
       notice={statusNotice}
       scanner={scanner}
       progressPercent={progressPercent}

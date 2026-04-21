@@ -43,6 +43,7 @@ from file_organizer.app.source_manager import SourceManager
 from file_organizer.app.session_store import SessionStore
 from file_organizer.app.target_profile_store import TargetProfileStore
 from file_organizer.app.target_manager import TargetManager
+from file_organizer.app.target_resolver import TargetResolver
 from file_organizer.app.task_planner_adapter import TaskPlannerAdapter
 from file_organizer.domain.models import MappingEntry, OrganizeTask, SourceRef, TargetSlot
 from file_organizer.execution import service as execution_service
@@ -76,6 +77,7 @@ class OrganizerSessionService:
         self._event_log: dict[str, list[dict]] = {}
         self._subscribers: dict[str, list[Queue]] = {}
         self.source_manager = SourceManager(self)
+        self.target_resolver = TargetResolver(self)
         self.target_manager = TargetManager(self)
         self.snapshot_builder = SnapshotBuilder(self)
         self.execution_app = ExecutionAppService(self)
@@ -210,15 +212,11 @@ class OrganizerSessionService:
 
     @staticmethod
     def _normalize_placement_root(value: str | None) -> str:
-        text = str(value or "").strip()
-        return str(Path(text).resolve()) if text else ""
+        return TargetResolver.normalize_placement_root(value)
 
     @classmethod
     def _default_review_root(cls, new_directory_root: str) -> str:
-        normalized_new_root = cls._normalize_placement_root(new_directory_root)
-        if not normalized_new_root:
-            return ""
-        return str((Path(normalized_new_root) / "Review").resolve())
+        return TargetResolver.default_review_root(new_directory_root)
 
     @classmethod
     def _placement_payload(
@@ -228,18 +226,10 @@ class OrganizerSessionService:
         new_directory_root: str | None = None,
         review_root: str | None = None,
     ) -> PlacementPayload:
-        base = PlacementPayload.from_dict(placement)
-        normalized_new_root = cls._normalize_placement_root(
-            new_directory_root if new_directory_root is not None else base.new_directory_root
-        )
-        normalized_review_root = cls._normalize_placement_root(
-            review_root if review_root is not None else base.review_root
-        )
-        if normalized_new_root and not normalized_review_root:
-            normalized_review_root = cls._default_review_root(normalized_new_root)
-        return PlacementPayload(
-            new_directory_root=normalized_new_root,
-            review_root=normalized_review_root,
+        return TargetResolver.placement_payload(
+            placement,
+            new_directory_root=new_directory_root,
+            review_root=review_root,
         )
 
     @staticmethod
@@ -284,25 +274,13 @@ class OrganizerSessionService:
 
     @staticmethod
     def _is_absolute_target_path(value: str | None) -> bool:
-        try:
-            return Path(str(value or "").strip()).is_absolute()
-        except OSError:
-            return False
+        return TargetResolver.is_absolute_target_path(value)
 
     def _resolve_target_real_path(self, session: OrganizerSession, target_dir: str) -> Path:
-        text = str(target_dir or "").strip()
-        candidate = Path(text)
-        if candidate.is_absolute():
-            return candidate.resolve()
-        placement = self._placement_payload(session.placement)
-        base_root = placement.new_directory_root or session.target_dir
-        return (Path(base_root).resolve() / text).resolve()
+        return self.target_resolver.resolve_target_real_path(session, target_dir)
 
     def _review_target_path(self, session: OrganizerSession, source_relpath: str) -> Path:
-        placement = self._placement_payload(session.placement)
-        filename = Path(str(source_relpath or "")).name
-        base_root = placement.review_root or self._default_review_root(placement.new_directory_root or session.target_dir)
-        return (Path(base_root).resolve() / filename).resolve()
+        return self.target_resolver.review_target_path(session, source_relpath)
 
     @staticmethod
     def _task_phase_for_stage(stage: str) -> str:
@@ -544,11 +522,7 @@ class OrganizerSessionService:
         return task, registry
 
     def _target_slot_relpath(self, session: OrganizerSession, target: TargetSlot) -> str:
-        try:
-            relative = Path(target.real_path).resolve().relative_to(Path(session.target_dir).resolve()).as_posix()
-        except ValueError:
-            return ""
-        return self._normalize_relpath(relative)
+        return self.target_resolver.target_slot_relpath(session, target)
 
     def _target_dir_from_slot_id(
         self,
@@ -556,19 +530,7 @@ class OrganizerSessionService:
         slot_id: str | None,
         plan: PendingPlan | FinalPlan | None = None,
     ) -> str:
-        normalized_slot_id = str(slot_id or "").strip()
-        if not normalized_slot_id:
-            return ""
-        if normalized_slot_id == "Review":
-            return "Review"
-        task, _ = self._build_organize_task(session, plan)
-        for target in task.targets:
-            if target.slot_id == normalized_slot_id:
-                relpath = self._target_slot_relpath(session, target)
-                if relpath:
-                    return relpath
-                return self._normalize_relpath(target.real_path)
-        raise RuntimeError("TARGET_SLOT_NOT_FOUND")
+        return self.target_resolver.target_dir_from_slot_id(session, slot_id, plan)
 
     def _planning_scope_sources(self, session: OrganizerSession) -> list[str]:
         if session.planner_items:
@@ -795,7 +757,7 @@ class OrganizerSessionService:
         return self.target_manager.filter_incremental_pending_scan_lines(scan_lines, target_directories)
 
     def _validate_incremental_target_dir(self, target_dir: str, selection: dict | None) -> bool:
-        return self.target_manager.validate_incremental_target_dir(target_dir, selection)
+        return self.target_resolver.validate_incremental_target_dir(target_dir, selection)
 
     def _planning_context(self, session: OrganizerSession) -> dict:
         selection = self._incremental_selection_snapshot(session)
@@ -1575,28 +1537,13 @@ class OrganizerSessionService:
         target_slot: str | None = None,
         move_to_review: bool = False,
     ) -> str:
-        if move_to_review:
-            normalized_dir = "Review"
-        else:
-            resolved_target_dir = target_dir
-            if target_slot is not None:
-                resolved_target_dir = self._target_dir_from_slot_id(session, target_slot, pending)
-                return resolved_target_dir
-            if self._is_absolute_target_path(resolved_target_dir):
-                raise RuntimeError("ABSOLUTE_TARGET_DIR_NOT_ALLOWED")
-            normalized_dir = self._normalize_relpath(resolved_target_dir)
-            if normalized_dir == "Review" or normalized_dir.startswith("Review/"):
-                raise RuntimeError("REVIEW_SUBDIRECTORY_NOT_ALLOWED")
-
-        if (
-            self._normalize_organize_mode(session.organize_mode) == "incremental"
-            and normalized_dir
-            and normalized_dir != "Review"
-        ):
-            selection = self._incremental_selection_snapshot(session)
-            if not self._validate_incremental_target_dir(normalized_dir, selection):
-                raise RuntimeError("INCREMENTAL_TARGET_NOT_ALLOWED")
-        return normalized_dir
+        return self.target_resolver.normalized_target(
+            session,
+            pending,
+            target_dir=target_dir,
+            target_slot=target_slot,
+            move_to_review=move_to_review,
+        ).normalized_dir
 
     @staticmethod
     def _target_relpath_for_source(source_relpath: str, destination_dir: str) -> str:

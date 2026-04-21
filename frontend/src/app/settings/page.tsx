@@ -11,6 +11,7 @@ import {
   Cpu,
   Eye,
   EyeOff,
+  FolderOpen,
   Globe,
   ImageIcon,
   Key,
@@ -314,6 +315,12 @@ export default function SettingsPage() {
   }, []);
 
   const launchTemplate = getTemplateMeta(draft?.global_config.LAUNCH_DEFAULT_TEMPLATE_ID ?? "general_downloads");
+  const launchReviewFollowsNewRoot = draft?.global_config.LAUNCH_REVIEW_FOLLOWS_NEW_ROOT !== false;
+  const launchDefaultNewDirectoryRoot = String(draft?.global_config.LAUNCH_DEFAULT_NEW_DIRECTORY_ROOT ?? "");
+  const launchDefaultReviewRoot = String(draft?.global_config.LAUNCH_DEFAULT_REVIEW_ROOT ?? "");
+  const launchDerivedReviewRoot = launchDefaultNewDirectoryRoot
+    ? `${launchDefaultNewDirectoryRoot.replace(/[\\/]$/, "")}/Review`
+    : "新目录生成位置/Review";
   const launchStrategyPreview = buildStrategySummary({
     template_id: draft?.global_config.LAUNCH_DEFAULT_TEMPLATE_ID ?? "general_downloads",
     organize_mode: "initial",
@@ -678,16 +685,16 @@ export default function SettingsPage() {
 
     if (isTesting) {
       return (
-        <div className="flex items-center gap-3 rounded-[12px] border border-primary/15 bg-primary/5 px-5 py-4">
-           <div className="relative h-8 w-8 shrink-0">
+        <div className="flex items-center gap-3 rounded-[6px] border border-primary/15 bg-primary/5 px-4 py-3">
+           <div className="relative h-6 w-6 shrink-0">
               <div className="absolute inset-0 animate-ping rounded-full bg-primary/20 opacity-75" />
               <div className="relative flex h-full w-full items-center justify-center rounded-full bg-primary/10 text-primary">
-                 <RefreshCw className="h-4 w-4 animate-spin" />
+                 <RefreshCw className="h-3.5 w-3.5 animate-spin" />
               </div>
            </div>
            <div className="min-w-0">
-              <p className="text-[13px] font-black tracking-tight text-on-surface">正在进行端到端连接测试...</p>
-              <p className="mt-0.5 text-[11px] font-bold text-primary/60 uppercase tracking-widest">Scanning Endpoint</p>
+              <p className="text-[13px] font-bold tracking-tight text-on-surface">正在进行端到端连接测试...</p>
+              <p className="text-[10px] font-bold text-primary/60 uppercase tracking-widest mt-0.5">Scanning Endpoint</p>
            </div>
         </div>
       );
@@ -704,32 +711,32 @@ export default function SettingsPage() {
         initial={{ opacity: 0, y: 5 }}
         animate={{ opacity: 1, y: 0 }}
         className={cn(
-          "flex items-start gap-4 rounded-[12px] border px-5 py-4 transition-all",
+          "flex items-start gap-3.5 rounded-[6px] border px-4 py-3 transition-all",
           isOk
-            ? "border-success/20 bg-success[0.03] shadow-[0_4px_24px_rgba(16,185,129,0.08)]"
-            : "border-error/20 bg-error/[0.03] shadow-[0_4px_24px_rgba(196,49,75,0.08)]",
+            ? "border-success/20 bg-success/[0.03]"
+            : "border-error/20 bg-error/[0.03]",
         )}
       >
         <div className={cn(
-           "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border",
+           "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] border",
            isOk ? "border-success/20 bg-success/10 text-success-dim" : "border-error/20 bg-error/10 text-error"
         )}>
-          {isOk ? <CheckCircle2 className="h-5 w-5" /> : <AlertCircle className="h-5 w-5" />}
+          {isOk ? <CheckCircle2 className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
         </div>
-        <div className="min-w-0 flex-1 space-y-1.5">
+        <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-center justify-between gap-4">
-             <h4 className={cn("text-[14px] font-black tracking-tight", isOk ? "text-success-dim" : "text-error-dim")}>
+             <h4 className={cn("text-[13px] font-bold tracking-tight", isOk ? "text-success-dim" : "text-error-dim")}>
                 {isOk ? "服务已成功对齐" : "连接遭到拦截"}
              </h4>
              {isOk && (
-                <div className="flex items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-success-dim">
-                   <div className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+                <div className="flex items-center gap-1.5 rounded-[4px] bg-success/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-success-dim">
+                   <div className="h-1 w-1 rounded-full bg-success animate-pulse" />
                    Stable
                 </div>
              )}
           </div>
-          <p className="text-[12.5px] font-medium leading-relaxed text-on-surface/60">{result.message}</p>
-          {!isOk && <p className="text-[11px] font-black uppercase tracking-widest opacity-40">Code: {result.code}</p>}
+          <p className="text-[12px] leading-relaxed text-on-surface/70">{result.message}</p>
+          {!isOk && <p className="text-[10px] font-mono opacity-50">Code: {result.code}</p>}
         </div>
       </motion.div>
     );
@@ -910,7 +917,7 @@ export default function SettingsPage() {
         </aside>
 
         {/* Right Content Area */}
-        <main className="flex-1 overflow-y-auto px-6 py-8 scrollbar-thin lg:px-10">
+        <main className="flex-1 overflow-y-auto px-6 py-6 scrollbar-thin lg:px-8">
           <div className="mx-auto max-w-[860px]">
             {error && (
               <div className="mb-6 animate-in fade-in slide-in-from-top-2 duration-300">
@@ -918,17 +925,17 @@ export default function SettingsPage() {
               </div>
             )}
             {success && (
-              <div className="mb-6 flex items-center gap-3 rounded-[6px] border border-success/10 bg-success/5 px-5 py-4 text-[13px] font-bold text-success-dim animate-in fade-in slide-in-from-top-2 duration-300">
-                <CheckCircle2 className="h-5 w-5" />
+              <div className="mb-6 flex items-center gap-2.5 rounded-[6px] border border-success/15 bg-success/5 px-4 py-3 text-[12.5px] font-bold text-success-dim animate-in fade-in slide-in-from-top-2 duration-300">
+                <CheckCircle2 className="h-4 w-4" />
                 {success}
               </div>
             )}
 
             {!snapshot.status.text_configured && (
-              <div className="mb-6 flex items-center justify-between gap-4 rounded-[10px] border border-warning/18 bg-warning-container/18 px-5 py-4 animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="mb-6 flex items-center justify-between gap-4 rounded-[6px] border border-warning/20 bg-warning-container/15 px-4 py-3 animate-in fade-in slide-in-from-top-2 duration-300">
                 <div className="flex items-start gap-3 min-w-0">
-                  <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-warning/12 text-warning">
-                    <AlertCircle className="h-4.5 w-4.5" />
+                  <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] bg-warning/10 text-warning">
+                    <AlertCircle className="h-4 w-4" />
                   </div>
                   <div className="min-w-0">
                     <p className="text-[14px] font-black tracking-tight text-on-surface">当前还没有可用的文本模型</p>
@@ -1344,6 +1351,58 @@ export default function SettingsPage() {
                       placeholder="例如：拿不准的先放 Review，课程资料尽量按学期整理。"
                     />
                   </FieldGroup>
+                </div>
+                <div className="rounded-[12px] border border-on-surface/8 bg-surface px-4 py-4">
+                  <div className="mb-4">
+                    <h3 className="text-[13px] font-semibold text-on-surface">默认放置规则</h3>
+                    <p className="mt-1 text-[12px] leading-5 text-on-surface-variant/65">
+                      这里只定义以后新任务启动时的默认 placement。任务页里仍然可以按单次任务覆盖。
+                    </p>
+                  </div>
+                  <div className="grid gap-4 xl:grid-cols-2">
+                    <FieldGroup label="默认新目录生成位置" hint="留空时，新结构任务默认使用输出目录；归入已有目录任务默认使用当前任务工作区根。">
+                      <InputShell icon={FolderOpen}>
+                        <input
+                          value={launchDefaultNewDirectoryRoot}
+                          onChange={(event) => updateGlobal("LAUNCH_DEFAULT_NEW_DIRECTORY_ROOT", event.target.value)}
+                          className="w-full bg-transparent py-2 text-sm font-semibold text-on-surface outline-none"
+                          placeholder="例如：D:/archive/sorted"
+                        />
+                      </InputShell>
+                    </FieldGroup>
+                    <FieldGroup
+                      label="默认 Review 目录位置"
+                      hint={
+                        launchReviewFollowsNewRoot
+                          ? `当前会自动跟随新目录位置，默认使用 ${launchDerivedReviewRoot}。`
+                          : "只在关闭“跟随新目录位置”后单独生效。"
+                      }
+                    >
+                      <InputShell icon={FolderOpen}>
+                        <input
+                          value={launchDefaultReviewRoot}
+                          onChange={(event) => updateGlobal("LAUNCH_DEFAULT_REVIEW_ROOT", event.target.value)}
+                          disabled={launchReviewFollowsNewRoot}
+                          className="w-full bg-transparent py-2 text-sm font-semibold text-on-surface outline-none disabled:opacity-60"
+                          placeholder={launchReviewFollowsNewRoot ? launchDerivedReviewRoot : "例如：D:/archive/review"}
+                        />
+                      </InputShell>
+                    </FieldGroup>
+                  </div>
+                  <div className="mt-4 rounded-[12px] border border-on-surface/8 bg-surface-container-low px-4 py-3.5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <h3 className="text-[13px] font-semibold text-on-surface">Review 默认跟随新目录位置</h3>
+                        <p className="mt-1 text-[12px] leading-5 text-on-surface-variant/65">
+                          开启后，新任务的 Review 目录默认会自动派生为 `新目录生成位置/Review`。只有关闭时，才会使用上面的独立 Review 路径。
+                        </p>
+                      </div>
+                      <ToggleSwitch
+                        checked={launchReviewFollowsNewRoot}
+                        onClick={() => updateGlobal("LAUNCH_REVIEW_FOLLOWS_NEW_ROOT", !launchReviewFollowsNewRoot)}
+                      />
+                    </div>
+                  </div>
                 </div>
                 <div className="rounded-[12px] border border-on-surface/8 bg-surface px-4 py-3.5">
                   <div className="flex items-start justify-between gap-4">
