@@ -6,5 +6,6 @@ export function canRunPrecheck(
   readiness: { can_precheck?: boolean } | null | undefined,
   isPlanSyncing: boolean,
 ): boolean {
-  return getSessionStageView(stage).isAwaitingPrecheck && Boolean(readiness?.can_precheck) && !isPlanSyncing;
+  const stageView = getSessionStageView(stage);
+  return (stageView.isPlanning || stageView.isAwaitingPrecheck) && Boolean(readiness?.can_precheck) && !isPlanSyncing;
 }

@@ -44,19 +44,19 @@ export function ResumePromptDialog({
               </div>
               <div className="space-y-1">
                 <h2 className="text-xl font-black font-headline text-on-surface tracking-tight">
-                  {isCompletedResume ? "发现之前的整理记录" : "发现上一次还没整理完"}
+                  {isCompletedResume ? "发现之前的整理记录" : "发现可继续的整理任务"}
                 </h2>
                 <p className="text-ui-body font-medium text-ui-muted">
                   {isCompletedResume
-                    ? "你可以先查看之前的结果，也可以按这次的预设重新开始"
-                    : "你可以继续上一次任务，或者按这次的预设重新开始"}
+                    ? "你可以先查看之前的结果，也可以按这次的设置重新开始"
+                    : "你可以接着处理，也可以按当前设置重新开始"}
                 </p>
               </div>
             </div>
 
             <p className="mb-5 text-sm leading-relaxed text-on-surface-variant">
-              检测到这个目录（<strong>{targetDir.split(/[\\/]/).pop()}</strong>）
-              {isCompletedResume ? "之前已经整理过一次" : "之前还有一条未完成的记录"}（当前状态：
+              检测到这次来源和设置（<strong>{targetDir.split(/[\\/]/).pop()}</strong>）
+              {isCompletedResume ? "之前已经整理过一次" : "还有一条未完成的任务"}（当前状态：
               <em>{getFriendlyStage(resumePrompt.snapshot.stage)}</em>）。
             </p>
 
@@ -71,12 +71,12 @@ export function ResumePromptDialog({
                 onClick={onConfirmResume}
                 className="w-full py-4 text-sm"
               >
-                {isCompletedResume ? "只读查看结果" : "继续上一次整理"}
+                {isCompletedResume ? "查看整理结果" : "继续整理"}
               </Button>
               <div className="rounded-[10px] border border-on-surface/8 bg-surface px-5 py-4 text-ui-section font-medium leading-relaxed text-ui-muted">
                 {isCompletedResume
-                  ? "重新开始会按当前选择的预设重新扫描这个目录。"
-                  : "重新开始会结束上一次未完成的状态，并按当前选择的预设重新扫描。"}
+                  ? "重新开始会按当前来源和设置重新读取目录。"
+                  : "重新开始会结束上一次未完成的状态，并按当前来源和设置重新读取目录。"}
               </div>
               <div className={isCompletedResume ? "grid grid-cols-2 gap-3" : "grid grid-cols-3 gap-3"}>
                 <Button

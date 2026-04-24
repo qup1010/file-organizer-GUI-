@@ -110,6 +110,12 @@ export interface SettingsSnapshot {
     icon_image_configured: boolean;
     bg_removal_configured: boolean;
   };
+  runtime: {
+    log_paths: {
+      runtime_log: string;
+      debug_log: string;
+    };
+  };
 }
 
 export interface SettingsSecretInput {
@@ -185,4 +191,9 @@ export interface SettingsTestResult {
   family: SettingsFamily;
   code: string;
   message: string;
+  details?: {
+    verification_type: "vision_text";
+    expected: string;
+    actual?: string;
+  };
 }

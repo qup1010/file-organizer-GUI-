@@ -55,6 +55,13 @@ struct InspectedPath {
     is_file: bool,
 }
 
+#[derive(Serialize)]
+struct DirectoryEntry {
+    path: String,
+    is_dir: bool,
+    is_file: bool,
+}
+
 #[tauri::command]
 fn inspect_paths(paths: Vec<String>) -> Vec<InspectedPath> {
     paths
@@ -71,6 +78,41 @@ fn inspect_paths(paths: Vec<String>) -> Vec<InspectedPath> {
             }
         })
         .collect()
+}
+
+#[tauri::command]
+fn list_directory_entries(path: String) -> Result<Vec<DirectoryEntry>, String> {
+    let directory = PathBuf::from(&path);
+    let entries = fs::read_dir(&directory)
+        .map_err(|error| format!("failed to read directory {}: {error}", directory.display()))?;
+
+    let mut result: Vec<DirectoryEntry> = entries
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let file_name = entry.file_name();
+            let name = file_name.to_string_lossy();
+            if name.starts_with('.') {
+                return None;
+            }
+
+            let path = entry.path();
+            let metadata = entry.metadata().ok()?;
+            Some(DirectoryEntry {
+                path: path.to_string_lossy().into_owned(),
+                is_dir: metadata.is_dir(),
+                is_file: metadata.is_file(),
+            })
+        })
+        .collect();
+
+    result.sort_by(|left, right| {
+        right
+            .is_dir
+            .cmp(&left.is_dir)
+            .then_with(|| left.path.to_lowercase().cmp(&right.path.to_lowercase()))
+    });
+
+    Ok(result)
 }
 
 #[tauri::command]
@@ -341,6 +383,7 @@ pub fn run() {
             pick_directories,
             pick_files,
             inspect_paths,
+            list_directory_entries,
             open_directory,
             save_file_as,
             get_runtime_config,

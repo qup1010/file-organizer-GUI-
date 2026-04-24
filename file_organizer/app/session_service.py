@@ -76,6 +76,8 @@ class OrganizerSessionService:
         self.async_scanner = scanner or AsyncScanner()
         self._event_log: dict[str, list[dict]] = {}
         self._subscribers: dict[str, list[Queue]] = {}
+        self._active_scan_sessions: set[str] = set()
+        self._active_scan_lock = threading.RLock()
         self.source_manager = SourceManager(self)
         self.target_resolver = TargetResolver(self)
         self.target_manager = TargetManager(self)
@@ -86,6 +88,18 @@ class OrganizerSessionService:
         self.planning_conversation = PlanningConversationService(self)
         self.scan_workflow = ScanWorkflowService(self)
         self.orchestrator = SessionOrchestrator(self)
+
+    def _mark_scan_active(self, session_id: str) -> None:
+        with self._active_scan_lock:
+            self._active_scan_sessions.add(str(session_id))
+
+    def _mark_scan_inactive(self, session_id: str) -> None:
+        with self._active_scan_lock:
+            self._active_scan_sessions.discard(str(session_id))
+
+    def _is_scan_active(self, session_id: str) -> bool:
+        with self._active_scan_lock:
+            return str(session_id) in self._active_scan_sessions
 
     @staticmethod
     def _planner_id_number(planner_id: str) -> int:
@@ -218,6 +232,29 @@ class OrganizerSessionService:
     def _default_review_root(cls, new_directory_root: str) -> str:
         return TargetResolver.default_review_root(new_directory_root)
 
+    @staticmethod
+    def _source_item_scans_contents(item: SourceCollectionItem) -> bool:
+        return item.scans_directory_contents
+
+    @staticmethod
+    def _source_item_workspace_root(item: SourceCollectionItem) -> Path:
+        path = Path(item.path).resolve()
+        if item.scans_directory_contents:
+            return path
+        return path.parent
+
+    @staticmethod
+    def _source_item_display_name(item: SourceCollectionItem) -> str:
+        return Path(item.path).name or ("file" if item.source_type == "file" else "source")
+
+    @staticmethod
+    def _source_item_matches(left: SourceCollectionItem, right: SourceCollectionItem) -> bool:
+        return (
+            left.source_type == right.source_type
+            and str(left.path).strip() == str(right.path).strip()
+            and left.normalized_directory_mode == right.normalized_directory_mode
+        )
+
     @classmethod
     def _placement_payload(
         cls,
@@ -232,8 +269,9 @@ class OrganizerSessionService:
             review_root=review_root,
         )
 
-    @staticmethod
+    @classmethod
     def _derive_session_root_dir(
+        cls,
         source_collection: list[SourceCollectionItem],
         organize_method: str,
         *,
@@ -242,12 +280,15 @@ class OrganizerSessionService:
     ) -> Path:
         if output_dir.strip():
             return Path(output_dir).resolve()
-        paths = [Path(item.path).resolve() for item in source_collection if str(item.path).strip()]
+        paths = [
+            cls._source_item_workspace_root(item)
+            for item in source_collection
+            if str(item.path).strip()
+        ]
         if not paths:
             raise ValueError("SOURCES_REQUIRED")
         if len(paths) == 1:
-            path = paths[0]
-            return path if path.is_dir() else path.parent
+            return paths[0]
         directory_paths = [path if path.is_dir() else path.parent for path in paths]
         common = Path(directory_paths[0])
         for candidate in directory_paths[1:]:
@@ -605,12 +646,12 @@ class OrganizerSessionService:
 
     def _source_alias_map(self, session: OrganizerSession) -> dict[str, SourceCollectionItem]:
         items = self._normalize_source_collection(session.source_collection)
-        if len(items) == 1 and items[0].source_type == "directory":
+        if len(items) == 1 and self._source_item_scans_contents(items[0]):
             return {}
         counts: dict[str, int] = {}
         mapping: dict[str, SourceCollectionItem] = {}
         for item in items:
-            base = Path(item.path).name or ("file" if item.source_type == "file" else "source")
+            base = self._source_item_display_name(item)
             alias = base
             counts[base] = counts.get(base, 0) + 1
             if counts[base] > 1:
@@ -632,8 +673,8 @@ class OrganizerSessionService:
         entries: list[dict] = []
         for item in source_collection:
             item_path = Path(item.path).resolve()
-            alias = next((key for key, value in alias_map.items() if value.path == item.path and value.source_type == item.source_type), "")
-            if item.source_type == "directory":
+            alias = next((key for key, value in alias_map.items() if self._source_item_matches(value, item)), "")
+            if item.scans_directory_contents:
                 scan_lines = self._call_with_optional_session_id(scan_runner, item_path, session_id=session_id)
                 for entry in self._scan_entries(scan_lines):
                     source_relpath = self._normalize_relpath(entry.get("source_relpath"))
@@ -649,19 +690,21 @@ class OrganizerSessionService:
                         }
                     )
                 continue
+
+            selected_entry_name = self._normalize_relpath(item_path.name) or item_path.name
             analyzed_lines = self._call_with_optional_session_id(
                 analysis_service.run_analysis_cycle_for_entries,
                 item_path.parent,
-                [item_path.name],
+                [selected_entry_name],
                 session_id=session_id,
             )
             analyzed_entries = self._scan_entries(analyzed_lines)
             if not analyzed_entries:
-                raise RuntimeError(f"FILE_SOURCE_ANALYSIS_EMPTY:{item_path}")
+                raise RuntimeError(f"SINGLE_SOURCE_ANALYSIS_EMPTY:{item_path}")
             for entry in analyzed_entries:
-                source_relpath = self._normalize_relpath(entry.get("source_relpath")) or item_path.name
+                source_relpath = self._normalize_relpath(entry.get("source_relpath")) or selected_entry_name
                 if alias:
-                    prefixed = alias if source_relpath == self._normalize_relpath(item_path.name) else f"{alias}/{source_relpath}"
+                    prefixed = alias if source_relpath == selected_entry_name else f"{alias}/{source_relpath}"
                 else:
                     prefixed = source_relpath
                 entries.append(
@@ -670,7 +713,7 @@ class OrganizerSessionService:
                         "item_id": prefixed,
                         "display_name": str(entry.get("display_name") or item_path.name),
                         "source_relpath": prefixed,
-                        "origin_path": str(item_path),
+                        "origin_path": str(item_path.parent if item.is_atomic_directory else item_path),
                         "origin_relpath": source_relpath,
                     }
                 )
@@ -685,26 +728,29 @@ class OrganizerSessionService:
         alias_map = self._source_alias_map(session)
         if not alias_map and len(source_collection) == 1:
             item = source_collection[0]
-            if item.source_type == "directory":
+            if item.scans_directory_contents:
                 return str(Path(item.path).resolve()), normalized
-            return str(Path(item.path).resolve().parent), Path(item.path).name
+            item_path = Path(item.path).resolve()
+            return str(item_path.parent), item_path.name
         first_segment, _, remainder = normalized.partition("/")
         target_item = alias_map.get(first_segment)
         if target_item is None:
             first_item = source_collection[0]
-            if first_item.source_type == "directory":
+            if first_item.scans_directory_contents:
                 return str(Path(first_item.path).resolve()), normalized
-            return str(Path(first_item.path).resolve().parent), Path(first_item.path).name
-        if target_item.source_type == "directory":
+            first_item_path = Path(first_item.path).resolve()
+            return str(first_item_path.parent), first_item_path.name
+        if target_item.scans_directory_contents:
             return str(Path(target_item.path).resolve()), remainder or ""
-        return str(Path(target_item.path).resolve().parent), Path(target_item.path).name
+        target_item_path = Path(target_item.path).resolve()
+        return str(target_item_path.parent), target_item_path.name
 
     def _can_use_single_directory_scan(self, session: OrganizerSession) -> bool:
         source_collection = self._normalize_source_collection(session.source_collection)
         if len(source_collection) != 1:
             return False
         item = source_collection[0]
-        if item.source_type != "directory":
+        if not item.scans_directory_contents:
             return False
         return Path(item.path).resolve() == Path(session.target_dir).resolve()
 
@@ -1708,6 +1754,42 @@ class OrganizerSessionService:
             "message": "正在读取目录结构",
         }
 
+    def _initial_source_collection_scan_progress(self, session: OrganizerSession) -> dict:
+        source_collection = self._normalize_source_collection(session.source_collection)
+        if not source_collection:
+            return self._initial_scan_progress(Path(session.target_dir))
+
+        recent_items = [
+            {
+                "item_id": str(index),
+                "display_name": self._source_item_display_name(item),
+                "source_relpath": self._source_item_display_name(item),
+                "entry_type": item.source_type,
+                "suggested_purpose": "准备分析",
+                "summary": "等待分配并进行文件内容分析...",
+            }
+            for index, item in enumerate(source_collection[:10], start=1)
+        ]
+        return {
+            "status": "running",
+            "processed_count": 0,
+            "total_count": len(source_collection),
+            "current_item": "正在准备扫描任务",
+            "recent_analysis_items": recent_items,
+            "completed_batches": 0,
+            "had_failed_batches": False,
+            "placeholder_count": 0,
+            "message": "正在读取本次整理来源",
+        }
+
+    @staticmethod
+    def _clear_scan_recovery_state(session: OrganizerSession) -> None:
+        session.last_error = None
+        session.integrity_flags.pop("interrupted_during", None)
+        session.integrity_flags.pop("scan_incomplete", None)
+        session.integrity_flags.pop("scan_placeholder_count", None)
+        session.integrity_flags.pop("scan_had_failed_batches", None)
+
     def _top_level_scan_entry(self, target_dir: Path, raw_path: str | None) -> str | None:
         if not raw_path:
             return None
@@ -1892,7 +1974,7 @@ class OrganizerSessionService:
             session.plan_snapshot = self._plan_snapshot_payload({})
             session.assistant_message = {"role": "assistant", "content": "当前目录为空，没有可整理的文件。"}
             session.stage = "planning"
-            session.last_error = None
+            self._clear_scan_recovery_state(session)
             session.scanner_progress = {
                 **dict(session.scanner_progress or {}),
                 "status": "completed",
@@ -2018,222 +2100,238 @@ class OrganizerSessionService:
         self._record_event("session.interrupted", session)
 
     def _finish_async_scan(self, session_id: str, scan_lines: str) -> None:
-        session = self._load_or_raise(session_id)
-        if session.stage != "scanning":
-            return
-        all_entries = self._scan_entries(scan_lines)
-        total_count = self._count_visible_entries(Path(session.target_dir))
-        if not all_entries:
-            self._handle_empty_scan_result(session, total_count=total_count, mode="async")
-            return
-        session.scan_lines = scan_lines or ""
-        session.planning_schema_version = CURRENT_PLANNING_SCHEMA_VERSION
-        self._ensure_planner_items(session, session.scan_lines)
-        recent_items = all_entries[-5:]
-        existing_progress = dict(session.scanner_progress or {})
-        placeholder_count = self._placeholder_scan_item_count(all_entries)
-        had_failed_batches = bool(existing_progress.get("had_failed_batches"))
-        session.scanner_progress = {
-            **existing_progress,
-            "status": "completed",
-            "processed_count": len(all_entries),
-            "total_count": total_count,
-            "current_item": recent_items[-1]["display_name"] if recent_items else None,
-            "recent_analysis_items": recent_items,
-            "placeholder_count": placeholder_count,
-            "ai_thinking": False,
-            "is_retrying": False,
-        }
-        if existing_progress.get("batch_count"):
-            session.scanner_progress["completed_batches"] = existing_progress.get("batch_count")
-            session.scanner_progress["message"] = self._scan_completion_message(
-                all_entries,
-                parallel=True,
-                batch_count=int(existing_progress.get("batch_count") or 0),
-            )
-        else:
-            session.scanner_progress["message"] = self._scan_completion_message(all_entries, parallel=False)
-
-        if had_failed_batches or placeholder_count > 0:
-            self._handle_incomplete_scan_result(
-                session,
-                all_entries,
-                total_count=total_count,
-                mode="async",
-            )
-            return
-
-        if self._normalize_organize_mode(session.organize_mode) == "incremental":
-            session.pending_plan = self._pending_plan_payload(PendingPlan())
-            session.plan_snapshot = self._plan_snapshot_payload(
-                self._plan_snapshot(PendingPlan(), {}, scan_lines=session.scan_lines, session=session)
-            )
-            session.precheck_summary = None
-            session.messages = []
-            session.assistant_message = None
-            session.last_ai_pending_plan = None
-            session.summary = ""
+        try:
+            session = self._load_or_raise(session_id)
+            if session.stage != "scanning":
+                return
+            all_entries = self._scan_entries(scan_lines)
+            total_count = self._count_visible_entries(Path(session.target_dir))
+            if not all_entries:
+                self._handle_empty_scan_result(session, total_count=total_count, mode="async")
+                return
+            session.scan_lines = scan_lines or ""
+            session.planning_schema_version = CURRENT_PLANNING_SCHEMA_VERSION
             self._ensure_planner_items(session, session.scan_lines)
-            session.source_tree_entries = self._build_source_tree_entries(
-                Path(session.target_dir),
-                session.scan_lines,
-                planner_items=session.planner_items,
-            )
-            if session.selected_target_directories:
-                session.incremental_selection = {
-                    **self._incremental_selection_snapshot(session),
-                    "status": "ready",
-                    "target_directories": list(session.selected_target_directories),
-                    "target_directory_tree": self._explore_target_directories(
-                        Path(session.target_dir),
-                        list(session.selected_target_directories),
-                        max_depth=self._normalize_destination_index_depth(session.destination_index_depth)
-                    ),
-                    "pending_items_count": len(all_entries),
-                    "source_scan_completed": True,
-                }
-                session.stage = "planning"
+            recent_items = all_entries[-5:]
+            existing_progress = dict(session.scanner_progress or {})
+            placeholder_count = self._placeholder_scan_item_count(all_entries)
+            had_failed_batches = bool(existing_progress.get("had_failed_batches"))
+            session.scanner_progress = {
+                **existing_progress,
+                "status": "completed",
+                "processed_count": len(all_entries),
+                "total_count": total_count,
+                "current_item": recent_items[-1]["display_name"] if recent_items else None,
+                "recent_analysis_items": recent_items,
+                "placeholder_count": placeholder_count,
+                "ai_thinking": False,
+                "is_retrying": False,
+            }
+            if existing_progress.get("batch_count"):
+                session.scanner_progress["completed_batches"] = existing_progress.get("batch_count")
+                session.scanner_progress["message"] = self._scan_completion_message(
+                    all_entries,
+                    parallel=True,
+                    batch_count=int(existing_progress.get("batch_count") or 0),
+                )
             else:
-                session.planner_items = []
+                session.scanner_progress["message"] = self._scan_completion_message(all_entries, parallel=False)
+
+            if had_failed_batches or placeholder_count > 0:
+                self._handle_incomplete_scan_result(
+                    session,
+                    all_entries,
+                    total_count=total_count,
+                    mode="async",
+                )
+                return
+
+            self._clear_scan_recovery_state(session)
+            if self._normalize_organize_mode(session.organize_mode) == "incremental":
+                session.pending_plan = self._pending_plan_payload(PendingPlan())
+                session.plan_snapshot = self._plan_snapshot_payload(
+                    self._plan_snapshot(PendingPlan(), {}, scan_lines=session.scan_lines, session=session)
+                )
+                session.precheck_summary = None
+                session.messages = []
+                session.assistant_message = None
+                session.last_ai_pending_plan = None
+                session.summary = ""
+                self._ensure_planner_items(session, session.scan_lines)
                 session.source_tree_entries = self._build_source_tree_entries(
                     Path(session.target_dir),
                     session.scan_lines,
-                    planner_items=[],
+                    planner_items=session.planner_items,
                 )
-                self._set_incremental_selection_pending(session, session.scan_lines)
-                session.stage = "selecting_incremental_scope"
-        else:
-            session.incremental_selection = self._incremental_selection_defaults(session)
-            session.stage = "planning"
-            self._seed_initial_messages(session)
-            
-        self.store.save(session)
-        self._log_runtime_event(
-            "scan.completed",
-            session,
-            entry_count=len(all_entries),
-            auto_plan_pending=not session.assistant_message and not self._plan_snapshot_has_moves(session.plan_snapshot),
-        )
-        self._write_session_debug_event(
-            "scan.completed",
-            session,
-            payload={
-                "entry_count": len(all_entries),
-                "recent_items": recent_items,
-            },
-        )
-        self._record_event("scan.completed", session)
+                if session.selected_target_directories:
+                    session.incremental_selection = {
+                        **self._incremental_selection_snapshot(session),
+                        "status": "ready",
+                        "target_directories": list(session.selected_target_directories),
+                        "target_directory_tree": self._explore_target_directories(
+                            Path(session.target_dir),
+                            list(session.selected_target_directories),
+                            max_depth=self._normalize_destination_index_depth(session.destination_index_depth)
+                        ),
+                        "pending_items_count": len(all_entries),
+                        "source_scan_completed": True,
+                    }
+                    session.stage = "planning"
+                else:
+                    session.planner_items = []
+                    session.source_tree_entries = self._build_source_tree_entries(
+                        Path(session.target_dir),
+                        session.scan_lines,
+                        planner_items=[],
+                    )
+                    self._set_incremental_selection_pending(session, session.scan_lines)
+                    session.stage = "selecting_incremental_scope"
+            else:
+                session.incremental_selection = self._incremental_selection_defaults(session)
+                session.stage = "planning"
+                self._seed_initial_messages(session)
 
-        self.orchestrator.maybe_run_auto_plan_after_scan(session)
+            self.store.save(session)
+            self._log_runtime_event(
+                "scan.completed",
+                session,
+                entry_count=len(all_entries),
+                auto_plan_pending=not session.assistant_message and not self._plan_snapshot_has_moves(session.plan_snapshot),
+            )
+            self._write_session_debug_event(
+                "scan.completed",
+                session,
+                payload={
+                    "entry_count": len(all_entries),
+                    "recent_items": recent_items,
+                },
+            )
+            self._record_event("scan.completed", session)
+
+            self.orchestrator.maybe_run_auto_plan_after_scan(session)
+        finally:
+            self._mark_scan_inactive(session_id)
 
     def _fail_async_scan(self, session_id: str, exc: Exception) -> None:
-        session = self._load_or_raise(session_id)
-        session.stage = "interrupted"
-        session.last_error = str(exc)
-        session.scanner_progress = {**dict(session.scanner_progress or {}), "status": "failed", "message": str(exc)}
-        self.store.save(session)
-        logger.exception(
-            "scan.failed session_id=%s target_dir=%s",
-            session.session_id,
-            session.target_dir,
-            exc_info=exc,
-        )
-        self._log_runtime_event("scan.failed", session, level=logging.ERROR, error=str(exc))
-        self._write_session_debug_event(
-            "scan.failed",
-            session,
-            level="ERROR",
-            payload={"error": str(exc)},
-        )
-        self._record_event("session.error", session)
+        try:
+            session = self._load_or_raise(session_id)
+            session.stage = "interrupted"
+            session.last_error = str(exc)
+            session.scanner_progress = {**dict(session.scanner_progress or {}), "status": "failed", "message": str(exc)}
+            self.store.save(session)
+            logger.exception(
+                "scan.failed session_id=%s target_dir=%s",
+                session.session_id,
+                session.target_dir,
+                exc_info=exc,
+            )
+            self._log_runtime_event("scan.failed", session, level=logging.ERROR, error=str(exc))
+            self._write_session_debug_event(
+                "scan.failed",
+                session,
+                level="ERROR",
+                payload={"error": str(exc)},
+            )
+            self._record_event("session.error", session)
+        finally:
+            self._mark_scan_inactive(session_id)
 
     def _run_scan_sync(self, session: OrganizerSession, scan_runner) -> str:
+        self._mark_scan_active(session.session_id)
         session.stage = "scanning"
-        session.scanner_progress = self._initial_scan_progress(Path(session.target_dir))
+        self._clear_scan_recovery_state(session)
+        if self._can_use_single_directory_scan(session):
+            session.scanner_progress = self._initial_scan_progress(Path(session.target_dir))
+        else:
+            session.scanner_progress = self._initial_source_collection_scan_progress(session)
         self.store.save(session)
         self._record_event("scan.started", session)
-        if self._can_use_single_directory_scan(session):
-            result = self._call_with_optional_session_id(
-                scan_runner,
-                Path(session.target_dir),
-                session_id=session.session_id,
-            )
-            all_entries = self._scan_entries(result)
-            total_count = self._count_visible_entries(Path(session.target_dir))
-        else:
-            result, all_entries = self._scan_source_collection(
-                session,
-                scan_runner,
-                session_id=session.session_id,
-            )
-            total_count = len(all_entries)
-        if not all_entries:
-            outcome = self._handle_empty_scan_result(session, total_count=total_count, mode="sync")
-            if outcome == "scan_empty_result":
-                raise RuntimeError(outcome)
-            return result or ""
-        recent_items = all_entries[-5:]
-        session.scan_lines = result or ""
-        session.planning_schema_version = CURRENT_PLANNING_SCHEMA_VERSION
-        if self._normalize_organize_mode(session.organize_mode) == "incremental":
-            session.pending_plan = self._pending_plan_payload(PendingPlan())
-            session.plan_snapshot = self._plan_snapshot_payload(
-                self._plan_snapshot(PendingPlan(), {}, scan_lines=session.scan_lines, session=session)
-            )
-            session.messages = []
-            session.assistant_message = None
-            session.summary = ""
-            self._ensure_planner_items(session, session.scan_lines)
-            session.source_tree_entries = self._build_source_tree_entries(
-                Path(session.target_dir),
-                session.scan_lines,
-                planner_items=session.planner_items,
-            )
-            if session.selected_target_directories:
-                session.incremental_selection = {
-                    **self._incremental_selection_snapshot(session),
-                    "status": "ready",
-                    "target_directories": list(session.selected_target_directories),
-                    "target_directory_tree": self._explore_target_directories(
-                        Path(session.target_dir),
-                        list(session.selected_target_directories),
-                        max_depth=self._normalize_destination_index_depth(session.destination_index_depth)
-                    ),
-                    "pending_items_count": len(all_entries),
-                    "source_scan_completed": True,
-                }
-                session.stage = "planning"
+        try:
+            if self._can_use_single_directory_scan(session):
+                result = self._call_with_optional_session_id(
+                    scan_runner,
+                    Path(session.target_dir),
+                    session_id=session.session_id,
+                )
+                all_entries = self._scan_entries(result)
+                total_count = self._count_visible_entries(Path(session.target_dir))
             else:
-                session.planner_items = []
+                result, all_entries = self._scan_source_collection(
+                    session,
+                    scan_runner,
+                    session_id=session.session_id,
+                )
+                total_count = len(all_entries)
+            if not all_entries:
+                outcome = self._handle_empty_scan_result(session, total_count=total_count, mode="sync")
+                if outcome == "scan_empty_result":
+                    raise RuntimeError(outcome)
+                return result or ""
+            recent_items = all_entries[-5:]
+            session.scan_lines = result or ""
+            session.planning_schema_version = CURRENT_PLANNING_SCHEMA_VERSION
+            self._clear_scan_recovery_state(session)
+            if self._normalize_organize_mode(session.organize_mode) == "incremental":
+                session.pending_plan = self._pending_plan_payload(PendingPlan())
+                session.plan_snapshot = self._plan_snapshot_payload(
+                    self._plan_snapshot(PendingPlan(), {}, scan_lines=session.scan_lines, session=session)
+                )
+                session.messages = []
+                session.assistant_message = None
+                session.summary = ""
+                self._ensure_planner_items(session, session.scan_lines)
                 session.source_tree_entries = self._build_source_tree_entries(
                     Path(session.target_dir),
                     session.scan_lines,
-                    planner_items=[],
+                    planner_items=session.planner_items,
                 )
-                self._set_incremental_selection_pending(session, session.scan_lines)
-                session.stage = "selecting_incremental_scope"
-        else:
-            self._ensure_planner_items(session, session.scan_lines)
-            session.incremental_selection = self._incremental_selection_defaults(session)
-            session.stage = "planning"
-        session.scanner_progress = {
-            **dict(session.scanner_progress or {}),
-            "status": "completed",
-            "processed_count": len(all_entries),
-            "total_count": total_count,
-            "current_item": recent_items[-1]["display_name"] if recent_items else None,
-            "recent_analysis_items": recent_items,
-            "message": self._scan_completion_message(all_entries, parallel=False),
-        }
-        self.store.save(session)
-        self._log_runtime_event("scan.completed", session, entry_count=len(all_entries), mode="sync")
-        self._write_session_debug_event(
-            "scan.completed",
-            session,
-            payload={"entry_count": len(all_entries), "mode": "sync"},
-        )
-        self._record_event("scan.completed", session)
-        return result
+                if session.selected_target_directories:
+                    session.incremental_selection = {
+                        **self._incremental_selection_snapshot(session),
+                        "status": "ready",
+                        "target_directories": list(session.selected_target_directories),
+                        "target_directory_tree": self._explore_target_directories(
+                            Path(session.target_dir),
+                            list(session.selected_target_directories),
+                            max_depth=self._normalize_destination_index_depth(session.destination_index_depth)
+                        ),
+                        "pending_items_count": len(all_entries),
+                        "source_scan_completed": True,
+                    }
+                    session.stage = "planning"
+                else:
+                    session.planner_items = []
+                    session.source_tree_entries = self._build_source_tree_entries(
+                        Path(session.target_dir),
+                        session.scan_lines,
+                        planner_items=[],
+                    )
+                    self._set_incremental_selection_pending(session, session.scan_lines)
+                    session.stage = "selecting_incremental_scope"
+            else:
+                self._ensure_planner_items(session, session.scan_lines)
+                session.incremental_selection = self._incremental_selection_defaults(session)
+                session.stage = "planning"
+            session.scanner_progress = {
+                **dict(session.scanner_progress or {}),
+                "status": "completed",
+                "processed_count": len(all_entries),
+                "total_count": total_count,
+                "current_item": recent_items[-1]["display_name"] if recent_items else None,
+                "recent_analysis_items": recent_items,
+                "message": self._scan_completion_message(all_entries, parallel=False),
+            }
+            self.store.save(session)
+            self._log_runtime_event("scan.completed", session, entry_count=len(all_entries), mode="sync")
+            self._write_session_debug_event(
+                "scan.completed",
+                session,
+                payload={"entry_count": len(all_entries), "mode": "sync"},
+            )
+            self._record_event("scan.completed", session)
+            return result
+        finally:
+            self._mark_scan_inactive(session.session_id)
 
     def _load_or_raise(self, session_id: str) -> OrganizerSession:
         session = self.store.load(session_id)

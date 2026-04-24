@@ -114,6 +114,8 @@ class SettingsServiceTests(unittest.TestCase):
         self.assertEqual(snapshot["families"]["icon_image"]["active_preset"]["image_model"]["secret_state"], "stored")
         self.assertIn("analysis_concurrency_limit", snapshot["families"]["icon_image"]["active_preset"])
         self.assertIn("image_concurrency_limit", snapshot["families"]["icon_image"]["active_preset"])
+        self.assertTrue(snapshot["runtime"]["log_paths"]["runtime_log"].endswith("logs\\backend\\runtime.log"))
+        self.assertTrue(snapshot["runtime"]["log_paths"]["debug_log"].endswith("logs\\backend\\debug.jsonl"))
 
     def test_icon_image_runtime_supports_split_concurrency_limits(self):
         service = SettingsService(

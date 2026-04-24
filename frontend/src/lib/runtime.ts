@@ -157,6 +157,17 @@ export async function inspectPathsWithTauri(paths: string[]): Promise<TauriInspe
   return result ?? [];
 }
 
+export type TauriDirectoryEntry = {
+  path: string;
+  is_dir: boolean;
+  is_file: boolean;
+};
+
+export async function listDirectoryEntriesWithTauri(path: string): Promise<TauriDirectoryEntry[]> {
+  const result = await invokeTauriCommand<TauriDirectoryEntry[]>("list_directory_entries", { path });
+  return result ?? [];
+}
+
 export async function openDirectoryWithTauri(path: string): Promise<void> {
   await invokeTauriCommand<void>("open_directory", { path });
 }

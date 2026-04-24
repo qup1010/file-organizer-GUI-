@@ -44,42 +44,33 @@ export function SettingsSection({
   return (
     <section
       className={cn(
-        "overflow-hidden rounded-[8px] border border-on-surface/10 bg-surface-container-lowest shadow-sm shadow-black/[0.01]",
+        "overflow-hidden rounded-xl border border-on-surface/8 bg-surface-container-lowest",
         disabled && "opacity-55",
       )}
     >
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-on-surface/8 bg-surface px-5 py-3.5">
-        <div className="flex min-w-0 items-start gap-3">
-          <div
-            className={cn(
-              "flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] border",
-              disabled
-                ? "border-on-surface/6 bg-surface-container-low text-on-surface-variant/30"
-                : "border-primary/12 bg-primary/10 text-primary",
-            )}
-          >
-            <Icon className="h-4 w-4" />
-          </div>
-          <div className="min-w-0 space-y-0.5 mt-0.5">
-            <h2 className="text-[14.5px] font-black tracking-tight text-on-surface leading-none">{title}</h2>
-            <p className="text-[11.5px] font-medium leading-relaxed text-on-surface-variant/70">{description}</p>
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-on-surface/6 bg-surface px-4 py-2.5">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <Icon className={cn("h-4 w-4 shrink-0", disabled ? "text-on-surface-variant/30" : "text-primary/70")} />
+          <div className="min-w-0 space-y-0.5">
+            <h2 className="text-[13.5px] font-black tracking-tight text-on-surface leading-none">{title}</h2>
+            <p className="text-[11px] font-medium text-on-surface-variant/50">{description}</p>
           </div>
         </div>
         {actions ? <div className="shrink-0">{actions}</div> : null}
       </div>
-      <div className="px-5 py-5 space-y-6">{children}</div>
+      <div className="px-4 py-4 space-y-5">{children}</div>
     </section>
   );
 }
 
 export function FieldGroup({ label, hint, className, children }: FieldGroupProps) {
   return (
-    <div className={cn("space-y-2", className)}>
-      <label className="flex items-center gap-2 px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant/60">
+    <div className={cn("space-y-1.5", className)}>
+      <label className="flex items-center gap-2 px-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-on-surface-variant/50">
         {label}
       </label>
       {children}
-      {hint ? <p className="px-1 text-[12px] leading-5 text-on-surface-variant/55">{hint}</p> : null}
+      {hint ? <p className="px-1 text-[11.5px] font-medium text-on-surface-variant/40 leading-relaxed">{hint}</p> : null}
     </div>
   );
 }
@@ -88,12 +79,12 @@ export function InputShell({ icon: Icon, children, className }: InputShellProps)
   return (
     <div
       className={cn(
-        "ui-field-shell group min-h-[42px] bg-surface-container-lowest border border-on-surface/10 rounded-[6px] px-2.5 transition-colors focus-within:border-primary/40 focus-within:ring-1 focus-within:ring-primary/10",
+        "ui-field-shell group min-h-[36px] bg-surface-container-lowest border border-on-surface/10 rounded-[6px] px-2 transition-colors focus-within:border-primary/40 focus-within:ring-1 focus-within:ring-primary/10",
         className,
       )}
     >
-      <div className="flex h-7 w-7 shrink-0 items-center justify-center text-on-surface-variant/40 transition-colors group-focus-within:text-primary">
-        <Icon className="h-3.5 w-3.5" />
+      <div className="flex h-6 w-6 shrink-0 items-center justify-center text-on-surface-variant/30 transition-colors group-focus-within:text-primary">
+        <Icon className="h-3 w-3" />
       </div>
       {children}
     </div>
@@ -116,14 +107,14 @@ export function StrategyOptionButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "w-full rounded-[6px] border px-3.5 py-2.5 text-left transition-colors",
+        "w-full rounded-[6px] border px-3 py-2 text-left transition-colors",
         active 
-          ? "border-primary/40 bg-primary/[0.04] shadow-sm shadow-primary/5 select-active" 
-          : "border-on-surface/10 bg-surface-container-lowest hover:border-primary/25 hover:bg-surface-container-low",
+          ? "border-primary/40 bg-primary/[0.04] select-active" 
+          : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
       )}
     >
-      <p className={cn("text-[13px] font-black tracking-tight", active ? "text-primary" : "text-on-surface")}>{label}</p>
-      <p className="mt-0.5 text-[12px] font-medium leading-relaxed text-ui-muted">{description}</p>
+      <p className={cn("text-[12px] font-black tracking-tight", active ? "text-primary" : "text-on-surface")}>{label}</p>
+      <p className="mt-0.5 text-[11px] font-medium leading-relaxed text-ui-muted/70">{description}</p>
     </button>
   );
 }
@@ -196,7 +187,7 @@ export function PresetManager({
             className={cn(
               "group flex items-center justify-between rounded-[10px] border px-3.5 py-3 text-left transition-colors",
               activeId === preset.id
-                ? "border-primary/25 bg-primary/10 shadow-[0_8px_20px_rgba(0,0,0,0.08)]"
+                ? "border-primary/25 bg-primary/10"
                 : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/18 hover:bg-surface-container-low",
             )}
           >
@@ -289,7 +280,7 @@ export function PresetSelector({
             className={cn(
               "flex min-h-[46px] w-full items-center justify-between gap-4 rounded-[6px] border px-3 py-2 text-left transition-[border-color,background-color] duration-150",
               open
-                ? "border-primary/30 bg-primary/[0.02]"
+                ? "border-primary/25 bg-primary/10"
                 : "border-on-surface/10 bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
               disabled && "cursor-not-allowed opacity-55",
             )}
@@ -322,7 +313,7 @@ export function PresetSelector({
         id={`${label}-preset-list`}
         role="listbox"
         className={cn(
-          "overflow-hidden rounded-[8px] border border-on-surface/8 bg-surface shadow-md shadow-black/[0.04] transition-[max-height,opacity,margin] duration-200",
+          "overflow-hidden rounded-[8px] border border-on-surface/8 bg-surface transition-[max-height,opacity,margin] duration-200",
           open ? "max-h-[320px] opacity-100 mt-1" : "max-h-0 border-transparent opacity-0 mt-0",
         )}
       >

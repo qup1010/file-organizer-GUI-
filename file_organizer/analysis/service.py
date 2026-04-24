@@ -27,6 +27,7 @@ SUBMIT_ANALYSIS_TOOL_NAME = "submit_analysis_result"
 BATCH_READ_TOOL_NAME = "read_local_files_batch"
 API_RETRY_ATTEMPTS = 2
 API_RETRY_DELAY_SECONDS = 2
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
 
 logger = logging.getLogger(__name__)
 
@@ -155,6 +156,27 @@ def _render_entry_catalog(entry_context: dict[str, dict[str, str]]) -> str:
             f"{item['entry_id']} | {item['display_name']} | {item['entry_type']}"
         )
     return "\n".join(lines)
+
+
+def _is_image_entry_name(entry_name: str) -> bool:
+    return Path(str(entry_name or "")).suffix.lower() in IMAGE_EXTENSIONS
+
+
+def _collect_image_entry_context(entry_context: dict[str, dict[str, str]] | None) -> list[dict[str, str]]:
+    if not entry_context:
+        return []
+    return [
+        item
+        for item in entry_context.values()
+        if str(item.get("entry_type") or "").lower() == "file" and _is_image_entry_name(item.get("entry_name") or "")
+    ]
+
+
+def _vision_prompt_enabled() -> bool:
+    from file_organizer.shared.config import get_image_analysis_settings
+
+    settings = get_image_analysis_settings()
+    return bool(settings.get("enabled"))
 
 
 def append_output_result(content: str | list[AnalysisItem] | list[dict]):
@@ -693,13 +715,57 @@ def _slice_files_info_for_batch(files_info: str, batch_entries: list[str], targe
 
 
 def _build_retry_message(check: dict, retry_scope: str) -> str:
-    return (
+    message = (
         "刚才的结果未通过校验。\n"
         f"缺失：{check['missing']}\n"
         f"多余：{check['extra']}\n"
         f"重复：{check['duplicates']}\n"
         f"请重新完整提交{retry_scope}分析结果。"
     )
+    if check.get("image_probe_failures"):
+        message += "\n图片识别未成功，禁止编造具体画面内容；这些图片只能写待判断或仅按文件名做低置信度判断。"
+    return message
+
+
+def _extract_image_probe_statuses(result: str) -> dict[str, dict[str, str]]:
+    statuses: dict[str, dict[str, str]] = {}
+    pattern = re.compile(
+        r"--- 条目 \[(?P<entry_id>[^\]|]+)\s*\|.*?\] 内容开始 ---\n(?P<body>.*?)\n--- 内容结束 ---",
+        flags=re.S,
+    )
+    for match in pattern.finditer(str(result or "")):
+        body = match.group("body")
+        if "--- 图片识别结果开始 ---" not in body:
+            continue
+        status_match = re.search(r"status:\s*(?P<status>[^\n]+)", body)
+        summary_match = re.search(r"summary:\s*(?P<summary>[^\n]+)", body)
+        error_code_match = re.search(r"error_code:\s*(?P<error_code>[^\n]+)", body)
+        error_message_match = re.search(r"error_message:\s*(?P<error_message>[^\n]+)", body)
+        statuses[match.group("entry_id").strip()] = {
+            "status": (status_match.group("status").strip() if status_match else "").lower(),
+            "summary": summary_match.group("summary").strip() if summary_match else "",
+            "error_code": error_code_match.group("error_code").strip() if error_code_match else "",
+            "error_message": error_message_match.group("error_message").strip() if error_message_match else "",
+        }
+    return statuses
+
+
+def _validate_failed_image_probe_items(
+    items: list[AnalysisItem],
+    image_probe_statuses: dict[str, dict[str, str]],
+) -> list[str]:
+    if not image_probe_statuses:
+        return []
+    generic_tokens = ("待判断", "待确认", "未识别", "未成功识别", "仅凭文件名", "内容待确认", "图片文件")
+    failures: list[str] = []
+    for item in items:
+        status = (image_probe_statuses.get(item.entry_id) or {}).get("status", "")
+        if status in {"", "ok"}:
+            continue
+        combined = f"{item.suggested_purpose} {item.summary}"
+        if not any(token in combined for token in generic_tokens):
+            failures.append(item.entry_id or item.entry_name)
+    return failures
 
 
 def _run_analysis_worker(
@@ -717,7 +783,23 @@ def _run_analysis_worker(
     entry_context: dict[str, dict[str, str]] | None = None,
 ) -> list[AnalysisItem] | None:
     client = get_client()
-    messages = [{"role": "system", "content": build_system_prompt(files_info, target_dir=target_dir)}]
+    vision_enabled = _vision_prompt_enabled()
+    image_entries = _collect_image_entry_context(entry_context)
+    image_entry_ids = [item["entry_id"] for item in image_entries]
+    image_entry_names = [item["entry_name"] for item in image_entries]
+    vision_probe_requested = False
+    if image_entries and not vision_enabled:
+        _write_analysis_debug_event(
+            target_dir,
+            "analysis.vision.skipped_disabled",
+            session_id=session_id,
+            payload={
+                "model": model,
+                "image_entry_count": len(image_entries),
+                "image_entries": image_entry_names,
+            },
+        )
+    messages = [{"role": "system", "content": build_system_prompt(files_info, target_dir=target_dir, vision_enabled=vision_enabled)}]
     messages.append({"role": "user", "content": user_message})
 
     for attempt in range(1, max_retries + 1):
@@ -725,6 +807,7 @@ def _run_analysis_worker(
         curr_messages = list(messages)
         legacy_text = ""
         normalized_items: list[AnalysisItem] = []
+        image_probe_statuses: dict[str, dict[str, str]] = {}
         check = {"is_valid": False, "missing": expected_entries, "extra": [], "duplicates": [], "invalid_lines": ["未能在规定工具轮次内提交结果"]}
         rendered = ""
 
@@ -795,6 +878,14 @@ def _run_analysis_worker(
             if submitted_items is not None:
                 normalized_items, invalid_lines = _normalize_analysis_items(submitted_items, target_dir)
                 check = validate_analysis_items(normalized_items, target_dir, expected_entries=expected_entries)
+                image_probe_failures = _validate_failed_image_probe_items(normalized_items, image_probe_statuses)
+                if image_probe_failures:
+                    check["image_probe_failures"] = image_probe_failures
+                    check["invalid_lines"] = list(check.get("invalid_lines", [])) + [
+                        f"{entry_id}: 图片识别未成功，禁止编造具体画面内容。"
+                        for entry_id in image_probe_failures
+                    ]
+                    check["is_valid"] = False
                 if invalid_lines:
                     check["invalid_lines"] = list(check.get("invalid_lines", [])) + invalid_lines
                     check["is_valid"] = False
@@ -830,13 +921,83 @@ def _run_analysis_worker(
                     })
                     continue
                 emit(event_handler, "tool_start", {"name": name, "args": args})
-                result = _dispatch_tool_call(target_dir, name, args, entry_context=entry_context)
+                if name == BATCH_READ_TOOL_NAME and image_entry_ids:
+                    requested_entry_ids = [str(item).strip() for item in (args.get("entry_ids") or []) if str(item).strip()]
+                    if any(entry_id in image_entry_ids for entry_id in requested_entry_ids):
+                        vision_probe_requested = True
+                tool_started_at = time.perf_counter()
+                _write_analysis_debug_event(
+                    target_dir,
+                    "analysis.tool_call.started",
+                    session_id=session_id,
+                    payload={
+                        "attempt": attempt,
+                        "tool_round": tool_round,
+                        "name": name,
+                        "args": args,
+                    },
+                )
+                try:
+                    result = _dispatch_tool_call(target_dir, name, args, entry_context=entry_context)
+                except Exception as exc:
+                    _write_analysis_debug_event(
+                        target_dir,
+                        "analysis.tool_call.failed",
+                        level="ERROR",
+                        session_id=session_id,
+                        payload={
+                            "attempt": attempt,
+                            "tool_round": tool_round,
+                            "name": name,
+                            "args": args,
+                            "duration_ms": round((time.perf_counter() - tool_started_at) * 1000),
+                            "error": exc,
+                        },
+                    )
+                    raise
+                _write_analysis_debug_event(
+                    target_dir,
+                    "analysis.tool_call.completed",
+                    session_id=session_id,
+                    payload={
+                        "attempt": attempt,
+                        "tool_round": tool_round,
+                        "name": name,
+                        "args": args,
+                        "duration_ms": round((time.perf_counter() - tool_started_at) * 1000),
+                        "result_preview": str(result)[:300],
+                    },
+                )
+                current_image_probe_statuses: dict[str, dict[str, str]] = {}
+                if name == BATCH_READ_TOOL_NAME:
+                    current_image_probe_statuses = _extract_image_probe_statuses(str(result))
+                    image_probe_statuses.update(current_image_probe_statuses)
                 curr_messages.append({
                     "role": "tool",
                     "tool_call_id": tool_call.id,
                     "name": name,
                     "content": result,
                 })
+                failed_image_entries = [
+                    entry_id
+                    for entry_id, status_payload in current_image_probe_statuses.items()
+                    if status_payload.get("status") not in {"", "ok"}
+                ]
+                if failed_image_entries:
+                    failure_lines = []
+                    for entry_id in failed_image_entries:
+                        status_payload = image_probe_statuses.get(entry_id) or {}
+                        failure_lines.append(
+                            f"- {entry_id}: {status_payload.get('error_code') or 'vision_request_failed'}"
+                        )
+                    curr_messages.append({
+                        "role": "user",
+                        "content": (
+                            "以下图片未成功完成内容识别：\n"
+                            + "\n".join(failure_lines)
+                            + "\n这些图片不得编造具体画面内容；只能写待判断，或仅按文件名做低置信度判断。"
+                        ),
+                    })
 
         if check["is_valid"]:
             emit(event_handler, "validation_pass", {
@@ -853,6 +1014,17 @@ def _run_analysis_worker(
                     "item_count": len(normalized_items),
                 },
             )
+            if image_entries and vision_enabled and not vision_probe_requested:
+                _write_analysis_debug_event(
+                    target_dir,
+                    "analysis.vision.skipped_not_requested",
+                    session_id=session_id,
+                    payload={
+                        "model": model,
+                        "image_entry_count": len(image_entries),
+                        "image_entries": image_entry_names,
+                    },
+                )
             return normalized_items
 
         emit(event_handler, "validation_fail", {"attempt": attempt, "details": check})
@@ -1248,7 +1420,8 @@ tools = [
                 "批量探查多个条目。"
                 "传入 entry_id 则返回对应条目的内容摘要（支持文本、PDF、Word、Excel、图片描述、zip 索引）；"
                 "如果条目是文件夹，则返回其目录结构（最多两层）。"
-                "仅在条目名称完全无法推断用途时才使用，且应一次性传入所有需要探查的条目。"
+                "当条目名称难以稳妥推断用途时才使用，尤其是截图、相机照片、纯编号图片这类仅凭文件名无法判断内容的图片。"
+                "应一次性传入所有需要探查的条目。"
             ),
             "parameters": {
                 "type": "object",

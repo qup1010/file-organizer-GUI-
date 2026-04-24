@@ -229,24 +229,43 @@ function DirectoryTreePanel({ column, filter = "all" }: { column: DirectoryTreeC
     if (node.kind === "file") {
       const badge = statusBadge(node.status);
       const isReviewFile = node.path.split("/")[0]?.toLowerCase() === "review" || node.status === "review";
+      const isAdded = node.status === "pending" || node.status === "success";
+      const isFailed = node.status === "failed";
+      
       return (
-        <div key={node.path} className="group flex items-center gap-3 rounded-lg px-3 py-1.5 transition-colors hover:bg-on-surface/[0.03]"
-             style={{ paddingLeft: `${12 + depth * 18}px` }}>
+        <div key={node.path} className={cn(
+          "group relative flex items-center gap-2.5 px-2 py-0.5 transition-all border-l border-transparent hover:bg-on-surface/[0.025] hover:border-on-surface/10",
+          isReviewFile && "hover:bg-warning/[0.03] hover:border-warning/20",
+          isFailed && "hover:bg-error/[0.03] hover:border-error/20",
+          isAdded && "hover:bg-success/[0.03] hover:border-success/20"
+        )}
+             style={{ paddingLeft: `${14 + depth * 16}px` }}>
+          
+          {/* Connector Line */}
+          <div className="absolute left-[-1px] top-0 bottom-0 w-[1px] bg-on-surface/5" 
+               style={{ left: `${6 + depth * 16}px` }} />
+          
           {isReviewFile ? (
-            <FileWarning className="h-4 w-4 shrink-0 text-warning" />
+            <FileWarning className="h-3.5 w-3.5 shrink-0 text-warning/70" />
           ) : (
-            <File className="h-4 w-4 shrink-0 text-on-surface-variant/40 group-hover:text-primary/60 transition-colors" />
+            <File className={cn(
+              "h-3.5 w-3.5 shrink-0 transition-colors",
+              isAdded ? "text-success/50" : isFailed ? "text-error/50" : "text-on-surface-variant/25"
+            )} />
           )}
           <span 
             title={node.name}
             className={cn(
-            "min-w-0 flex-1 truncate text-[13.5px] transition-colors",
-            isReviewFile ? "text-warning font-medium" : "text-on-surface/80 group-hover:text-on-surface"
+            "min-w-0 flex-1 truncate font-mono text-[11.5px] tracking-tight transition-colors",
+            isReviewFile ? "text-warning font-black" : 
+            isAdded ? "text-success-dim/80 font-bold" :
+            isFailed ? "text-error/70 font-bold" :
+            "text-on-surface/60 group-hover:text-on-surface"
           )}>
             {node.name}
           </span>
           {badge && (
-            <span className={cn("shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] uppercase tracking-wider whitespace-nowrap shadow-sm", badge.className)}>
+            <span className={cn("shrink-0 rounded-[3px] border px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest whitespace-nowrap opacity-80", badge.className)}>
               {badge.label}
             </span>
           )}
@@ -257,36 +276,44 @@ function DirectoryTreePanel({ column, filter = "all" }: { column: DirectoryTreeC
     const isExpanded = expanded[node.path] ?? depth === 0;
     const isReviewDirectory = node.path.toLowerCase() === "review" || node.path.toLowerCase().startsWith("review/");
     return (
-      <div key={node.path} className="space-y-1">
+      <div key={node.path} className="relative">
         <button
           type="button"
           onClick={() => toggle(node.path)}
-          className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition-colors hover:bg-surface-container-low/70"
-          style={{ paddingLeft: `${8 + depth * 18}px` }}
+          className="group flex w-full items-center gap-2.5 px-2 py-1 text-left transition-colors hover:bg-on-surface/[0.03]"
+          style={{ paddingLeft: `${8 + depth * 16}px` }}
         >
-          {isExpanded ? (
-            <ChevronDown className="h-4 w-4 shrink-0 text-on-surface-variant/60" />
-          ) : (
-            <ChevronRight className="h-4 w-4 shrink-0 text-on-surface-variant/60" />
+          {/* Connector Line for Dirs */}
+          {depth > 0 && (
+            <div className="absolute left-[-1px] top-0 h-full w-[1px] bg-on-surface/5" 
+                 style={{ left: `${6 + depth * 16}px` }} />
           )}
+
+          <div className="flex h-4 w-4 shrink-0 items-center justify-center">
+            {isExpanded ? (
+              <ChevronDown className="h-3 w-3 text-on-surface-variant/40" />
+            ) : (
+              <ChevronRight className="h-3 w-3 text-on-surface-variant/40" />
+            )}
+          </div>
           {isExpanded ? (
-            <FolderOpen className="h-4 w-4 shrink-0 text-primary" />
+            <FolderOpen className="h-3.5 w-3.5 shrink-0 text-primary/70" />
           ) : (
-            <Folder className="h-4 w-4 shrink-0 text-primary" />
+            <Folder className="h-3.5 w-3.5 shrink-0 text-primary/70" />
           )}
-          <span title={node.name} className="min-w-0 flex-1 truncate font-medium text-on-surface">{node.name}</span>
-          <span className="shrink-0 text-[12px] font-medium text-on-surface-variant/60">
-            {node.descendantFileCount} 项
+          <span title={node.name} className="min-w-0 flex-1 truncate font-mono text-[12.5px] font-black tracking-tight text-on-surface/80">{node.name}</span>
+          <span className="shrink-0 font-mono text-[10px] font-bold text-ui-muted opacity-40">
+            {node.descendantFileCount}
           </span>
           {isReviewDirectory ? (
-            <span className="shrink-0 rounded-full border border-warning/20 bg-warning-container/20 px-2 py-0.5 text-[11px] font-bold whitespace-nowrap text-warning-dim/80">
+            <span className="shrink-0 rounded-full border border-warning/20 bg-warning/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-warning-dim/80">
               待确认
             </span>
           ) : null}
         </button>
 
         {isExpanded ? (
-          <div className="space-y-1">
+          <div className="flex flex-col">
             {node.children.map((child) => renderNode(child, depth + 1))}
           </div>
         ) : null}
@@ -295,17 +322,18 @@ function DirectoryTreePanel({ column, filter = "all" }: { column: DirectoryTreeC
   };
 
   return (
-    <div className="flex-1 flex flex-col px-1 pb-4">
-      <div className="border-b border-on-surface/6 pb-4">
-        <h3 className="text-[14px] font-semibold text-on-surface">{column.title}</h3>
-        <p className="mt-1 text-[12px] leading-6 text-on-surface-variant">{column.subtitle}</p>
+    <div className="flex-1 flex flex-col min-w-0">
+      <div className="border-b border-on-surface/8 bg-on-surface/[0.015] px-4 py-1.5">
+        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-on-surface/50 truncate">
+          {column.title === "整理前目录树" ? "整理前" : "整理后"} · {column.title}
+        </h3>
       </div>
 
       <div className="mt-4 space-y-1">
         {tree.length > 0 ? (
           tree.map((node) => renderNode(node, 0))
         ) : (
-          <div className="flex flex-col items-center justify-center rounded-[12px] border border-dashed border-on-surface/10 bg-on-surface/[0.02] px-6 py-16 text-center shadow-inner">
+          <div className="flex flex-col items-center justify-center rounded-[12px] border border-dashed border-on-surface/10 bg-on-surface/[0.02] px-6 py-16 text-center">
             <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-on-surface/5 text-on-surface/20">
                <Layers className="h-6 w-6" />
             </div>

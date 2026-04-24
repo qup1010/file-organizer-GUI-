@@ -1,6 +1,7 @@
 import shutil
 import time
 import unittest
+import json
 from pathlib import Path
 
 from file_organizer.app.session_service import OrganizerSessionService
@@ -45,6 +46,41 @@ class HistoryAppServiceTests(unittest.TestCase):
         assert reloaded is not None
         self.assertEqual(reloaded.stage, "interrupted")
 
+    def test_list_history_does_not_interrupt_recent_scanning_session(self):
+        created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
+        session = created.session
+        assert session is not None
+        session.stage = "scanning"
+        self.store.save(session)
+
+        history = self.service.history_app.list_history()
+        reloaded = self.store.load(session.session_id)
+
+        self.assertTrue(any(entry["execution_id"] == session.session_id for entry in history))
+        self.assertIsNotNone(reloaded)
+        assert reloaded is not None
+        self.assertEqual(reloaded.stage, "scanning")
+
+    def test_list_history_recovers_old_scanning_session(self):
+        created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
+        session = created.session
+        assert session is not None
+        session.stage = "scanning"
+        self.store.save(session)
+        session.updated_at = "2000-01-01T00:00:00+00:00"
+        (self.store.sessions_dir / f"{session.session_id}.json").write_text(
+            json.dumps(session.to_dict(), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        history = self.service.history_app.list_history()
+        reloaded = self.store.load(session.session_id)
+
+        self.assertTrue(any(entry["execution_id"] == session.session_id for entry in history))
+        self.assertIsNotNone(reloaded)
+        assert reloaded is not None
+        self.assertEqual(reloaded.stage, "interrupted")
+
     def test_get_journal_summary_via_history_app_returns_execution_details(self):
         (self.target_dir / "a.txt").write_text("hello", encoding="utf-8")
         created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
@@ -64,6 +100,8 @@ class HistoryAppServiceTests(unittest.TestCase):
 
         self.assertEqual(summary["status"], "completed")
         self.assertEqual(summary["item_count"], 2)
+        mkdir_item = next(item for item in summary["items"] if item["action_type"] == "MKDIR")
+        self.assertTrue(str(mkdir_item["target"]).replace("\\", "/").endswith("/Docs"))
         move_item = next(item for item in summary["items"] if item["action_type"] == "MOVE")
         self.assertEqual(move_item["display_name"], "a.txt")
         self.assertEqual(move_item["item_id"], "F001")

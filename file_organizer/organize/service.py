@@ -29,7 +29,7 @@ MKDIR_LINE_RE = re.compile(r'^\s*MKDIR\s+"(.*?)"\s*$', flags=re.I)
 PLAN_DIFF_TOOL_NAME = "submit_plan_diff"
 REPAIR_FINAL_PLAN_TOOL_NAME = "repair_commit_final_plan"
 MODEL_WAIT_MESSAGE = "正在等待模型回复..."
-SYNTHETIC_PLAN_REPLY = "我已按照您的要求做了修改"
+SYNTHETIC_PLAN_REPLY = "我已经更新了整理计划，请您查看。"
 
 logger = logging.getLogger(__name__)
 

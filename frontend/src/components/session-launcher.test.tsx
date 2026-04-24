@@ -12,6 +12,12 @@ const getCommonDirsMock = vi.fn();
 const getTargetProfilesMock = vi.fn();
 const createTargetProfileMock = vi.fn();
 const selectDirMock = vi.fn();
+const isTauriDesktopMock = vi.fn();
+const inspectPathsWithTauriMock = vi.fn();
+const pickDirectoryWithTauriMock = vi.fn();
+const pickDirectoriesWithTauriMock = vi.fn();
+const pickFilesWithTauriMock = vi.fn();
+const listDirectoryEntriesWithTauriMock = vi.fn();
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
@@ -42,11 +48,12 @@ vi.mock("./launcher/resume-prompt-dialog", () => ({
 vi.mock("@/lib/runtime", () => ({
   getApiBaseUrl: () => "http://127.0.0.1:8765",
   getApiToken: () => "",
-  isTauriDesktop: () => false,
-  inspectPathsWithTauri: vi.fn(),
-  pickDirectoryWithTauri: vi.fn(),
-  pickDirectoriesWithTauri: vi.fn(),
-  pickFilesWithTauri: vi.fn(),
+  isTauriDesktop: () => isTauriDesktopMock(),
+  inspectPathsWithTauri: (...args: unknown[]) => inspectPathsWithTauriMock(...args),
+  pickDirectoryWithTauri: (...args: unknown[]) => pickDirectoryWithTauriMock(...args),
+  pickDirectoriesWithTauri: (...args: unknown[]) => pickDirectoriesWithTauriMock(...args),
+  pickFilesWithTauri: (...args: unknown[]) => pickFilesWithTauriMock(...args),
+  listDirectoryEntriesWithTauri: (...args: unknown[]) => listDirectoryEntriesWithTauriMock(...args),
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -79,7 +86,9 @@ function openManualTargetInput() {
 
 function addSource(path: string, sourceType: "directory" | "file" = "directory") {
   openManualSourceInput();
-  const selectorButtons = screen.getAllByRole("button", { name: sourceType === "file" ? "文件" : "目录" });
+  const selectorButtons = screen.getAllByRole("button", {
+    name: sourceType === "file" ? "文件" : "文件夹",
+  });
   fireEvent.click(selectorButtons[selectorButtons.length - 1]);
   fireEvent.change(screen.getByPlaceholderText("输入完整绝对路径..."), {
     target: { value: path },
@@ -98,6 +107,13 @@ describe("SessionLauncher", () => {
     getTargetProfilesMock.mockReset();
     createTargetProfileMock.mockReset();
     selectDirMock.mockReset();
+    isTauriDesktopMock.mockReset();
+    inspectPathsWithTauriMock.mockReset();
+    pickDirectoryWithTauriMock.mockReset();
+    pickDirectoriesWithTauriMock.mockReset();
+    pickFilesWithTauriMock.mockReset();
+    listDirectoryEntriesWithTauriMock.mockReset();
+    isTauriDesktopMock.mockReturnValue(false);
 
     getSettingsMock.mockResolvedValue({
       global_config: {
@@ -155,14 +171,14 @@ describe("SessionLauncher", () => {
     fireEvent.change(screen.getAllByRole("textbox")[0], {
       target: { value: "D:/sorted" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "开始扫描与分析" }));
+    fireEvent.click(screen.getByRole("button", { name: "读取目录并生成建议" }));
 
     await waitFor(() => {
       expect(createSessionAndStartScanMock).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
           sources: [
-            { source_type: "directory", path: "D:/incoming" },
+            { source_type: "directory", path: "D:/incoming", directory_mode: "atomic" },
             { source_type: "file", path: "D:/incoming/readme.txt" },
           ],
           organize_method: "categorize_into_new_structure",
@@ -185,13 +201,43 @@ describe("SessionLauncher", () => {
     addSource("D:/incoming");
     fireEvent.click(screen.getByRole("button", { name: "下一步：选择整理方式" }));
     fireEvent.click(screen.getByRole("button", { name: "下一步：填写必要信息" }));
-    fireEvent.click(screen.getByRole("button", { name: "开始扫描与分析" }));
+    fireEvent.click(screen.getByRole("button", { name: "读取目录并生成建议" }));
+
+    await waitFor(() => {
+        expect(createSessionAndStartScanMock).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.objectContaining({
+            output_dir: "D:",
+          }),
+        );
+      });
+  });
+
+  it("starts directly from step one when launch skip prompt is enabled", async () => {
+    getSettingsMock.mockResolvedValueOnce({
+      global_config: {
+        LAUNCH_SKIP_STRATEGY_PROMPT: true,
+        LAUNCH_REVIEW_FOLLOWS_NEW_ROOT: true,
+      },
+      status: {
+        text_configured: true,
+      },
+    });
+
+    render(<SessionLauncher />);
+
+    await screen.findByText("本次整理对象");
+    addSource("D:/incoming");
+
+    fireEvent.click(screen.getByRole("button", { name: "按默认配置开始整理" }));
 
     await waitFor(() => {
       expect(createSessionAndStartScanMock).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
-          output_dir: "D:/incoming",
+          sources: [{ source_type: "directory", path: "D:/incoming", directory_mode: "atomic" }],
+          organize_method: "categorize_into_new_structure",
+          output_dir: "D:",
         }),
       );
     });
@@ -217,13 +263,13 @@ describe("SessionLauncher", () => {
       target: { value: "D:/archive/misc" },
     });
     fireEvent.click(screen.getByRole("button", { name: "添加" }));
-    fireEvent.click(screen.getByRole("button", { name: "开始扫描并进入目标确认" }));
+    fireEvent.click(screen.getByRole("button", { name: "读取目录并确认目标" }));
 
     await waitFor(() => {
       expect(createSessionAndStartScanMock).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
-          sources: [{ source_type: "directory", path: "D:/downloads" }],
+          sources: [{ source_type: "directory", path: "D:/downloads", directory_mode: "atomic" }],
           organize_method: "assign_into_existing_categories",
           target_profile_id: "profile-1",
           target_directories: ["D:/archive/docs", "D:/archive/media", "D:/archive/misc"],
@@ -238,6 +284,27 @@ describe("SessionLauncher", () => {
     });
   });
 
+  it("submits atomic directory sources as single items and falls back to the parent workspace root", async () => {
+    render(<SessionLauncher />);
+
+    await screen.findByText("本次整理对象");
+    addSource("D:/incoming/project-bundle");
+    fireEvent.click(screen.getByRole("button", { name: "下一步：选择整理方式" }));
+    fireEvent.click(screen.getByRole("button", { name: "下一步：填写必要信息" }));
+    fireEvent.click(screen.getByRole("button", { name: "读取目录并生成建议" }));
+
+    await waitFor(() => {
+      expect(createSessionAndStartScanMock).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          sources: [{ source_type: "directory", path: "D:/incoming/project-bundle", directory_mode: "atomic" }],
+          organize_method: "categorize_into_new_structure",
+          output_dir: "D:/incoming",
+        }),
+      );
+    });
+  });
+
   it("blocks assign-existing submission when no target profile or target directories are provided", async () => {
     render(<SessionLauncher />);
 
@@ -246,7 +313,20 @@ describe("SessionLauncher", () => {
     fireEvent.click(screen.getByRole("button", { name: "下一步：选择整理方式" }));
     fireEvent.click(screen.getByRole("button", { name: /归入现有目录/ }));
     fireEvent.click(screen.getByRole("button", { name: "下一步：填写必要信息" }));
-    fireEvent.click(screen.getByRole("button", { name: "开始扫描并进入目标确认" }));
+    fireEvent.click(screen.getByRole("button", { name: "读取目录并确认目标" }));
+
+    expect(await screen.findByText("归入现有目录时，至少需要选择一个目录配置或手动添加目标目录。")).toBeInTheDocument();
+    expect(createSessionAndStartScanMock).not.toHaveBeenCalled();
+  });
+
+  it("shows the missing-target warning immediately after entering step three for assign-existing mode", async () => {
+    render(<SessionLauncher />);
+
+    await screen.findByText("本次整理对象");
+    addSource("D:/downloads");
+    fireEvent.click(screen.getByRole("button", { name: "下一步：选择整理方式" }));
+    fireEvent.click(screen.getByRole("button", { name: /归入现有目录/ }));
+    fireEvent.click(screen.getByRole("button", { name: "下一步：填写必要信息" }));
 
     expect(await screen.findByText("归入现有目录时，至少需要选择一个目录配置或手动添加目标目录。")).toBeInTheDocument();
     expect(createSessionAndStartScanMock).not.toHaveBeenCalled();
@@ -287,9 +367,10 @@ describe("SessionLauncher", () => {
     fireEvent.click(screen.getByRole("button", { name: "下一步：选择整理方式" }));
     fireEvent.click(screen.getByRole("button", { name: "下一步：填写必要信息" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "展开高级面板" }));
+    fireEvent.click(screen.getByRole("button", { name: "打开高级设置" }));
 
-    expect(await screen.findByText("更多设置")).toBeInTheDocument();
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.getAllByText("高级设置").length).toBeGreaterThan(0);
     expect(screen.getByText("默认模板")).toBeInTheDocument();
   });
 
@@ -320,5 +401,82 @@ describe("SessionLauncher", () => {
 
     await screen.findByText("本次整理对象");
     expect(screen.getByRole("button", { name: "下一步：选择整理方式" })).toBeDisabled();
+  });
+
+  it("imports top-level items from a folder into a grouped preview and submits only real source items", async () => {
+    isTauriDesktopMock.mockReturnValue(true);
+    pickDirectoryWithTauriMock.mockResolvedValue("D:/Downloads");
+    listDirectoryEntriesWithTauriMock.mockResolvedValue([
+      { path: "D:/Downloads/ProjectA", is_dir: true, is_file: false },
+      { path: "D:/Downloads/ProjectB", is_dir: true, is_file: false },
+      { path: "D:/Downloads/notes.txt", is_dir: false, is_file: true },
+      { path: "D:/Downloads/cover.png", is_dir: false, is_file: true },
+      { path: "D:/Downloads/invoice.pdf", is_dir: false, is_file: true },
+      { path: "D:/Downloads/archive.zip", is_dir: false, is_file: true },
+    ]);
+
+    render(<SessionLauncher />);
+
+    await screen.findByText("本次整理对象");
+    fireEvent.click(screen.getByRole("button", { name: "导入文件夹下所有项" }));
+
+    expect(await screen.findByText("已从 D:/Downloads 导入 6 项")).toBeInTheDocument();
+    expect(screen.queryByText("D:/Downloads/archive.zip")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "展开其余 1 项" }));
+    expect(screen.getByText("D:/Downloads/archive.zip")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "下一步：选择整理方式" }));
+    fireEvent.click(screen.getByRole("button", { name: "下一步：填写必要信息" }));
+    fireEvent.click(screen.getByRole("button", { name: "读取目录并生成建议" }));
+
+    await waitFor(() => {
+      expect(createSessionAndStartScanMock).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          sources: [
+            { source_type: "directory", path: "D:/Downloads/ProjectA", directory_mode: "atomic" },
+            { source_type: "directory", path: "D:/Downloads/ProjectB", directory_mode: "atomic" },
+            { source_type: "file", path: "D:/Downloads/notes.txt" },
+            { source_type: "file", path: "D:/Downloads/cover.png" },
+            { source_type: "file", path: "D:/Downloads/invoice.pdf" },
+            { source_type: "file", path: "D:/Downloads/archive.zip" },
+          ],
+        }),
+      );
+    });
+  });
+
+  it("replaces an atomic folder item with imported top-level items when switching modes", async () => {
+    isTauriDesktopMock.mockReturnValue(true);
+    listDirectoryEntriesWithTauriMock.mockResolvedValue([
+      { path: "D:/incoming/project-bundle/README.md", is_dir: false, is_file: true },
+      { path: "D:/incoming/project-bundle/src", is_dir: true, is_file: false },
+    ]);
+
+    render(<SessionLauncher />);
+
+    await screen.findByText("本次整理对象");
+    addSource("D:/incoming/project-bundle");
+    fireEvent.click(screen.getByRole("button", { name: "改为导入里面的项" }));
+
+    expect(await screen.findByText("已从 D:/incoming/project-bundle 导入 2 项")).toBeInTheDocument();
+    expect(screen.getByText("D:/incoming/project-bundle/README.md")).toBeInTheDocument();
+    expect(screen.getByText("D:/incoming/project-bundle/src")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "下一步：选择整理方式" }));
+    fireEvent.click(screen.getByRole("button", { name: "下一步：填写必要信息" }));
+    fireEvent.click(screen.getByRole("button", { name: "读取目录并生成建议" }));
+
+    await waitFor(() => {
+      expect(createSessionAndStartScanMock).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          sources: [
+            { source_type: "file", path: "D:/incoming/project-bundle/README.md" },
+            { source_type: "directory", path: "D:/incoming/project-bundle/src", directory_mode: "atomic" },
+          ],
+        }),
+      );
+    });
   });
 });

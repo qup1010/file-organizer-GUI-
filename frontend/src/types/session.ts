@@ -33,10 +33,12 @@ export type OrganizeMode = "initial" | "incremental";
 export type TaskType = "organize_full_directory" | "organize_into_existing";
 export type OrganizeMethod = "categorize_into_new_structure" | "assign_into_existing_categories";
 export type DestinationIndexDepth = 1 | 2 | 3;
+export type DirectorySourceMode = "contents" | "atomic";
 
 export interface SessionSourceSelection {
   source_type: "file" | "directory";
   path: string;
+  directory_mode?: DirectorySourceMode;
 }
 
 export interface TargetProfileDirectory {

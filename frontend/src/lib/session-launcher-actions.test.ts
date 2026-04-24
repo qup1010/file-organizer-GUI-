@@ -4,7 +4,7 @@ import { createSessionAndStartScan, firstSourcePath, startFreshSession } from ".
 
 const fullLaunchPayload = {
   sources: [
-    { source_type: "directory" as const, path: "D:/inbox" },
+    { source_type: "directory" as const, path: "D:/inbox", directory_mode: "atomic" as const },
     { source_type: "file" as const, path: "D:/loose/readme.txt" },
   ],
   resume_if_exists: false,
@@ -29,9 +29,9 @@ describe("session-launcher-actions", () => {
   it("returns the first valid source path", () => {
     expect(
       firstSourcePath([
-        { source_type: "directory", path: "   " },
+        { source_type: "directory", path: "   ", directory_mode: "atomic" as const },
         { source_type: "file", path: "D:/a.txt" },
-        { source_type: "directory", path: "D:/folder" },
+        { source_type: "directory", path: "D:/folder", directory_mode: "atomic" as const },
       ]),
     ).toBe("D:/a.txt");
   });
@@ -82,7 +82,7 @@ describe("session-launcher-actions", () => {
     };
 
     const payload = {
-      sources: [{ source_type: "directory" as const, path: "D:/downloads" }],
+      sources: [{ source_type: "directory" as const, path: "D:/downloads", directory_mode: "atomic" as const }],
       resume_if_exists: true,
       organize_method: "assign_into_existing_categories" as const,
       target_profile_id: "profile-1",
@@ -99,6 +99,31 @@ describe("session-launcher-actions", () => {
         caution_level: "balanced" as const,
         target_profile_id: "profile-1",
         note: "",
+      },
+    };
+
+    await createSessionAndStartScan(api, payload);
+
+    expect(api.createSession).toHaveBeenCalledWith(payload);
+  });
+
+  it("passes through atomic directory selections unchanged", async () => {
+    const api = {
+      createSession: vi.fn().mockResolvedValue({
+        mode: "created",
+        session_id: "session-2",
+        restorable_session: null,
+        session_snapshot: null,
+      }),
+    };
+
+    const payload = {
+      ...fullLaunchPayload,
+      sources: [{ source_type: "directory" as const, path: "D:/projects/repo", directory_mode: "atomic" as const }],
+      output_dir: "D:/projects",
+      strategy: {
+        ...fullLaunchPayload.strategy,
+        output_dir: "D:/projects",
       },
     };
 

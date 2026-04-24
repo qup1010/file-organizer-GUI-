@@ -125,9 +125,25 @@ class TaskState:
 class SourceCollectionItem:
     source_type: str
     path: str
+    directory_mode: str | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+    @property
+    def normalized_directory_mode(self) -> str:
+        if self.source_type != "directory":
+            return "atomic"
+        normalized = str(self.directory_mode or "contents").strip().lower()
+        return "atomic" if normalized == "atomic" else "contents"
+
+    @property
+    def scans_directory_contents(self) -> bool:
+        return self.source_type == "directory" and self.normalized_directory_mode == "contents"
+
+    @property
+    def is_atomic_directory(self) -> bool:
+        return self.source_type == "directory" and self.normalized_directory_mode == "atomic"
 
     @classmethod
     def from_dict(cls, data: dict | "SourceCollectionItem" | None) -> "SourceCollectionItem" | None:
@@ -141,7 +157,11 @@ class SourceCollectionItem:
         path = str(data.get("path") or "").strip()
         if source_type not in {"file", "directory"} or not path:
             return None
-        return cls(source_type=source_type, path=path)
+        directory_mode = None
+        if source_type == "directory":
+            raw_mode = str(data.get("directory_mode") or "").strip().lower()
+            directory_mode = "atomic" if raw_mode == "atomic" else "contents"
+        return cls(source_type=source_type, path=path, directory_mode=directory_mode)
 
 
 @dataclass

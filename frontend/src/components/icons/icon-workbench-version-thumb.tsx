@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Check, ZoomIn, LoaderCircle, AlertCircle } from "lucide-react";
+import { Check, LoaderCircle, AlertCircle, Maximize2, Scissors, Trash2, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { IconPreviewVersion } from "@/types/icon-workbench";
 import { buildImageSrc } from "./icon-workbench-utils";
@@ -22,10 +22,6 @@ interface IconWorkbenchVersionThumbProps {
   isProcessing?: boolean;
 }
 
-/**
- * 版本缩略图卡片
- * 显示小预览图，下方固定 4 个明确的操作按键 (放大、抠图、应用、删除)
- */
 export function IconWorkbenchVersionThumb({
   version,
   isSelected,
@@ -43,10 +39,8 @@ export function IconWorkbenchVersionThumb({
 }: IconWorkbenchVersionThumbProps) {
   const isReady = version.status === "ready";
   const isGenerating = version.status === "generating";
-  const applyButtonLabel = isApplied ? "重新应用" : "应用到系统";
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
-
   const imgSrc = isReady ? buildImageSrc(version, baseUrl, apiToken) : "";
 
   useEffect(() => {
@@ -58,117 +52,60 @@ export function IconWorkbenchVersionThumb({
     <div
       onClick={onSelect}
       className={cn(
-        "group relative flex w-[140px] shrink-0 cursor-pointer flex-col gap-2 rounded-xl border p-2.5 transition-all active:scale-95",
+        "group relative flex w-[88px] shrink-0 cursor-pointer flex-col overflow-hidden border transition-all duration-200 rounded-md",
         isSelected
-          ? "border-primary/20 bg-primary/8 shadow-[0_8px_20px_rgba(0,0,0,0.06)]"
-          : "border-on-surface/8 bg-surface-container-low hover:border-primary/14",
+          ? "border-primary bg-primary/[0.03] ring-1 ring-primary/20"
+          : "border-on-surface/8 bg-surface-container-low hover:border-on-surface/20",
       )}
     >
-      {/* 图片预览 */}
-      <div className="relative aspect-square overflow-hidden rounded-lg border border-on-surface/4 bg-surface-container-lowest">
+      {/* 缩略图主体 */}
+      <div className="relative aspect-square overflow-hidden bg-surface">
         {isReady ? (
           <>
-            {!imageLoaded && !imageFailed ? (
-              <div className="absolute inset-0 z-10 flex items-center justify-center bg-surface-container-lowest">
-                <LoaderCircle className="h-5 w-5 animate-spin text-primary/40" />
+            {!imageLoaded && !imageFailed && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <LoaderCircle className="h-4 w-4 animate-spin text-primary/20" />
               </div>
-            ) : null}
-            {imageFailed ? (
-              <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-error/60">
-                <AlertCircle className="h-6 w-6" />
-                <span className="text-[10px] font-medium">加载失败</span>
-              </div>
-            ) : (
-              <img
-                src={imgSrc}
-                alt={`v${version.version_number}`}
-                loading="lazy"
-                decoding="async"
-                onLoad={() => setImageLoaded(true)}
-                onError={() => setImageFailed(true)}
-                className={cn(
-                  "relative z-10 h-full w-full object-cover transition-opacity duration-200",
-                  imageLoaded ? "opacity-100" : "opacity-0",
-                )}
-              />
             )}
+            <img
+              src={imgSrc}
+              alt="v"
+              onLoad={() => setImageLoaded(true)}
+              onError={() => setImageFailed(true)}
+              className={cn("h-full w-full object-cover transition-opacity", imageLoaded ? "opacity-100" : "opacity-0")}
+            />
           </>
-        ) : isGenerating ? (
-          <div className="flex h-full w-full items-center justify-center">
-            <LoaderCircle className="h-6 w-6 animate-spin text-primary/40" />
-          </div>
         ) : (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-error/60">
-            <AlertCircle className="h-6 w-6" />
-            <span className="text-[10px] font-medium">生成失败</span>
+          <div className="flex h-full w-full items-center justify-center">
+            {isGenerating ? <LoaderCircle className="h-4 w-4 animate-spin text-primary/30" /> : <AlertCircle className="h-4 w-4 text-error/30" />}
           </div>
         )}
 
-        {/* 选中标记 */}
-        {isSelected && isReady && (
-          <div className="absolute right-1 text-[11px] font-semibold text-primary/80 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white/90 shadow-sm z-20">
-            <Check className="h-3.5 w-3.5" />
-          </div>
-        )}
-      </div>
-
-      {/* 信息底部与操作按键区 */}
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between gap-1.5">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className="text-[14px] font-bold text-on-surface">v{version.version_number}</span>
-            {isSelected && (
-              <span className="truncate text-[10px] items-center flex font-semibold text-primary/70">
-                当前版本
-              </span>
-            )}
-            {isApplied && (
-              <span className="truncate text-[10px] items-center flex font-semibold text-emerald-600/80">
-                已应用
-              </span>
-            )}
-          </div>
+        {/* 顶部标签 */}
+        <div className="absolute left-1 top-1 flex items-center gap-1">
+           <span className="rounded bg-black/60 px-1 py-0.5 text-[8px] font-black text-white/90 backdrop-blur-sm">V{version.version_number}</span>
+           {isApplied && (
+             <div className="bg-primary rounded-full p-0.5 ring-1 ring-white/20">
+               <Check className="h-1.5 w-1.5 text-white stroke-[4]" />
+             </div>
+           )}
         </div>
 
-        {/* 四格操作面板 */}
-        {isReady && (
-          <div className="grid grid-cols-2 gap-1.5">
-            <button
-              onClick={(e) => { e.stopPropagation(); onZoom(); }}
-              className="flex h-[26px] items-center justify-center gap-1 whitespace-nowrap rounded-md bg-on-surface/4 text-[11px] font-semibold text-on-surface/80 hover:bg-on-surface/8 hover:text-on-surface active:scale-95"
-              title="查看大图"
-            >
-              <ZoomIn className="h-3 w-3" />
-              查看
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); onRemoveBg(); }}
-              disabled={isRemovingBg || isProcessing}
-              className="flex h-[26px] items-center justify-center gap-1 whitespace-nowrap rounded-md bg-on-surface/4 text-[11px] font-semibold text-on-surface/80 hover:bg-primary/10 hover:text-primary active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
-              title="移除背景"
-            >
-              {isRemovingBg ? <LoaderCircle className="h-3 w-3 animate-spin" /> : <span className="text-[14px] leading-none mb-0.5">✂</span>}
-              抠图
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); onApply(); }}
-              disabled={isApplying || isRemovingBg || isProcessing}
-              className="flex h-[26px] items-center justify-center gap-1 whitespace-nowrap rounded-md bg-primary/10 text-[11px] font-semibold text-primary hover:bg-primary/20 hover:shadow-sm active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
-              title={applyButtonLabel}
-            >
-              {isApplying ? <LoaderCircle className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
-              {applyButtonLabel}
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); onDelete(); }}
-              disabled={isApplying || isRemovingBg || isProcessing}
-              className="flex h-[26px] items-center justify-center gap-1 whitespace-nowrap rounded-md bg-error/5 text-[11px] font-semibold text-error/80 hover:bg-error/15 hover:text-error active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
-              title="移除废弃"
-            >
-              <span className="text-[12px] font-bold">×</span>
-              删除
-            </button>
+        {/* Hover 操作浮层 */}
+        {isReady && !isProcessing && (
+          <div className="absolute inset-x-0 bottom-0 flex h-7 translate-y-full items-center justify-around bg-black/70 px-1 backdrop-blur-md transition-transform group-hover:translate-y-0">
+             <button onClick={(e) => { e.stopPropagation(); onZoom(); }} className="p-1 text-white hover:text-primary transition-colors"><Maximize2 className="h-3 w-3" /></button>
+             <button onClick={(e) => { e.stopPropagation(); onRemoveBg(); }} className="p-1 text-white hover:text-primary transition-colors"><Scissors className="h-3 w-3" /></button>
+             <button onClick={(e) => { e.stopPropagation(); onApply(); }} className="p-1 text-white hover:text-primary transition-colors"><CheckCircle2 className="h-3.5 w-3.5 text-primary" /></button>
+             <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-1 text-white hover:text-error transition-colors"><Trash2 className="h-3 w-3" /></button>
           </div>
+        )}
+
+        {/* 覆盖状态提示 */}
+        {(isApplying || isRemovingBg) && (
+           <div className="absolute inset-0 z-30 flex items-center justify-center bg-surface/60 backdrop-blur-[1px]">
+              <LoaderCircle className="h-5 w-5 animate-spin text-primary" />
+           </div>
         )}
       </div>
     </div>

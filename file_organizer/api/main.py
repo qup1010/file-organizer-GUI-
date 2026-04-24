@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import base64
 import json
 import logging
 import os
 import re
+import time
 from pathlib import Path
 from queue import Empty
 from typing import Any
@@ -13,13 +13,27 @@ from urllib import request as urllib_request
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from file_organizer.app.session_service import OrganizerSessionService
 from file_organizer.app.session_store import SessionStore
+from file_organizer.analysis.vision_runtime import (
+    VISION_TEST_EXPECTED_TEXT,
+    VISION_TEST_IMAGE_DATA_URL,
+    VISION_TEST_IMAGE_MIME_TYPE,
+    VISION_TEST_IMAGE_BYTES,
+    build_registered_vision_image_url,
+    build_vision_request_debug_payload,
+    build_vision_request_kwargs,
+    coerce_response_message,
+    extract_message_text,
+    register_vision_image_bytes,
+    resolve_registered_vision_image,
+    should_retry_with_http_image_url,
+)
 from file_organizer.shared.config import SESSIONS_DIR, SPOOF_HEADERS
-from file_organizer.shared.logging_utils import setup_backend_logging
+from file_organizer.shared.logging_utils import append_debug_event, setup_backend_logging
 from file_organizer.shared.path_utils import get_windows_shell_folder
 
 logger = logging.getLogger(__name__)
@@ -258,17 +272,6 @@ def _normalize_image_generation_probe_url(base_url: str) -> str:
     return f"{normalized.rstrip('/')}/v1/images/generations"
 
 
-_TINY_PNG_DATA_URL = (
-    "data:image/png;base64,"
-    + base64.b64encode(
-        b"\x89PNG\r\n\x1a\n"
-        b"\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
-        b"\x00\x00\x00\x0dIDATx\x9cc\xf8\xcf\xc0\xf0\x1f\x00\x05\x00\x01\xff\x89\x99=\x1d"
-        b"\x00\x00\x00\x00IEND\xaeB`\x82"
-    ).decode("ascii")
-)
-
-
 def _classify_test_error(exc: Exception) -> tuple[str, str]:
     status_code = getattr(exc, "status_code", None)
     if status_code is None:
@@ -375,6 +378,32 @@ def _build_icon_image_test_runtime(payload: SettingsTestPayload, settings_servic
     return runtime
 
 
+def _strip_json_code_fence(value: str) -> str:
+    text = str(value or "").strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.I)
+        text = re.sub(r"\s*```$", "", text)
+    return text.strip()
+
+
+def _extract_vision_test_seen_text(response: Any) -> str:
+    message = coerce_response_message(response)
+    text = _strip_json_code_fence(extract_message_text(getattr(message, "content", "")))
+    if not text:
+        return ""
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        return text
+    if isinstance(parsed, dict):
+        return str(parsed.get("seen_text") or "").strip()
+    return ""
+
+
+def _normalize_vision_test_text(value: str) -> str:
+    return re.sub(r"[^0-9A-Z]+", "", str(value or "").upper())
+
+
 def _probe_image_generation_endpoint(base_url: str, model: str, api_key: str) -> None:
     url = _normalize_image_generation_probe_url(base_url)
     payload = {
@@ -439,6 +468,15 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
     @app.get("/api/health")
     def health():
         return {"status": "ok", "instance_id": os.getenv("FILE_ORGANIZER_INSTANCE_ID")}
+
+    @app.get("/_filepilot/vision-images/{token}")
+    def get_registered_vision_image(token: str):
+        item = resolve_registered_vision_image(token)
+        if item is None:
+            raise HTTPException(status_code=404, detail="VISION_IMAGE_NOT_FOUND")
+        if item.path is not None:
+            return FileResponse(item.path, media_type=item.mime_type)
+        return Response(content=item.data or b"", media_type=item.mime_type)
 
     @app.post("/api/sessions")
     def create_session(payload: CreateSessionPayload):
@@ -1034,7 +1072,7 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
             logger.exception("Register processed version failed")
             raise HTTPException(status_code=500, detail=str(exc))
 
-    def _execute_settings_test(payload: SettingsTestPayload):
+    def _execute_settings_test(payload: SettingsTestPayload, request: Request | None = None):
         from openai import OpenAI
         from file_organizer.shared.config_manager import config_manager
 
@@ -1075,22 +1113,117 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
                             "message": "图片理解模型配置不完整，请补全接口地址、模型 ID 和 API 密钥。" + (f" {hint}" if hint else ""),
                         },
                     )
-                client = OpenAI(api_key=runtime["api_key"], base_url=runtime["base_url"], default_headers=SPOOF_HEADERS)
-                client.chat.completions.create(
-                    model=runtime["model"],
-                    messages=[
-                        {"role": "system", "content": "请只回复 ok。"},
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "text", "text": "请识别这张图片并回复 ok。"},
-                                {"type": "image_url", "image_url": {"url": _TINY_PNG_DATA_URL}},
-                            ],
-                        },
-                    ],
-                    max_tokens=8,
+                debug_payload = build_vision_request_debug_payload(
+                    model=str(runtime["model"]),
+                    base_url=str(runtime["base_url"]),
+                    prompt_mode="test",
+                    mime_type=VISION_TEST_IMAGE_MIME_TYPE,
+                    image_bytes=len(VISION_TEST_IMAGE_BYTES),
+                    data_url_length=len(VISION_TEST_IMAGE_DATA_URL),
                 )
-                return {"status": "ok", "family": family, "code": "ok", "message": "图片理解连接测试已通过。"}
+                append_debug_event(
+                    kind="settings.vision_test.started",
+                    stage="settings",
+                    payload=debug_payload,
+                )
+                started_at = time.perf_counter()
+                client = OpenAI(api_key=runtime["api_key"], base_url=runtime["base_url"], default_headers=SPOOF_HEADERS)
+                system_prompt = (
+                    "你正在进行图片理解能力验证。"
+                    "请严格返回 JSON，不要输出任何额外说明。"
+                    '格式固定为 {"seen_text":"..."}。'
+                )
+                user_prompt = "请读取图片中最显眼的文本，并按 JSON 返回。"
+                try:
+                    response = client.chat.completions.create(
+                        **build_vision_request_kwargs(
+                            model=str(runtime["model"]),
+                        system_prompt=system_prompt,
+                        user_prompt=user_prompt,
+                        image_url=VISION_TEST_IMAGE_DATA_URL,
+                    )
+                )
+                except Exception as exc:
+                    if not should_retry_with_http_image_url(exc, base_url=str(runtime["base_url"])):
+                        raise
+                    http_url = build_registered_vision_image_url(
+                        register_vision_image_bytes(VISION_TEST_IMAGE_BYTES, VISION_TEST_IMAGE_MIME_TYPE),
+                        base_url=str(request.base_url) if request is not None else None,
+                    )
+                    retry_debug_payload = build_vision_request_debug_payload(
+                        model=str(runtime["model"]),
+                        base_url=str(runtime["base_url"]),
+                        prompt_mode="test",
+                        mime_type=VISION_TEST_IMAGE_MIME_TYPE,
+                        image_bytes=len(VISION_TEST_IMAGE_BYTES),
+                        data_url_length=0,
+                        image_source_type="http_url",
+                    )
+                    append_debug_event(
+                        kind="settings.vision_test.retry_http_image_url",
+                        level="WARNING",
+                        stage="settings",
+                        payload={**retry_debug_payload, "reason": "data_url_rejected", "error": exc},
+                    )
+                    response = client.chat.completions.create(
+                        **build_vision_request_kwargs(
+                            model=str(runtime["model"]),
+                            system_prompt=system_prompt,
+                            user_prompt=user_prompt,
+                            image_url=http_url,
+                        )
+                    )
+                    debug_payload = retry_debug_payload
+                actual_text = _extract_vision_test_seen_text(response)
+                duration_ms = round((time.perf_counter() - started_at) * 1000)
+                if _normalize_vision_test_text(actual_text) == _normalize_vision_test_text(VISION_TEST_EXPECTED_TEXT):
+                    append_debug_event(
+                        kind="settings.vision_test.completed",
+                        stage="settings",
+                        payload={
+                            **debug_payload,
+                            "duration_ms": duration_ms,
+                            "verification_expected": VISION_TEST_EXPECTED_TEXT,
+                            "verification_actual": actual_text,
+                        },
+                    )
+                    return {
+                        "status": "ok",
+                        "family": family,
+                        "code": "ok",
+                        "message": f'已验证模型能够识别测试图中的 "{VISION_TEST_EXPECTED_TEXT}"。',
+                        "details": {
+                            "verification_type": "vision_text",
+                            "expected": VISION_TEST_EXPECTED_TEXT,
+                            "actual": actual_text,
+                        },
+                    }
+                append_debug_event(
+                    kind="settings.vision_test.failed",
+                    level="WARNING",
+                    stage="settings",
+                    payload={
+                        **debug_payload,
+                        "duration_ms": duration_ms,
+                        "verification_expected": VISION_TEST_EXPECTED_TEXT,
+                        "verification_actual": actual_text,
+                        "reason": "vision_not_verified",
+                    },
+                )
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "family": family,
+                        "code": "vision_not_verified",
+                        "message": "接口可达，但未验证到真实看图能力。",
+                        "details": {
+                            "verification_type": "vision_text",
+                            "expected": VISION_TEST_EXPECTED_TEXT,
+                            "actual": actual_text,
+                        },
+                    },
+                )
 
             if family == "icon_image":
                 runtime = _build_icon_image_test_runtime(payload, settings_service)
@@ -1121,6 +1254,13 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
             return JSONResponse(status_code=400, content={"status": "error", "family": family, "code": "invalid_family", "message": "不支持的测试类型。"})
         except Exception as exc:
             logger.exception("设置连接测试失败", extra={"family": family})
+            if family == "vision":
+                append_debug_event(
+                    kind="settings.vision_test.failed",
+                    level="ERROR",
+                    stage="settings",
+                    payload={"error": exc},
+                )
             code, message = _classify_test_error(exc)
             return JSONResponse(
                 status_code=400,
@@ -1167,8 +1307,8 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
         return {"status": "ok"}
 
     @app.post("/api/settings/test")
-    def test_settings(payload: SettingsTestPayload):
-        return _execute_settings_test(payload)
+    def test_settings(payload: SettingsTestPayload, request: Request):
+        return _execute_settings_test(payload, request=request)
 
     @app.get("/api/utils/config")
     def get_config():

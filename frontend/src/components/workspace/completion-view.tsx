@@ -1,10 +1,11 @@
 "use client";
 
-import { AlertTriangle, ArrowLeft, CheckCircle2, Folder, History, Info, Layers, RotateCcw, ShieldCheck } from "lucide-react";
-import { JournalSummary } from "@/types/session";
+import { AlertTriangle, ArrowLeft, CheckCircle2, Folder, History, Info, Layers, Palette, RotateCcw, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { OrganizeMethod, JournalSummary } from "@/types/session";
 import { DirectoryTreeDiff, type DirectoryTreeLeafEntry, type DirectoryTreeFilter } from "./directory-tree-diff";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { MarkdownProse } from "./markdown-prose";
 
@@ -14,6 +15,7 @@ interface CompletionViewProps {
   summary: string;
   loading: boolean;
   targetDir: string;
+  organizeMethod?: OrganizeMethod;
   isBusy: boolean;
   readOnly?: boolean;
   onOpenExplorer: (path?: string) => void;
@@ -37,11 +39,16 @@ function summarizeJournalNames(items: { display_name: string }[], limit = 3): st
   return names.join("、") + (items.length > limit ? ` 等 ${items.length} 项` : "");
 }
 
+function normalizeFsPath(path: string): string {
+  return path.replace(/\\/g, "/").replace(/\/+$/, "");
+}
+
 export function CompletionView({
   journal,
   summary,
   loading,
   targetDir,
+  organizeMethod,
   isBusy,
   readOnly = false,
   onOpenExplorer,
@@ -49,6 +56,7 @@ export function CompletionView({
   onRollback,
   onGoHome,
 }: CompletionViewProps) {
+  const router = useRouter();
   const [filter, setFilter] = useState<DirectoryTreeFilter>("all");
   const [rollbackConfirmOpen, setRollbackConfirmOpen] = useState(false);
 
@@ -69,7 +77,7 @@ export function CompletionView({
 
   if (!journal) {
     return (
-      <div className="rounded-[8px] border border-on-surface/8 bg-surface-container-lowest p-12 text-center shadow-[0_8px_24px_rgba(0,0,0,0.04)]">
+      <div className="rounded-[8px] border border-on-surface/12 bg-surface-container-lowest p-12 text-center">
         <History className="mx-auto mb-4 h-12 w-12 text-on-surface-variant/20" />
         <p className="text-sm font-medium text-on-surface-variant">这里暂时还没有可显示的结果。</p>
       </div>
@@ -86,6 +94,31 @@ export function CompletionView({
   const isPartial = (journal.failure_count || 0) > 0;
   const baseLabel = targetDir.split(/[\\/]/).filter(Boolean).at(-1) || "当前目录";
   const moveItemsSummary = summarizeJournalNames(moveItems);
+  const normalizedTargetDir = normalizeFsPath(targetDir);
+  const topLevelCreatedDirs = Array.from(new Map(
+    mkdirItems
+      .map((item) => item.target)
+      .filter((path): path is string => Boolean(path))
+      .map((path) => normalizeFsPath(path))
+      .filter((path) => {
+        if (!normalizedTargetDir) return false;
+        const lowerPath = path.toLowerCase();
+        const lowerBase = normalizedTargetDir.toLowerCase();
+        if (lowerPath === lowerBase) {
+          return false;
+        }
+        const prefix = `${lowerBase}/`;
+        if (!lowerPath.startsWith(prefix)) {
+          return false;
+        }
+        const relative = path.slice(normalizedTargetDir.length).replace(/^[\\/]+/, "");
+        if (!relative) return false;
+        const parts = relative.split(/[\\/]/).filter(Boolean);
+        return parts.length === 1 && parts[0].toLowerCase() !== "review";
+      })
+      .map((path) => [path.toLowerCase(), path] as const),
+  ).values());
+  const canBeautifyCreatedDirs = organizeMethod === "categorize_into_new_structure" && topLevelCreatedDirs.length > 0;
 
   const beforeTree = {
     title: "整理前目录树",
@@ -107,7 +140,7 @@ export function CompletionView({
 
   const afterTree = {
     title: "整理后目录树",
-    subtitle: "执行后的目标目录结构。成功、失败与 Review 会在树中直接标出。",
+    subtitle: "执行后的目标目录结构。成功、失败和待确认区（Review）会在树中标出。",
     leafEntries: moveItems
       .filter((item): item is typeof item & { target: string } => Boolean(item.target))
       .map<DirectoryTreeLeafEntry>((item) => ({
@@ -126,77 +159,115 @@ export function CompletionView({
     emptyLabel: "当前没有可展示的目标目录结构。",
   };
 
+  const handleBeautifyIcons = () => {
+    if (!canBeautifyCreatedDirs) return;
+    router.push(`/icons?import_paths=${encodeURIComponent(JSON.stringify(topLevelCreatedDirs))}`);
+  };
+
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden @container bg-surface pb-4">
-      <div className="flex-1 overflow-y-auto min-h-0 scrollbar-thin">
-      <div className="shrink-0 px-2 py-4 lg:px-4">
-        <section className="space-y-4 px-1">
-          <div className="border-b border-on-surface/10 pb-4 mb-4">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-2">
-                  <div className={cn("flex h-6 w-6 items-center justify-center rounded-[6px]", isPartial ? "bg-error/10 text-error" : "bg-success/10 text-success-dim")}>
-                    {isPartial ? <AlertTriangle className="h-3.5 w-3.5" /> : <ShieldCheck className="h-3.5 w-3.5" />}
-                  </div>
-                  <h2 className="font-headline text-[15px] font-bold tracking-tight text-on-surface">
-                    {isPartial ? "部分条目整理未完成" : "本次整理已顺利执行"}
-                  </h2>
-                </div>
-                <div className="text-[12px] leading-relaxed text-ui-muted pl-8 max-w-[600px] line-clamp-2 hover:line-clamp-none transition-all cursor-default">
-                  {summary ? <MarkdownProse content={summary} /> : "文件已按方案完成移动。"}
-                </div>
-              </div>
-
-              <div className="flex shrink-0 items-center justify-end">
-                  <div className="flex flex-col items-end gap-0.5 text-right">
-                    <span className="text-[10px] font-bold text-ui-muted uppercase tracking-widest opacity-60">目标目录</span>
-                    <span className="text-[11px] font-mono text-on-surface/80 max-w-[240px] truncate bg-on-surface/5 px-2 py-0.5 rounded-[4px]" title={targetDir}>{targetDir}</span>
-                  </div>
-              </div>
+    <div className="flex h-full w-full flex-col overflow-hidden bg-surface">
+      <div className="flex-1 overflow-y-auto min-h-0 scrollbar-thin px-5 py-5 space-y-6">
+        {/* Status Header - Workbench Style */}
+        <div className={cn(
+            "flex items-center gap-4 rounded-lg border px-5 py-2.5",
+            isPartial 
+                ? "border-error/15 bg-error/[0.02] text-error" 
+                : "border-success/15 bg-success/[0.02] text-success-dim"
+        )}>
+            <div className={cn(
+                "flex h-8 w-8 shrink-0 items-center justify-center rounded-md font-black",
+                isPartial ? "bg-error text-white" : "bg-success text-white"
+            )}>
+                {isPartial ? <AlertTriangle className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
             </div>
-          </div>
+            <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 leading-none">
+                    <span className="text-[9px] font-black uppercase tracking-[0.2em] opacity-40">整理结果</span>
+                    <span className="h-0.5 w-0.5 rounded-full bg-current opacity-20" />
+                    <span className="text-[9px] font-black uppercase tracking-[0.2em] opacity-40">{isPartial ? "部分完成" : "已完成"}</span>
+                </div>
+                <h2 className="text-[14px] font-black tracking-tight text-on-surface mt-1 uppercase leading-none">
+                    {isPartial ? "整理已完成，但有部分项目需要处理" : "文件整理已完成"}
+                </h2>
+            </div>
+            <div className="hidden shrink-0 flex-col items-end gap-1 sm:flex">
+                <span className="text-[8px] font-black text-ui-muted uppercase tracking-[0.2em] opacity-30">目标路径</span>
+                <div className="flex items-center gap-2 rounded bg-on-surface/[0.04] px-2 py-0.5 border border-on-surface/5">
+                    <Folder className="h-2.5 w-2.5 opacity-30 text-primary" />
+                    <span className="max-w-[200px] truncate font-mono text-[10px] font-bold text-on-surface/60" title={targetDir}>{targetDir}</span>
+                </div>
+            </div>
+        </div>
 
-          <div className="flex flex-wrap items-center gap-8 mt-2">
+        {/* Metrics Grid - High Density */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {[
-              { label: "成功移动", count: journal.success_count || 0, icon: CheckCircle2, color: "text-primary", bg: "bg-primary/5" },
-              { label: "执行失败", count: journal.failure_count || 0, icon: AlertTriangle, color: isPartial ? "text-error" : "text-ui-muted", bg: isPartial ? "bg-error/10" : "bg-on-surface/5" },
-              { label: "Review 保留", count: reviewItems.length, icon: Layers, color: "text-warning", bg: "bg-warning/10" },
-              { label: "总计条目", count: journal.item_count || 0, icon: Folder, color: "text-ui-muted", bg: "bg-on-surface/5" },
+                { label: "成功移动", count: journal.success_count || 0, icon: CheckCircle2, color: "text-success-dim", bg: "bg-success/5" },
+                { label: "执行失败", count: journal.failure_count || 0, icon: AlertTriangle, color: isPartial ? "text-error" : "text-ui-muted", bg: isPartial ? "bg-error/5" : "bg-on-surface/5" },
+                { label: "待确认区", count: reviewItems.length, icon: Layers, color: "text-warning", bg: "bg-warning/5" },
+                { label: "处理总数", count: journal.item_count || 0, icon: History, color: "text-primary", bg: "bg-primary/5" },
             ].map((stat, i) => (
-              <div key={i} className="flex items-center gap-3">
-                <div className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px]", stat.bg, stat.color)}>
-                  <stat.icon className="h-4 w-4" />
+                <div key={i} className="flex flex-col gap-0.5 rounded-lg border border-on-surface/6 bg-on-surface/[0.015] p-2.5 transition-all hover:bg-on-surface/[0.03]">
+                    <div className="flex items-center justify-between">
+                        <stat.icon className={cn("h-3 w-3 opacity-40", stat.color)} />
+                        <div className={cn("text-[17px] font-black tabular-nums leading-none tracking-tighter", stat.color)}>
+                            {stat.count}
+                        </div>
+                    </div>
+                    <div className="text-[9px] font-black uppercase tracking-widest text-ui-muted opacity-40">
+                        {stat.label}
+                    </div>
                 </div>
-                <div className="flex items-baseline gap-1.5">
-                  <span className={cn("font-headline text-[16px] font-bold tracking-tight leading-none", stat.color === "text-ui-muted" ? "text-on-surface" : stat.color)}>{stat.count}</span>
-                  <span className="text-[11px] font-medium text-ui-muted opacity-80">{stat.label}</span>
-                </div>
-              </div>
             ))}
-          </div>
-        </section>
-      </div>
+        </div>
 
-      <div className="shrink-0 flex flex-col px-4 lg:px-6 pt-2 pb-4 gap-6">
-        <section className="flex flex-col">
-          <div className="shrink-0 flex items-center justify-between border-b border-on-surface/10 pb-3 mb-2">
-            <h3 className="text-[13px] font-bold font-headline text-on-surface flex items-center gap-2">
-              <History className="h-4 w-4 opacity-40" />
-              执行前后结构变化
-            </h3>
-            <div className="flex items-center gap-1 rounded-[6px] border border-on-surface/8 bg-surface p-1 shadow-sm">
+        {/* Action Suggestion: Beautify Icons - Promoted to Card */}
+        {canBeautifyCreatedDirs ? (
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center justify-between rounded-lg border border-primary/20 bg-primary/[0.01] p-3.5 transition-colors hover:bg-primary/[0.02]">
+           <div className="flex items-center gap-4">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                 <Palette className="h-4.5 w-4.5" />
+              </div>
+              <div className="min-w-0">
+                 <h3 className="text-[13px] font-black tracking-tight text-on-surface uppercase">为整理后的目录美化图标？</h3>
+                 <p className="mt-0.5 text-[11px] font-medium leading-relaxed text-ui-muted opacity-60">
+                    可以把本次新建出来的目录直接带入“图标工坊”，继续生成并应用更有辨识度的文件夹图标。
+                 </p>
+              </div>
+           </div>
+           <button
+              type="button"
+              onClick={handleBeautifyIcons}
+              disabled={isBusy}
+              className="shrink-0 flex h-8 items-center justify-center gap-2 rounded-md bg-primary px-5 text-[11px] font-black text-white transition-all hover:bg-primary-dim active:scale-95 disabled:opacity-50 uppercase tracking-widest"
+            >
+              <Palette className="h-3.5 w-3.5" />
+              去生成文件夹图标
+           </button>
+        </div>
+        ) : null}
+
+        {/* Structure Visualization */}
+        <section className="flex flex-col space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-ui-muted opacity-40">整理结果对照</span>
+                <span className="h-0.5 w-0.5 rounded-full bg-on-surface/10" />
+                <h3 className="text-[12px] font-black text-on-surface uppercase tracking-tight">整理前后变化</h3>
+            </div>
+            <div className="flex items-center gap-0.5 rounded-md border border-on-surface/8 bg-on-surface/[0.02] p-0.5">
               {[
                 { id: "all", label: "全部" },
                 { id: "failed", label: `失败 (${journal.failure_count || 0})` },
-                { id: "review", label: `Review (${reviewItems.length})` },
+                { id: "review", label: `待确认 (${reviewItems.length})` },
               ].map((btn) => (
                 <button
                   key={btn.id}
                   onClick={() => setFilter(btn.id as DirectoryTreeFilter)}
                   className={cn(
-                    "rounded-[4px] px-3.5 py-1.5 text-[11px] font-bold transition-all",
+                    "rounded-[3px] px-2.5 py-1 text-[10px] font-black uppercase tracking-widest transition-all",
                     filter === btn.id
-                      ? "bg-on-surface/8 text-on-surface shadow-sm"
+                      ? "bg-on-surface text-surface"
                       : "text-ui-muted hover:text-on-surface hover:bg-on-surface/5",
                   )}
                 >
@@ -205,32 +276,33 @@ export function CompletionView({
               ))}
             </div>
           </div>
-          <div className="pb-2">
+          
+          <div className="rounded-lg border border-on-surface/8 bg-transparent overflow-hidden">
             <DirectoryTreeDiff before={beforeTree} after={afterTree} filter={filter} />
           </div>
         </section>
 
         {(failedItems.length > 0 || reviewItems.length > 0) ? (
-          <section className="shrink-0 flex flex-col gap-3 pb-6">
+          <section className="shrink-0 flex flex-col gap-4 pb-6">
             <div className={cn("grid gap-4", (failedItems.length > 0 && reviewItems.length > 0) ? "lg:grid-cols-2" : "grid-cols-1")}>
               {failedItems.length > 0 && (
-                <div className="flex flex-col rounded-[12px] border border-error/12 bg-error-container/10 overflow-hidden">
-                  <div className="flex items-center gap-2 px-4 py-2.5 border-b border-error/8 bg-error/5">
-                    <AlertTriangle className="h-4 w-4 text-error" />
-                    <h3 className="text-[13px] font-bold text-error">异常项整理失败 ({failedItems.length})</h3>
+                <div className="flex flex-col rounded-lg border border-error/15 bg-error/[0.01] overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-2 border-b border-error/10 bg-error/5">
+                    <div className="flex items-center gap-2">
+                        <AlertTriangle className="h-3 w-3 text-error" />
+                        <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-error">失败项</h3>
+                    </div>
+                    <span className="font-mono text-[9px] font-bold text-error/60">{failedItems.length} 项</span>
                   </div>
-                  <div className="p-2">
-                    <div className="grid grid-cols-1 @[800px]:grid-cols-2 @[1200px]:grid-cols-3 gap-1.5 focus:outline-none">
+                  <div className="p-1 max-h-[280px] overflow-y-auto scrollbar-thin">
+                    <div className="flex flex-col">
                       {failedItems.map((item, idx) => (
-                        <div key={idx} className="flex items-center justify-between gap-3 px-3 py-1.5 rounded-[6px] hover:bg-error/5 transition-colors border border-transparent hover:border-error/10">
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-[12px] font-medium text-on-surface" title={item.display_name}>{item.display_name}</p>
-                            {renderItemMeta(item) ? (
-                              <p className="truncate text-[10px] font-bold text-ui-muted">{renderItemMeta(item)}</p>
-                            ) : null}
-                            <p className="truncate text-[10px] text-error/60 font-mono" title={item.target || ""}>{item.target}</p>
+                        <div key={idx} className="group flex flex-col gap-1 p-2 transition-colors hover:bg-error/5 border-b border-error/5 last:border-0 text-[11px]">
+                          <p className="truncate font-mono font-black text-on-surface/90" title={item.display_name}>{item.display_name}</p>
+                          <div className="flex items-center gap-2 opacity-50">
+                             <span className="text-[8px] font-black uppercase text-error/60">目标</span>
+                             <p className="truncate font-mono text-[9px] text-error/70" title={item.target || ""}>{item.target}</p>
                           </div>
-                          <AlertTriangle className="h-3 w-3 text-error/30 shrink-0" />
                         </div>
                       ))}
                     </div>
@@ -239,23 +311,23 @@ export function CompletionView({
               )}
 
               {reviewItems.length > 0 && (
-                <div className="flex flex-col rounded-[12px] border border-warning/15 bg-warning-container/10 overflow-hidden">
-                  <div className="flex items-center gap-2 px-4 py-2.5 border-b border-warning/10 bg-warning/5">
-                    <Info className="h-4 w-4 text-warning" />
-                    <h3 className="text-[13px] font-bold text-warning-dim">归档至 Review 目录 ({reviewItems.length})</h3>
+                <div className="flex flex-col rounded-lg border border-warning/20 bg-warning/[0.01] overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-2 border-b border-warning/15 bg-warning/5">
+                    <div className="flex items-center gap-2">
+                        <Info className="h-3 w-3 text-warning-dim" />
+                        <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-warning-dim">待确认区</h3>
+                    </div>
+                    <span className="font-mono text-[9px] font-bold text-warning-dim/60">{reviewItems.length} 项</span>
                   </div>
-                  <div className="p-2">
-                    <div className="grid grid-cols-1 @[800px]:grid-cols-2 @[1200px]:grid-cols-3 gap-1.5 focus:outline-none">
+                  <div className="p-1 max-h-[280px] overflow-y-auto scrollbar-thin">
+                    <div className="flex flex-col font-mono">
                       {reviewItems.map((item, idx) => (
-                        <div key={idx} className="flex items-center justify-between gap-3 px-3 py-1.5 rounded-[6px] hover:bg-warning/5 transition-colors border border-transparent hover:border-warning/10">
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-[12px] font-medium text-on-surface" title={item.display_name}>{item.display_name}</p>
-                            {renderItemMeta(item) ? (
-                              <p className="truncate text-[10px] font-bold text-ui-muted">{renderItemMeta(item)}</p>
-                            ) : null}
-                            <p className="truncate text-[10px] text-warning-dim/60 font-mono" title={item.target || ""}>{item.target}</p>
+                        <div key={idx} className="group flex flex-col gap-1 p-2 transition-colors hover:bg-warning/5 border-b border-warning/5 last:border-0 text-[11px]">
+                          <p className="truncate font-black text-on-surface/90" title={item.display_name}>{item.display_name}</p>
+                          <div className="flex items-center gap-2 opacity-60">
+                             <span className="text-[8px] font-black uppercase text-warning-dim/70">目标</span>
+                             <p className="truncate text-[9px] text-warning-dim/80" title={item.target || ""}>{item.target}</p>
                           </div>
-                          <Layers className="h-3 w-3 text-warning/30 shrink-0" />
                         </div>
                       ))}
                     </div>
@@ -266,51 +338,50 @@ export function CompletionView({
           </section>
         ) : null}
       </div>
-      </div>
 
-      <div className="shrink-0 border-t border-on-surface/10 pt-4 px-4 lg:px-6 mt-2 relative z-10">
-        <div className={cn("flex items-center justify-between gap-4", readOnly ? "flex-row-reverse" : "")}>
-          <div className="flex items-center gap-3">
+      <div className="shrink-0 border-t border-on-surface/8 pt-3 pb-5 px-4 lg:px-6 bg-surface-container-lowest/50 backdrop-blur-sm relative z-10">
+        <div className={cn("flex flex-wrap items-center justify-between gap-4", readOnly ? "flex-row-reverse" : "")}>
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={onGoHome}
               disabled={isBusy}
-              className="group flex h-9 items-center justify-center gap-2 rounded-[8px] border border-on-surface/10 bg-surface-container-lowest px-4 text-[13px] font-bold text-on-surface-variant transition-all hover:bg-on-surface/5 active:scale-95 disabled:opacity-50"
+              className="group flex h-8.5 items-center justify-center gap-2 rounded-lg border border-on-surface/10 bg-surface px-3.5 text-[11.5px] font-black text-on-surface/60 transition-all hover:bg-on-surface/5 active:scale-95 disabled:opacity-50"
             >
-              <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
+              <ArrowLeft className="h-3.5 w-3.5 transition-transform group-hover:-translate-x-0.5" />
               返回首页
             </button>
+            <div className="h-5 w-px bg-on-surface/10 mx-1" />
             <button
               type="button"
               onClick={() => onOpenExplorer(targetDir)}
               disabled={isBusy}
-              className="flex h-9 items-center justify-center gap-2 rounded-[8px] bg-primary px-5 text-[13px] font-bold text-white transition-all hover:bg-primary-dim hover:shadow-lg active:scale-95 disabled:opacity-50"
+              className="flex h-8.5 items-center justify-center gap-2 rounded-lg bg-on-surface px-4 text-[11.5px] font-black text-surface transition-all hover:bg-on-surface/90 active:scale-95 disabled:opacity-50"
             >
-              <Folder className="h-4 w-4" />
-              打开目录
+              <Folder className="h-3.5 w-3.5" />
+              打开整理目录
             </button>
           </div>
 
           {!readOnly && (
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={onCleanupDirs}
                 disabled={isBusy}
-                className="flex h-9 items-center justify-center gap-2 rounded-[8px] border border-on-surface/10 bg-surface-container-lowest px-4 text-[13px] font-bold text-on-surface-variant transition-all hover:bg-on-surface/5 active:scale-95 disabled:opacity-50"
+                className="flex h-8.5 items-center justify-center gap-2 rounded-lg border border-on-surface/10 bg-surface px-3.5 text-[11.5px] font-black text-on-surface/50 transition-all hover:bg-on-surface/5 active:scale-95 disabled:opacity-50"
               >
-                <CheckCircle2 className="h-4 w-4 opacity-60" />
+                <CheckCircle2 className="h-3.5 w-3.5 opacity-50" />
                 清理空目录
               </button>
-              <div className="h-4 w-px bg-on-surface/10 mx-1" />
               <button
                 type="button"
                 onClick={() => setRollbackConfirmOpen(true)}
                 disabled={isBusy}
-                className="flex h-9 items-center justify-center gap-2 rounded-[8px] border border-error/20 bg-error-container/10 px-4 text-[13px] font-bold text-error transition-all hover:bg-error-container/20 active:scale-95 disabled:opacity-50"
+                className="flex h-8.5 items-center justify-center gap-2 rounded-lg border border-error/20 bg-error/5 px-3.5 text-[11.5px] font-black text-error/70 transition-all hover:bg-error/10 active:scale-95 disabled:opacity-50"
               >
-                <RotateCcw className="h-4 w-4" />
-                危险：还原操作
+                <RotateCcw className="h-3.5 w-3.5" />
+                回退整理
               </button>
             </div>
           )}
@@ -320,7 +391,7 @@ export function CompletionView({
       <ConfirmDialog
         open={rollbackConfirmOpen}
         title="确认回退这次整理？"
-        description={`这会尝试把本次整理移动过的 ${moveItems.length} 项内容放回原位置${reviewItems.length > 0 ? `，其中 ${reviewItems.length} 项当前位于 Review` : ""}${moveItemsSummary ? `。涉及条目：${moveItemsSummary}` : ""}。已存在冲突或被占用的文件，回退时仍可能失败。`}
+        description={`这会尝试把本次整理移动过的 ${moveItems.length} 项内容放回原位置${reviewItems.length > 0 ? `，其中 ${reviewItems.length} 项当前位于待确认区（Review）` : ""}${moveItemsSummary ? `。涉及条目：${moveItemsSummary}` : ""}。已存在冲突或被占用的文件，回退时仍可能失败。`}
         confirmLabel="开始回退"
         cancelLabel="先不回退"
         tone="danger"

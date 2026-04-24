@@ -1,5 +1,6 @@
 import io
 import json
+import os
 from collections import Counter
 import unittest
 from unittest import mock
@@ -265,7 +266,15 @@ class ApiConfigTests(unittest.TestCase):
 
     def test_test_settings_vision_sends_inline_image_probe(self):
         mock_client = mock.Mock()
-        mock_client.chat.completions.create.return_value = mock.Mock()
+        mock_client.chat.completions.create.return_value = {
+            "choices": [
+                {
+                    "message": {
+                        "content": '{"seen_text":"vision\\n test 42"}',
+                    }
+                }
+            ]
+        }
         with mock.patch("openai.OpenAI", return_value=mock_client):
             response = self.client.post(
                 "/api/settings/test",
@@ -282,9 +291,80 @@ class ApiConfigTests(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["message"], '已验证模型能够识别测试图中的 "VISION TEST 42"。')
+        self.assertEqual(response.json()["details"]["expected"], "VISION TEST 42")
         messages = mock_client.chat.completions.create.call_args.kwargs["messages"]
         self.assertEqual(messages[1]["content"][1]["type"], "image_url")
-        self.assertIn("data:image/png;base64,", messages[1]["content"][1]["image_url"]["url"])
+        self.assertIn("data:image/", messages[1]["content"][1]["image_url"]["url"])
+        self.assertIn(";base64,", messages[1]["content"][1]["image_url"]["url"])
+
+    def test_test_settings_vision_retries_local_http_image_when_data_url_rejected(self):
+        mock_client = mock.Mock()
+        mock_client.chat.completions.create.side_effect = [
+            RuntimeError("The image data you provided does not represent a valid image."),
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "content": '{"seen_text":"VISION TEST 42"}',
+                        }
+                    }
+                ]
+            },
+        ]
+        with mock.patch("openai.OpenAI", return_value=mock_client), mock.patch.dict(
+            os.environ,
+            {"FILEPILOT_VISION_HTTP_FALLBACK": "1"},
+        ):
+            response = self.client.post(
+                "/api/settings/test",
+                json={
+                    "family": "vision",
+                    "preset": {
+                        "name": "本地视觉模型",
+                        "IMAGE_ANALYSIS_NAME": "本地视觉模型",
+                        "IMAGE_ANALYSIS_BASE_URL": "http://localhost:8317/v1",
+                        "IMAGE_ANALYSIS_MODEL": "gpt-5.2",
+                    },
+                    "secret": {"action": "replace", "value": "vision-secret"},
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mock_client.chat.completions.create.call_count, 2)
+        retry_messages = mock_client.chat.completions.create.call_args_list[1].kwargs["messages"]
+        retry_url = retry_messages[1]["content"][1]["image_url"]["url"]
+        self.assertTrue(retry_url.startswith("http://testserver/_filepilot/vision-images/"))
+
+    def test_test_settings_vision_rejects_non_verified_result(self):
+        mock_client = mock.Mock()
+        mock_client.chat.completions.create.return_value = {
+            "choices": [
+                {
+                    "message": {
+                        "content": '{"seen_text":"hello world"}',
+                    }
+                }
+            ]
+        }
+        with mock.patch("openai.OpenAI", return_value=mock_client):
+            response = self.client.post(
+                "/api/settings/test",
+                json={
+                    "family": "vision",
+                    "preset": {
+                        "IMAGE_ANALYSIS_NAME": "视觉模型",
+                        "IMAGE_ANALYSIS_BASE_URL": "https://vision.example/v1",
+                        "IMAGE_ANALYSIS_MODEL": "gpt-4.1-mini",
+                    },
+                    "secret": {"action": "replace", "value": "vision-secret"},
+                },
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["code"], "vision_not_verified")
+        self.assertEqual(response.json()["details"]["expected"], "VISION TEST 42")
+        self.assertEqual(response.json()["details"]["actual"], "hello world")
 
     def test_test_settings_icon_image_accepts_400_as_endpoint_reachable(self):
         with mock.patch("urllib.request.urlopen", side_effect=urllib_error.HTTPError(

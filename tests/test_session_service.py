@@ -80,6 +80,51 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         self.assertIsNotNone(resumed.restorable_session)
         self.assertEqual(resumed.restorable_session.session_id, created.session.session_id)
 
+    def test_create_session_does_not_resume_when_source_collection_differs(self):
+        source_a = self.root / "SourceA"
+        source_b = self.root / "SourceB"
+        source_a.mkdir()
+        source_b.mkdir()
+
+        created = self.service.create_session(
+            [{"source_type": "directory", "path": str(source_a), "directory_mode": "atomic"}],
+            resume_if_exists=False,
+            organize_method="categorize_into_new_structure",
+            output_dir=str(self.target_dir),
+        )
+
+        next_result = self.service.create_session(
+            [{"source_type": "directory", "path": str(source_b), "directory_mode": "atomic"}],
+            resume_if_exists=True,
+            organize_method="categorize_into_new_structure",
+            output_dir=str(self.target_dir),
+        )
+
+        self.assertEqual(next_result.mode, "created")
+        self.assertIsNotNone(next_result.session)
+        self.assertNotEqual(next_result.session.session_id, created.session.session_id)
+        abandoned = self.store.load(created.session.session_id)
+        self.assertEqual(abandoned.stage, "abandoned")
+
+    def test_create_session_does_not_resume_when_strategy_differs(self):
+        created = self.service.create_session(
+            str(self.target_dir),
+            resume_if_exists=False,
+            strategy={"note": "旧要求"},
+        )
+
+        next_result = self.service.create_session(
+            str(self.target_dir),
+            resume_if_exists=True,
+            strategy={"note": "新要求"},
+        )
+
+        self.assertEqual(next_result.mode, "created")
+        self.assertIsNotNone(next_result.session)
+        self.assertNotEqual(next_result.session.session_id, created.session.session_id)
+        abandoned = self.store.load(created.session.session_id)
+        self.assertEqual(abandoned.stage, "abandoned")
+
     def test_create_session_allows_new_session_when_latest_session_completed(self):
         created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
         session = created.session
@@ -419,6 +464,33 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         self.assertEqual(scanned.stage, "planning")
         self.assertEqual(scanned.scan_lines, "a.txt | 文档 | A")
         self.assertEqual(scanned.scanner_progress["status"], "completed")
+
+    def test_initial_source_collection_scan_progress_uses_selected_source_count(self):
+        extra_dir = self.target_dir / "extra"
+        extra_dir.mkdir()
+        for index in range(20):
+            (extra_dir / f"noise-{index}.txt").write_text("noise", encoding="utf-8")
+
+        selected_files = []
+        for name in ["a.txt", "b.txt", "c.txt", "d.txt"]:
+            path = self.target_dir / name
+            path.write_text(name, encoding="utf-8")
+            selected_files.append({"source_type": "file", "path": str(path)})
+
+        created = self.service.create_session(
+            selected_files,
+            resume_if_exists=False,
+            organize_method="categorize_into_new_structure",
+            output_dir=str(self.target_dir),
+        )
+        session = created.session
+        assert session is not None
+
+        progress = self.service._initial_source_collection_scan_progress(session)
+
+        self.assertEqual(progress["total_count"], 4)
+        self.assertEqual(len(progress["recent_analysis_items"]), 4)
+        self.assertEqual(progress["message"], "正在读取本次整理来源")
 
     def test_start_scan_in_incremental_mode_enters_target_selection_without_auto_planning(self):
         created = self.service.create_session(
@@ -1627,12 +1699,45 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         assert session is not None
         session.stage = "scanning"
         self.store.save(session)
+        session.updated_at = "2000-01-01T00:00:00+00:00"
+        (self.store.sessions_dir / f"{session.session_id}.json").write_text(
+            json.dumps(session.to_dict(), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
 
         snapshot = self.service.get_snapshot(session.session_id)
 
         self.assertEqual(snapshot["stage"], "interrupted")
         self.assertEqual(snapshot["integrity_flags"]["interrupted_during"], "scanning")
         self.assertEqual(snapshot["last_error"], "scanning_interrupted")
+
+    def test_get_snapshot_keeps_recent_scanning_session_active(self):
+        created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
+        session = created.session
+        assert session is not None
+        session.stage = "scanning"
+        self.store.save(session)
+
+        snapshot = self.service.get_snapshot(session.session_id)
+
+        self.assertEqual(snapshot["stage"], "scanning")
+        self.assertNotIn("interrupted_during", snapshot["integrity_flags"])
+
+    def test_get_snapshot_keeps_registered_sync_scanning_session_active(self):
+        created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
+        session = created.session
+        assert session is not None
+        session.stage = "scanning"
+        session.updated_at = "2000-01-01T00:00:00+00:00"
+        self.store.save(session)
+        self.service._mark_scan_active(session.session_id)
+        try:
+            snapshot = self.service.get_snapshot(session.session_id)
+        finally:
+            self.service._mark_scan_inactive(session.session_id)
+
+        self.assertEqual(snapshot["stage"], "scanning")
+        self.assertNotIn("interrupted_during", snapshot["integrity_flags"])
 
     def test_list_history_recovers_orphaned_locked_session(self):
         created = self.service.create_session(str(self.target_dir), resume_if_exists=False)

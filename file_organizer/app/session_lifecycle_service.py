@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -7,8 +8,23 @@ if TYPE_CHECKING:
 
 
 class SessionLifecycleService:
+    _SCANNING_RECOVERY_GRACE_SECONDS = 45
+
     def __init__(self, helpers: "OrganizerSessionService"):
         self.helpers = helpers
+
+    def _scanning_session_recently_active(self, session: "OrganizerSession") -> bool:
+        timestamp_text = str(session.updated_at or session.created_at or "").strip()
+        if not timestamp_text:
+            return False
+        try:
+            activity_at = datetime.fromisoformat(timestamp_text.replace("Z", "+00:00"))
+        except ValueError:
+            return False
+        if activity_at.tzinfo is None:
+            activity_at = activity_at.replace(tzinfo=timezone.utc)
+        age_seconds = (datetime.now(timezone.utc) - activity_at).total_seconds()
+        return age_seconds < self._SCANNING_RECOVERY_GRACE_SECONDS
 
     def abandon_session(self, session_id: str) -> dict:
         session = self.helpers._load_or_raise(session_id)
@@ -58,7 +74,12 @@ class SessionLifecycleService:
             return
 
         interrupted_during = session.stage
-        if interrupted_during == "scanning" and self.helpers.async_scanner.is_running(session.session_id):
+        if interrupted_during == "scanning" and (
+            self.helpers._is_scan_active(session.session_id)
+            or self.helpers.async_scanner.is_running(session.session_id)
+        ):
+            return
+        if interrupted_during == "scanning" and self._scanning_session_recently_active(session):
             return
 
         session.stage = "interrupted"

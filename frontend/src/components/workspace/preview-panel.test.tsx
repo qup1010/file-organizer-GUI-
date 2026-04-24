@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PreviewPanel } from "./preview-panel";
@@ -105,19 +105,18 @@ describe("PreviewPanel", () => {
       />,
     );
 
-    expect(screen.getByText("点击条目后，右侧会显示更详细的检查信息。")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "查看" })).toBeInTheDocument();
+    expect(screen.getByText("待处理队列")).toBeInTheDocument();
+    expect(screen.getByText("待人工核对")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "收起" }));
 
-    expect(screen.queryByText("点击条目后，右侧会显示更详细的检查信息。")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "查看" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "展开列表" })).toBeInTheDocument();
     expect(screen.getByText("待处理队列")).toBeInTheDocument();
     expect(screen.getAllByText("待核对 1").length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole("button", { name: "展开" }));
+    fireEvent.click(screen.getByRole("button", { name: "展开列表" }));
 
-    expect(screen.getByText("点击条目后，右侧会显示更详细的检查信息。")).toBeInTheDocument();
+    expect(screen.getByText("待人工核对")).toBeInTheDocument();
   });
 
   it("shows pending-review state instead of syncing when review items still need checking", () => {
@@ -162,7 +161,7 @@ describe("PreviewPanel", () => {
 
     expect(screen.getAllByText("待处理 1").length).toBeGreaterThan(0);
     expect(screen.getByText("仍有 1 项待核对。")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "先处理待处理队列" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "先处理待处理项" })).toBeInTheDocument();
     expect(screen.queryByText("同步中")).not.toBeInTheDocument();
   });
 
@@ -200,11 +199,102 @@ describe("PreviewPanel", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "全部保留在 Review，稍后查看" }));
+    fireEvent.click(screen.getByRole("button", { name: "全部留在待确认区，稍后查看" }));
 
     expect(screen.queryByText("待处理队列")).not.toBeInTheDocument();
     expect(screen.getByText("已保留")).toBeInTheDocument();
     expect(screen.queryAllByText("待核对").length).toBe(0);
+  });
+
+  it("starts precheck immediately after accepting the last review-only queue item", async () => {
+    const onRunPrecheck = vi.fn();
+
+    render(
+      <PreviewPanel
+        plan={{
+          ...createPlan(),
+          items: [
+            {
+              item_id: "item-review-1",
+              display_name: "important_invoice_301.exe",
+              source_relpath: "incoming/important_invoice_301.exe",
+              target_slot_id: "Review",
+              status: "review",
+              mapping_status: "review",
+              suggested_purpose: "Review",
+              content_summary: "待人工核对",
+              reason: "用途不够稳定",
+              confidence: 0.62,
+            },
+          ],
+          stats: {
+            directory_count: 1,
+            move_count: 1,
+            unresolved_count: 0,
+          },
+          readiness: {
+            can_precheck: true,
+          },
+        }}
+        stage="ready_for_precheck"
+        isBusy={false}
+        plannerStatus={{
+          isRunning: false,
+          preservingPreviousPlan: false,
+        }}
+        onRunPrecheck={onRunPrecheck}
+        onUpdateItem={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "全部留在待确认区，并开始检查" }));
+
+    await waitFor(() => {
+      expect(onRunPrecheck).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("allows direct precheck from planning stage once readiness is satisfied", () => {
+    render(
+      <PreviewPanel
+        plan={{
+          ...createPlan(),
+          items: [
+            {
+              item_id: "item-review-1",
+              display_name: "important_invoice_301.exe",
+              source_relpath: "incoming/important_invoice_301.exe",
+              target_slot_id: "Review",
+              status: "review",
+              mapping_status: "review",
+              suggested_purpose: "Review",
+              content_summary: "待人工核对",
+              reason: "用途不够稳定",
+              confidence: 0.62,
+            },
+          ],
+          stats: {
+            directory_count: 1,
+            move_count: 1,
+            unresolved_count: 0,
+          },
+          readiness: {
+            can_precheck: true,
+          },
+        }}
+        stage="planning"
+        isBusy={false}
+        plannerStatus={{
+          isRunning: false,
+          preservingPreviousPlan: false,
+        }}
+        onRunPrecheck={() => {}}
+        onUpdateItem={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "全部留在待确认区，并开始检查" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "检查移动风险" })).toBeEnabled();
   });
 
   it("lets users click the footer notice to jump back to the pending queue", () => {
@@ -242,10 +332,10 @@ describe("PreviewPanel", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "收起" }));
-    expect(screen.queryByText("点击条目后，右侧会显示更详细的检查信息。")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "展开列表" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "仍有 1 项待核对。 点击查看" }));
-    expect(screen.getByText("点击条目后，右侧会显示更详细的检查信息。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "收起" })).toBeInTheDocument();
   });
 
   it("shows the before tree by default while planning is running", () => {
@@ -293,7 +383,7 @@ describe("PreviewPanel", () => {
       />,
     );
 
-    fireEvent.click(screen.getAllByRole("button", { name: "后" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "PLAN 建议" })[0]);
 
     expect(screen.getByText("整理后结构尚在生成")).toBeInTheDocument();
     expect(screen.getByText("先切回“前”查看原始目录，方案稳定后这里会自动出现整理后结构。")).toBeInTheDocument();
@@ -342,7 +432,7 @@ describe("PreviewPanel", () => {
       />,
     );
 
-    fireEvent.click(screen.getAllByRole("button", { name: "后" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "PLAN 建议" })[0]);
 
     expect(screen.getAllByText("Review").length).toBeGreaterThan(0);
     expect(screen.queryByText("D:")).not.toBeInTheDocument();
@@ -373,7 +463,7 @@ describe("PreviewPanel", () => {
     const footer = screen.getByTestId("preview-footer");
 
     expect(scrollRegion.contains(footer)).toBe(false);
-    expect(screen.getByRole("button", { name: "等待进入预检阶段" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "等待方案准备好" })).toBeInTheDocument();
   });
 
   it("shows incremental mapping rows before the structure reference", () => {
@@ -442,8 +532,8 @@ describe("PreviewPanel", () => {
       />,
     );
 
-    expect(screen.getByText("归属映射")).toBeInTheDocument();
-    expect(screen.getByText("contract.pdf -> Finance/合同")).toBeInTheDocument();
+    expect(screen.getByText("归属映射清单")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /contract\.pdf.*Finance\/合同/ })).toBeInTheDocument();
     expect(screen.getByText("结构参考")).toBeInTheDocument();
   });
 
@@ -513,10 +603,8 @@ describe("PreviewPanel", () => {
       />,
     );
 
-    fireEvent.click(screen.getAllByRole("button", { name: "后" })[0]);
-
     expect(screen.getByText("Finance")).toBeInTheDocument();
     expect(screen.getByText("合同")).toBeInTheDocument();
-    expect(screen.getByText("contract.pdf")).toBeInTheDocument();
+    expect(screen.getAllByText("contract.pdf").length).toBeGreaterThan(0);
   });
 });

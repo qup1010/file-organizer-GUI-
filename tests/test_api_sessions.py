@@ -173,35 +173,31 @@ class SessionApiTests(unittest.TestCase):
         self.assertEqual(response.json()["error_code"], "TASK_TYPE_CONFLICT")
 
     def test_post_sessions_returns_resume_available_when_previous_session_exists(self):
+        request_payload = {
+            "sources": [{"source_type": "directory", "path": str(self.target_dir), "directory_mode": "contents"}],
+            "resume_if_exists": False,
+            "organize_method": "categorize_into_new_structure",
+            "output_dir": str(self.target_dir),
+            "strategy": {
+                "template_id": "project_workspace",
+                "organize_method": "categorize_into_new_structure",
+                "language": "en",
+                "density": "normal",
+                "prefix_style": "none",
+                "caution_level": "balanced",
+                "note": "旧策略",
+            },
+        }
         created = self.client.post(
             "/api/sessions",
-            json={
-                "target_dir": str(self.target_dir),
-                "resume_if_exists": False,
-                "strategy": {
-                    "template_id": "project_workspace",
-                    "language": "en",
-                    "density": "normal",
-                    "prefix_style": "none",
-                    "caution_level": "balanced",
-                    "note": "旧策略",
-                },
-            },
+            json=request_payload,
         ).json()
 
         response = self.client.post(
             "/api/sessions",
             json={
-                "target_dir": str(self.target_dir),
+                **request_payload,
                 "resume_if_exists": True,
-                "strategy": {
-                    "template_id": "study_materials",
-                    "language": "zh",
-                    "density": "normal",
-                    "prefix_style": "none",
-                    "caution_level": "conservative",
-                    "note": "新策略不应覆盖旧会话",
-                },
             },
         )
 
@@ -211,6 +207,45 @@ class SessionApiTests(unittest.TestCase):
         self.assertEqual(payload["restorable_session"]["session_id"], created["session_id"])
         self.assertEqual(payload["restorable_session"]["strategy"]["template_id"], "project_workspace")
         self.assertEqual(payload["restorable_session"]["strategy"]["note"], "旧策略")
+
+    def test_post_sessions_creates_new_session_when_previous_scope_differs(self):
+        base_payload = {
+            "sources": [{"source_type": "directory", "path": str(self.target_dir), "directory_mode": "contents"}],
+            "resume_if_exists": False,
+            "organize_method": "categorize_into_new_structure",
+            "output_dir": str(self.target_dir),
+            "strategy": {
+                "template_id": "project_workspace",
+                "organize_method": "categorize_into_new_structure",
+                "language": "en",
+                "density": "normal",
+                "prefix_style": "none",
+                "caution_level": "balanced",
+                "note": "旧策略",
+            },
+        }
+        created = self.client.post("/api/sessions", json=base_payload).json()
+
+        response = self.client.post(
+            "/api/sessions",
+            json={
+                **base_payload,
+                "resume_if_exists": True,
+                "strategy": {
+                    **base_payload["strategy"],
+                    "template_id": "study_materials",
+                    "language": "zh",
+                    "caution_level": "conservative",
+                    "note": "新策略",
+                },
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["mode"], "created")
+        self.assertNotEqual(payload["session_id"], created["session_id"])
+        self.assertEqual(self.store.load(created["session_id"]).stage, "abandoned")
 
     def test_post_sessions_allows_new_creation_when_previous_session_completed(self):
         created = self.client.post(
@@ -346,8 +381,8 @@ class SessionApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.json()["error_code"], "SESSION_STAGE_CONFLICT")
-        self.assertEqual(response.json()["session_snapshot"]["stage"], "interrupted")
-        self.assertEqual(response.json()["session_snapshot"]["integrity_flags"]["interrupted_during"], "scanning")
+        self.assertEqual(response.json()["session_snapshot"]["stage"], "scanning")
+        self.assertNotIn("interrupted_during", response.json()["session_snapshot"]["integrity_flags"])
 
     def test_update_item_uses_target_dir_and_returns_updated_snapshot(self):
         created = self.service.create_session(str(self.target_dir), resume_if_exists=False)

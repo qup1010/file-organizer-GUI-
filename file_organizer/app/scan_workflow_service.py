@@ -220,6 +220,7 @@ class ScanWorkflowService:
 
         target_dir = Path(session.target_dir).resolve()
         session.stage = "scanning"
+        self.helpers._clear_scan_recovery_state(session)
         session.scanner_progress = self.helpers._initial_scan_progress(target_dir)
         self.helpers._sync_session_views(session)
         self.helpers.store.save(session)
@@ -262,6 +263,7 @@ class ScanWorkflowService:
                     self.helpers.store.save(session)
                     self.helpers._record_event("scan.progress", session)
 
+        self.helpers._mark_scan_active(session.session_id)
         self.helpers.async_scanner.start(
             session_id=session.session_id,
             target_dir=target_dir,

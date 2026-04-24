@@ -3,10 +3,11 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from file_organizer.app.models import CreateSessionResult
+from file_organizer.app.models import CreateSessionResult, OrganizerSession, SourceCollectionItem
 from file_organizer.organize import service as organize_service
 from file_organizer.organize.models import PendingPlan
 from file_organizer.organize.strategy_templates import normalize_strategy_selection
+from file_organizer.shared.path_utils import canonical_target_dir
 
 if TYPE_CHECKING:
     from file_organizer.app.session_service import OrganizerSessionService
@@ -17,6 +18,94 @@ logger = logging.getLogger(__name__)
 class SessionOrchestrator:
     def __init__(self, helpers: "OrganizerSessionService"):
         self.helpers = helpers
+
+    @staticmethod
+    def _canonical_path(value: str | Path | None) -> str:
+        text = str(value or "").strip()
+        return canonical_target_dir(text) if text else ""
+
+    @classmethod
+    def _source_collection_signature(cls, sources: list[SourceCollectionItem]) -> tuple[tuple[str, str, str], ...]:
+        entries: list[tuple[str, str, str]] = []
+        for item in sources:
+            source_type = str(item.source_type or "").strip().lower()
+            if source_type not in {"file", "directory"}:
+                continue
+            entries.append(
+                (
+                    source_type,
+                    cls._canonical_path(item.path),
+                    item.normalized_directory_mode if source_type == "directory" else "atomic",
+                )
+            )
+        return tuple(sorted(entries))
+
+    def _session_source_signature(self, session: OrganizerSession) -> tuple[tuple[str, str, str], ...]:
+        sources = self.helpers._normalize_source_collection(session.source_collection)
+        if not sources:
+            sources = [SourceCollectionItem(source_type="directory", path=session.target_dir, directory_mode="contents")]
+        return self._source_collection_signature(sources)
+
+    def _resume_signature_for_session(self, session: OrganizerSession) -> dict:
+        placement = self.helpers._placement_payload(session.placement)
+        return {
+            "sources": self._session_source_signature(session),
+            "organize_method": self.helpers._normalize_organize_method(session.organize_method),
+            "organize_mode": self.helpers._normalize_organize_mode(session.organize_mode),
+            "output_dir": self._canonical_path(session.output_dir),
+            "target_profile_id": str(session.target_profile_id or "").strip(),
+            "target_directories": tuple(sorted(self._canonical_path(item) for item in session.selected_target_directories or [] if str(item or "").strip())),
+            "new_directory_root": self._canonical_path(placement.new_directory_root),
+            "review_root": self._canonical_path(placement.review_root),
+            "template_id": str(session.strategy_template_id or "").strip(),
+            "destination_index_depth": self.helpers._normalize_destination_index_depth(session.destination_index_depth),
+            "language": str(session.language or "").strip(),
+            "density": str(session.density or "").strip(),
+            "prefix_style": str(session.prefix_style or "").strip(),
+            "caution_level": str(session.caution_level or "").strip(),
+            "note": str(session.strategy_note or "").strip(),
+        }
+
+    def _resume_signature_for_request(
+        self,
+        sources: list[SourceCollectionItem],
+        normalized_strategy: dict,
+        selected_target_directories: list[str],
+    ) -> dict:
+        placement = self.helpers._placement_payload(
+            new_directory_root=str(normalized_strategy.get("new_directory_root") or ""),
+            review_root=str(normalized_strategy.get("review_root") or ""),
+        )
+        return {
+            "sources": self._source_collection_signature(sources),
+            "organize_method": self.helpers._normalize_organize_method(normalized_strategy.get("organize_method")),
+            "organize_mode": self.helpers._normalize_organize_mode(normalized_strategy.get("organize_mode")),
+            "output_dir": self._canonical_path(normalized_strategy.get("output_dir")),
+            "target_profile_id": str(normalized_strategy.get("target_profile_id") or "").strip(),
+            "target_directories": tuple(sorted(self._canonical_path(item) for item in selected_target_directories if str(item or "").strip())),
+            "new_directory_root": self._canonical_path(placement.new_directory_root),
+            "review_root": self._canonical_path(placement.review_root),
+            "template_id": str(normalized_strategy.get("template_id") or "").strip(),
+            "destination_index_depth": self.helpers._normalize_destination_index_depth(normalized_strategy.get("destination_index_depth")),
+            "language": str(normalized_strategy.get("language") or "").strip(),
+            "density": str(normalized_strategy.get("density") or "").strip(),
+            "prefix_style": str(normalized_strategy.get("prefix_style") or "").strip(),
+            "caution_level": str(normalized_strategy.get("caution_level") or "").strip(),
+            "note": str(normalized_strategy.get("note") or "").strip(),
+        }
+
+    def _resume_scope_matches(
+        self,
+        latest: OrganizerSession,
+        sources: list[SourceCollectionItem],
+        normalized_strategy: dict,
+        selected_target_directories: list[str],
+    ) -> bool:
+        return self._resume_signature_for_session(latest) == self._resume_signature_for_request(
+            sources,
+            normalized_strategy,
+            selected_target_directories,
+        )
 
     def run_planner_cycle_for_session(
         self,
@@ -185,14 +274,25 @@ class SessionOrchestrator:
         path = default_workspace_root
         latest = self.helpers.store.find_latest_by_directory(path)
         if latest is not None and latest.stage not in self.helpers._TERMINAL_STAGES:
-            if resume_if_exists:
+            if self._resume_scope_matches(latest, normalized_sources, normalized_strategy, selected_target_directories):
+                if resume_if_exists:
+                    self.helpers._log_runtime_event(
+                        "session.resume_available",
+                        latest,
+                        existing_session_id=latest.session_id,
+                    )
+                    return CreateSessionResult(mode="resume_available", restorable_session=latest)
+                raise RuntimeError("SESSION_LOCKED")
+            if latest.stage in self.helpers._LOCKED_STAGES:
+                raise RuntimeError("SESSION_LOCKED")
+            try:
                 self.helpers._log_runtime_event(
-                    "session.resume_available",
+                    "session.superseded",
                     latest,
-                    existing_session_id=latest.session_id,
+                    reason="resume_scope_mismatch",
                 )
-                return CreateSessionResult(mode="resume_available", restorable_session=latest)
-            raise RuntimeError("SESSION_LOCKED")
+            finally:
+                self.helpers.lifecycle.abandon_session(latest.session_id)
 
         session = self.helpers.store.create(path)
         session.source_collection = normalized_sources

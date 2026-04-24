@@ -4,26 +4,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Activity,
-  AlertCircle,
   AlertTriangle,
   Check,
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-  Clock3,
-  Eye,
   FileText,
   FolderOpen,
   History,
   Layers3,
-  MoreHorizontal,
   Plus,
-  RotateCcw,
-  Settings2,
   Loader2,
   Sparkles,
   Trash2,
   Upload,
+  FolderPlus,
+  FilePlus,
+  LogOut,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -38,21 +33,12 @@ import {
   getApiToken,
   inspectPathsWithTauri,
   isTauriDesktop,
+  listDirectoryEntriesWithTauri,
   pickDirectoriesWithTauri,
   pickDirectoryWithTauri,
   pickFilesWithTauri,
 } from "@/lib/runtime";
 import { findDropZoneForPosition, listenToTauriDragDrop } from "@/lib/tauri-drag-drop";
-import {
-  getHistoryEntryHref,
-  getHistoryEntryReadonlyHref,
-  getHistoryEntrySummary,
-  isHistoryCompletedEntry,
-  isHistoryPartialFailureEntry,
-  isHistoryRollbackPartialFailureEntry,
-  isHistoryRolledBackEntry,
-  isHistorySessionEntry,
-} from "@/lib/use-history-list";
 import { getSessionStageView } from "@/lib/session-view-model";
 import {
   buildStrategySummary,
@@ -64,14 +50,14 @@ import {
   getTemplateMeta,
   LANGUAGE_OPTIONS,
   PREFIX_STYLE_OPTIONS,
+  shouldSkipLaunchStrategyPrompt,
   STRATEGY_TEMPLATES,
 } from "@/lib/strategy-templates";
-import { cn, formatDisplayDate, getFriendlyStage } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import type {
-  HistoryItem,
+  DirectorySourceMode,
   LaunchStrategyConfig,
   OrganizeMethod,
-  SessionStage,
   SessionSnapshot,
   SessionSourceSelection,
   SessionStrategySelection,
@@ -79,6 +65,7 @@ import type {
   TargetProfile,
   TargetProfileDirectory,
 } from "@/types/session";
+import { ErrorAlert } from "@/components/ui/error-alert";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -97,6 +84,18 @@ type TargetDirectoryDraft = {
   label: string;
 };
 
+type SourceImportGroup = {
+  group_id: string;
+  source_path: string;
+  item_keys: string[];
+  expanded: boolean;
+};
+
+type SourceFeedback = {
+  tone: "success" | "info";
+  message: string;
+};
+
 type LaunchRequestState = {
   sources: SessionSourceSelection[];
   resume_if_exists: boolean;
@@ -110,18 +109,57 @@ type LaunchRequestState = {
   display_path: string;
 };
 
-function dedupeSources(items: SessionSourceSelection[]): SessionSourceSelection[] {
-  const seen = new Set<string>();
-  const result: SessionSourceSelection[] = [];
-  for (const item of items) {
-    const path = item.path.trim();
-    if (!path) continue;
-    const key = `${item.source_type}:${path.toLowerCase()}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    result.push({ source_type: item.source_type, path });
+const IMPORT_GROUP_PREVIEW_LIMIT = 5;
+
+function createImportGroupId(): string {
+  return `import-group:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function normalizeDirectoryMode(item: Pick<SessionSourceSelection, "source_type" | "directory_mode">): DirectorySourceMode {
+  if (item.source_type !== "directory") {
+    return "atomic";
   }
-  return result;
+  return item.directory_mode === "atomic" ? "atomic" : "contents";
+}
+
+function createDirectorySource(path: string, directoryMode: DirectorySourceMode = "atomic"): SessionSourceSelection {
+  return {
+    source_type: "directory",
+    path,
+    directory_mode: directoryMode,
+  };
+}
+
+function sourceSelectionKey(item: Pick<SessionSourceSelection, "source_type" | "path">): string {
+  return `${item.source_type}:${item.path.trim().toLowerCase()}`;
+}
+
+function normalizeSourceSelection(item: SessionSourceSelection): SessionSourceSelection | null {
+  const path = item.path.trim();
+  if (!path) {
+    return null;
+  }
+  if (item.source_type === "directory") {
+    return createDirectorySource(path, normalizeDirectoryMode(item));
+  }
+  if (item.source_type === "file") {
+    return { source_type: "file", path };
+  }
+  return null;
+}
+
+function dedupeSources(items: SessionSourceSelection[]): SessionSourceSelection[] {
+  const seen = new Map<string, SessionSourceSelection>();
+  for (const item of items) {
+    const normalized = normalizeSourceSelection(item);
+    if (!normalized) continue;
+    const key = sourceSelectionKey(normalized);
+    if (seen.has(key)) {
+      seen.delete(key);
+    }
+    seen.set(key, normalized);
+  }
+  return Array.from(seen.values());
 }
 
 function dedupeTargetDirectories(items: TargetProfileDirectory[]): TargetProfileDirectory[] {
@@ -136,15 +174,6 @@ function dedupeTargetDirectories(items: TargetProfileDirectory[]): TargetProfile
     result.push({ path, label: item.label?.trim() || "" });
   }
   return result;
-}
-
-function formatCompactHistoryPath(path: string): string {
-  const normalized = path.replace(/\\/g, "/");
-  const segments = normalized.split("/").filter(Boolean);
-  if (segments.length <= 3) {
-    return normalized;
-  }
-  return `.../${segments.slice(-3).join("/")}`;
 }
 
 function strategyForMethod(previous: SessionStrategySelection, organizeMethod: OrganizeMethod): SessionStrategySelection {
@@ -181,7 +210,9 @@ function deriveWorkspaceRoot(sources: SessionSourceSelection[]): string {
     .map((item) => {
       const path = item.path.trim();
       if (!path) return "";
-      return item.source_type === "directory" ? normalizeSlashes(path) : getPathParent(path);
+      return item.source_type === "directory" && normalizeDirectoryMode(item) === "contents"
+        ? normalizeSlashes(path)
+        : getPathParent(path);
     })
     .filter(Boolean);
   if (!normalizedPaths.length) return "";
@@ -218,8 +249,9 @@ function extractDroppedSources(dataTransfer: DataTransfer): SessionSourceSelecti
     const path = String((file as File & { path?: string }).path || "");
     if (!path) continue;
     result.push({
-      source_type: inferDropSourceType(path, entry),
-      path,
+      ...(inferDropSourceType(path, entry) === "file"
+        ? ({ source_type: "file", path } as SessionSourceSelection)
+        : createDirectorySource(path, "atomic")),
     });
   }
 
@@ -227,10 +259,11 @@ function extractDroppedSources(dataTransfer: DataTransfer): SessionSourceSelecti
     for (const file of fallbackFiles) {
       const path = String((file as File & { path?: string }).path || "");
       if (!path) continue;
-      result.push({
-        source_type: /\.[^./\\]+$/.test(path) ? "file" : "directory",
-        path,
-      });
+      result.push(
+        /\.[^./\\]+$/.test(path)
+          ? { source_type: "file", path }
+          : createDirectorySource(path, "atomic"),
+      );
     }
   }
 
@@ -239,15 +272,47 @@ function extractDroppedSources(dataTransfer: DataTransfer): SessionSourceSelecti
 
 function inferSourceSelectionsFromPaths(paths: string[]): SessionSourceSelection[] {
   return dedupeSources(
-    paths.map((path) => ({
-      source_type: /\.[^./\\]+$/.test(path) ? "file" : "directory",
-      path,
-    })),
+    paths.map((path) => (
+      /\.[^./\\]+$/.test(path)
+        ? ({ source_type: "file", path } as SessionSourceSelection)
+        : createDirectorySource(path, "atomic")
+    )),
   );
 }
 
-function countSourcesByType(sources: SessionSourceSelection[], sourceType: SourceDraftType): number {
-  return sources.filter((item) => item.source_type === sourceType).length;
+function sourceSelectionFromDraft(path: string, draftType: SourceDraftType): SessionSourceSelection {
+  if (draftType === "file") {
+    return { source_type: "file", path };
+  }
+  return createDirectorySource(path, "atomic");
+}
+
+function getSourceBehaviorLabel(item: SessionSourceSelection): string {
+  if (item.source_type === "file") {
+    return "单个文件";
+  }
+  return normalizeDirectoryMode(item) === "atomic" ? "整体移动" : "整理里面内容";
+}
+
+function getSourceBehaviorHint(item: SessionSourceSelection): string {
+  if (item.source_type === "file") {
+    return "按单个文件处理。";
+  }
+  return normalizeDirectoryMode(item) === "atomic"
+    ? "将把这个文件夹整体作为一个项目移动。"
+    : "将整理这个文件夹里的内容。";
+}
+
+function mapDirectoryEntryToSource(entry: { path: string; is_dir: boolean; is_file: boolean }): SessionSourceSelection | null {
+  const path = String(entry.path || "").trim();
+  if (!path) return null;
+  if (entry.is_dir) {
+    return createDirectorySource(path, "atomic");
+  }
+  if (entry.is_file) {
+    return { source_type: "file", path };
+  }
+  return null;
 }
 
 function placementDefaults(
@@ -283,6 +348,8 @@ export function SessionLauncherShell() {
   const [strategy, setStrategy] = useState<SessionStrategySelection>(DEFAULT_STRATEGY_SELECTION);
   const [launchConfig, setLaunchConfig] = useState<LaunchStrategyConfig | null>(null);
   const [sources, setSources] = useState<SessionSourceSelection[]>([]);
+  const [sourceImportGroups, setSourceImportGroups] = useState<SourceImportGroup[]>([]);
+  const [sourceFeedback, setSourceFeedback] = useState<SourceFeedback | null>(null);
   const [sourceDraftType, setSourceDraftType] = useState<SourceDraftType>("directory");
   const [sourceDraftPath, setSourceDraftPath] = useState("");
   const [newDirectoryRoot, setNewDirectoryRoot] = useState("");
@@ -300,18 +367,29 @@ export function SessionLauncherShell() {
   const [loading, setLoading] = useState(false);
   const [launchTransitionOpen, setLaunchTransitionOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(true);
   const [showManualInput, setShowManualInput] = useState(false);
   const [showManualTargetInput, setShowManualTargetInput] = useState(false);
   const [resumePrompt, setResumePrompt] = useState<{ sessionId: string; snapshot: SessionSnapshot; launch: LaunchRequestState } | null>(null);
   const [commonDirs, setCommonDirs] = useState<{ label: string; path: string }[]>([]);
   const [isDropActive, setIsDropActive] = useState(false);
   const [isTargetDropActive, setIsTargetDropActive] = useState(false);
-  const [showHistorySidebar, setShowHistorySidebar] = useState(true);
   const [isDraggingGlobal, setIsDraggingGlobal] = useState(false);
+  const [isDesktopEnvironment, setIsDesktopEnvironment] = useState(false);
   const sourceDropZoneRef = useRef<HTMLDivElement | null>(null);
   const targetDropZoneRef = useRef<HTMLDivElement | null>(null);
+
+  const pruneImportGroups = useCallback(
+    (groups: SourceImportGroup[], nextSources: SessionSourceSelection[]): SourceImportGroup[] => {
+      const nextKeys = new Set(nextSources.map((item) => sourceSelectionKey(item)));
+      return groups
+        .map((group) => ({
+          ...group,
+          item_keys: group.item_keys.filter((key) => nextKeys.has(key)),
+        }))
+        .filter((group) => group.item_keys.length > 0);
+    },
+    [],
+  );
 
   const organizeMethod = strategy.organize_method || "categorize_into_new_structure";
   const isAssignExisting = organizeMethod === "assign_into_existing_categories";
@@ -366,6 +444,31 @@ export function SessionLauncherShell() {
       ]),
     [manualTargetDirectories, profileDirectories],
   );
+  const sourceKeyMap = useMemo(
+    () => new Map(sources.map((item) => [sourceSelectionKey(item), item])),
+    [sources],
+  );
+  const sourceImportGroupViews = useMemo(
+    () =>
+      sourceImportGroups
+        .map((group) => ({
+          ...group,
+          items: group.item_keys
+            .map((key) => sourceKeyMap.get(key))
+            .filter((item): item is SessionSourceSelection => Boolean(item)),
+        }))
+        .filter((group) => group.items.length > 0),
+    [sourceImportGroups, sourceKeyMap],
+  );
+  const sourceImportGroupByKey = useMemo(() => {
+    const mapping = new Map<string, SourceImportGroup & { items: SessionSourceSelection[] }>();
+    for (const group of sourceImportGroupViews) {
+      for (const key of group.item_keys) {
+        mapping.set(key, group);
+      }
+    }
+    return mapping;
+  }, [sourceImportGroupViews]);
 
   const currentSummary = useMemo(
     () =>
@@ -388,8 +491,57 @@ export function SessionLauncherShell() {
     [resumeStage],
   );
   const isCompletedResume = Boolean(resumeStageView?.isCompleted);
-  const primaryLaunchLabel = isAssignExisting ? "开始扫描并进入目标确认" : "开始扫描与分析";
+  const skipStrategyPrompt = shouldSkipLaunchStrategyPrompt(launchConfig);
+  const stepItems = skipStrategyPrompt
+    ? [{ id: 1 as const, title: "选择整理来源" }]
+    : [
+        { id: 1 as const, title: "选择整理来源" },
+        { id: 2 as const, title: "决定整理方式" },
+        { id: 3 as const, title: "填写必要信息" },
+      ];
+  const primaryLaunchLabel = isAssignExisting ? "读取目录并确认目标" : "读取目录并生成建议";
+  const fastStartLabel = "按默认配置开始整理";
   const displayPath = isFullCategorize ? effectiveOutputDir || firstSourcePath(sources) : firstSourcePath(sources);
+
+  const getLaunchValidationMessage = useCallback((mode: "default" | "direct" = "default"): string | null => {
+    if (sources.length === 0) {
+      return "请先添加至少一个待整理来源。";
+    }
+    if (isAssignExisting && effectiveTargetDirectories.length === 0 && !selectedTargetProfileId.trim()) {
+      return mode === "direct"
+        ? "当前已开启“直接使用默认值启动”，但默认整理方式是“归入现有目录”，还没有可用的目标目录。请先关闭直启后进入完整流程补充目标目录，或到设置中改用“生成新的分类结构”。"
+        : "归入现有目录时，至少需要选择一个目录配置或手动添加目标目录。";
+    }
+    if (isFullCategorize && !effectiveNewDirectoryRoot) {
+      return mode === "direct"
+        ? "当前默认配置没有可用的新目录生成位置。请先到设置补全默认放置规则，或关闭直启后手动调整。"
+        : "生成新的分类结构前，必须先指定新目录生成位置。";
+    }
+    if (isAssignExisting && !effectiveNewDirectoryRoot) {
+      return mode === "direct"
+        ? "当前默认整理方式是“归入现有目录”，但缺少“新增目录默认放置位置”。请先到设置补全默认放置规则。"
+        : "归入现有目录时，仍需要一个“新增目录默认放置位置”，用于必要时补充新目录，并作为待确认区（Review）的默认跟随路径。";
+    }
+    if (!effectiveReviewRoot) {
+      return mode === "direct"
+        ? "当前默认配置没有可用的待确认区（Review）位置。请先到设置补全默认放置规则。"
+        : "当前任务没有可用的待确认区（Review）位置。";
+    }
+    return null;
+  }, [
+    effectiveNewDirectoryRoot,
+    effectiveReviewRoot,
+    effectiveTargetDirectories.length,
+    isAssignExisting,
+    isFullCategorize,
+    selectedTargetProfileId,
+    sources.length,
+  ]);
+
+  const stepThreeValidationMessage = step === 3 ? getLaunchValidationMessage("default") : null;
+  const fastStartValidationMessage = step === 1 && skipStrategyPrompt && sources.length > 0
+    ? getLaunchValidationMessage("direct")
+    : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -420,24 +572,8 @@ export function SessionLauncherShell() {
   }, [apiBaseUrl]);
 
   useEffect(() => {
-    let cancelled = false;
-    async function loadLatestHistory() {
-      setHistoryLoading(true);
-      try {
-        const api = createApiClient(apiBaseUrl, getApiToken());
-        const history = await api.getHistory();
-        if (!cancelled) setHistoryItems(history.slice(0, 12));
-      } catch {
-        if (!cancelled) setHistoryItems([]);
-      } finally {
-        if (!cancelled) setHistoryLoading(false);
-      }
-    }
-    void loadLatestHistory();
-    return () => {
-      cancelled = true;
-    };
-  }, [apiBaseUrl]);
+    setIsDesktopEnvironment(isTauriDesktop());
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -481,8 +617,13 @@ export function SessionLauncherShell() {
   }
 
   const addSources = useCallback((nextItems: SessionSourceSelection[]) => {
-    setSources((previous) => dedupeSources([...previous, ...nextItems]));
-  }, []);
+    setSources((previous) => {
+      const nextSources = dedupeSources([...previous, ...nextItems]);
+      setSourceImportGroups((previousGroups) => pruneImportGroups(previousGroups, nextSources));
+      return nextSources;
+    });
+    setSourceFeedback(null);
+  }, [pruneImportGroups]);
 
   const resolveNativeDroppedSources = useCallback(async (paths: string[]) => {
     const normalizedPaths = paths.map((path) => path.trim()).filter(Boolean);
@@ -496,8 +637,9 @@ export function SessionLauncherShell() {
       inspected
         .filter((item) => item.is_dir || item.is_file)
         .map((item) => ({
-          source_type: item.is_dir ? "directory" as const : "file" as const,
-          path: item.path,
+          ...(item.is_dir
+            ? createDirectorySource(item.path, "atomic")
+            : ({ source_type: "file", path: item.path } as SessionSourceSelection)),
         })),
     );
     return resolved.length ? resolved : inferSourceSelectionsFromPaths(normalizedPaths);
@@ -556,7 +698,7 @@ export function SessionLauncherShell() {
         void resolveNativeDroppedSources(payload.paths).then((droppedSources) => {
           if (cancelled) return;
           if (!droppedSources.length) {
-            setError("当前环境暂时无法从拖拽内容里读取本地绝对路径。你可以改用“选择文件”“选择文件夹”或手动输入路径。");
+            setError("当前环境暂时无法从拖拽内容里读取本地绝对路径。你可以改用“添加文件夹”“添加文件”或手动输入路径。");
             return;
           }
           addSources(droppedSources);
@@ -595,8 +737,40 @@ export function SessionLauncherShell() {
     };
   }, [addSources, resolveNativeDirectoryPaths, resolveNativeDroppedSources]);
 
-  function removeSource(path: string, sourceType: SourceDraftType) {
-    setSources((previous) => previous.filter((item) => !(item.path === path && item.source_type === sourceType)));
+  function removeSource(path: string, sourceType: SessionSourceSelection["source_type"]) {
+    setSources((previous) => {
+      const nextSources = previous.filter((item) => !(item.path === path && item.source_type === sourceType));
+      setSourceImportGroups((previousGroups) => pruneImportGroups(previousGroups, nextSources));
+      return nextSources;
+    });
+  }
+
+  function updateDirectorySourceMode(path: string, directoryMode: DirectorySourceMode) {
+    setSources((previous) =>
+      dedupeSources(
+        previous.map((item) =>
+          item.source_type === "directory" && item.path === path
+            ? createDirectorySource(item.path, directoryMode)
+            : item,
+        ),
+      ),
+    );
+  }
+
+  function toggleImportGroupExpanded(groupId: string) {
+    setSourceImportGroups((previous) =>
+      previous.map((group) =>
+        group.group_id === groupId ? { ...group, expanded: !group.expanded } : group,
+      ),
+    );
+  }
+
+  function removeImportGroup(groupId: string) {
+    const group = sourceImportGroupViews.find((item) => item.group_id === groupId);
+    if (!group) return;
+    const keysToRemove = new Set(group.item_keys);
+    setSources((previous) => previous.filter((item) => !keysToRemove.has(sourceSelectionKey(item))));
+    setSourceImportGroups((previous) => previous.filter((item) => item.group_id !== groupId));
   }
 
   function addManualSource() {
@@ -605,9 +779,84 @@ export function SessionLauncherShell() {
       setError("请先输入文件或文件夹路径。");
       return;
     }
-    addSources([{ source_type: sourceDraftType, path }]);
+    addSources([sourceSelectionFromDraft(path, sourceDraftType)]);
     setSourceDraftPath("");
     setError(null);
+  }
+
+  async function importDirectoryEntries(path: string, options?: { replaceSourcePath?: string }) {
+    setError(null);
+    setSourceFeedback(null);
+
+    if (!isTauriDesktop()) {
+      setError("当前环境还不能直接读取文件夹内容。请在桌面端使用“导入文件夹下所有项”。");
+      return;
+    }
+
+    try {
+      const entries = await listDirectoryEntriesWithTauri(path);
+      const nextItems = dedupeSources(entries.map(mapDirectoryEntryToSource).filter((item): item is SessionSourceSelection => Boolean(item)));
+      if (!nextItems.length) {
+        setSourceFeedback({
+          tone: "info",
+          message: "这个文件夹下没有可导入的顶层项目。",
+        });
+        return;
+      }
+
+      const replaceSourcePath = options?.replaceSourcePath?.trim();
+      const baseSources = replaceSourcePath
+        ? sources.filter((item) => !(item.source_type === "directory" && item.path === replaceSourcePath))
+        : sources;
+      const existingKeys = new Set(baseSources.map((item) => sourceSelectionKey(item)));
+      const importedItems = nextItems.filter((item) => !existingKeys.has(sourceSelectionKey(item)));
+      const skippedCount = nextItems.length - importedItems.length;
+
+      if (!importedItems.length) {
+        setSourceFeedback({
+          tone: "info",
+          message: skippedCount > 0 ? `已跳过 ${skippedCount} 个已在列表中的项目。` : "这个文件夹下没有可导入的顶层项目。",
+        });
+        return;
+      }
+
+      const insertionIndex = replaceSourcePath
+        ? sources.findIndex((item) => item.source_type === "directory" && item.path === replaceSourcePath)
+        : -1;
+      const nextSources = replaceSourcePath && insertionIndex >= 0
+        ? [
+            ...baseSources.slice(0, insertionIndex),
+            ...importedItems,
+            ...baseSources.slice(insertionIndex),
+          ]
+        : [...baseSources, ...importedItems];
+      const importedKeys = importedItems.map((item) => sourceSelectionKey(item));
+
+      setSources(nextSources);
+      setSourceImportGroups((previous) =>
+        pruneImportGroups(
+          [
+            ...previous,
+            {
+              group_id: createImportGroupId(),
+              source_path: path,
+              item_keys: importedKeys,
+              expanded: false,
+            },
+          ],
+          nextSources,
+        ),
+      );
+
+      setSourceFeedback({
+        tone: "success",
+        message: skippedCount > 0
+          ? `已导入“${path}”下的 ${importedItems.length} 个顶层项目，已跳过 ${skippedCount} 个已在列表中的项目。`
+          : `已导入“${path}”下的 ${importedItems.length} 个顶层项目。`,
+      });
+    } catch {
+      setError("现在还不能读取这个文件夹的内容，请检查桌面端是否正常运行。");
+    }
   }
 
   async function handleChooseDirectories() {
@@ -615,7 +864,7 @@ export function SessionLauncherShell() {
     if (isTauriDesktop()) {
       const directories = await pickDirectoriesWithTauri();
       if (directories?.length) {
-        addSources(directories.map((path) => ({ source_type: "directory" as const, path })));
+        addSources(directories.map((path) => createDirectorySource(path, "atomic")));
       }
       return;
     }
@@ -624,11 +873,32 @@ export function SessionLauncherShell() {
       const api = createApiClient(apiBaseUrl, getApiToken());
       const response = await api.selectDir();
       if (response.path) {
-        addSources([{ source_type: "directory", path: response.path }]);
+        addSources([createDirectorySource(response.path, "atomic")]);
       }
     } catch {
       setError("现在还不能打开文件夹选择器，请检查本地服务是否正常运行。");
     }
+  }
+
+  async function handleImportDirectoryEntries() {
+    setError(null);
+    setSourceFeedback(null);
+    if (!isTauriDesktop()) {
+      setError("当前环境还不能直接读取文件夹内容。请在桌面端使用这个入口。");
+      return;
+    }
+    try {
+      const path = await pickDirectoryWithTauri();
+      if (!path) return;
+      await importDirectoryEntries(path);
+    } catch {
+      setError("现在还不能打开文件夹选择器，请检查桌面端是否正常运行。");
+    }
+  }
+
+  async function handleImportFromSource(item: SessionSourceSelection) {
+    if (item.source_type !== "directory") return;
+    await importDirectoryEntries(item.path, { replaceSourcePath: item.path });
   }
 
   async function handleChooseFiles() {
@@ -646,6 +916,75 @@ export function SessionLauncherShell() {
     } catch {
       setError("现在还不能打开文件选择器，请检查本地服务是否正常运行。");
     }
+  }
+
+  function renderSourceRow(item: SessionSourceSelection, options?: { nested?: boolean }) {
+    const nested = options?.nested === true;
+    const isDirectory = item.source_type === "directory";
+    const isAtomic = normalizeDirectoryMode(item) === "atomic";
+
+    return (
+      <div
+        key={sourceSelectionKey(item)}
+        className={cn(
+          "group flex items-center justify-between gap-3 rounded-lg border border-on-surface/8 bg-surface-container-lowest px-3 py-2 transition-all hover:border-on-surface/20 active:scale-[0.99]",
+          nested
+            ? "border-on-surface/8 bg-surface px-2.5 py-2"
+            : "border-on-surface/10 bg-surface-container-lowest",
+        )}
+      >
+        <div className="flex min-w-0 items-start gap-3">
+          <div className={cn(
+            "flex shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary",
+            nested ? "h-9 w-9" : "h-10 w-10",
+          )}>
+            {isDirectory ? <FolderOpen className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
+          </div>
+          <div className="min-w-0">
+            <div className={cn("truncate font-black tracking-tight text-on-surface", nested ? "text-[13px]" : "text-[14px]")}>
+              {item.path.split(/[\\/]/).pop() || item.path}
+            </div>
+            <div className="truncate font-mono text-[10.5px] font-medium text-ui-muted opacity-40 uppercase tracking-tighter" title={item.path}>{item.path}</div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+              <span className="rounded bg-on-surface/5 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-ui-muted">
+                {getSourceBehaviorLabel(item)}
+              </span>
+              <span className="text-[10px] font-bold text-ui-muted opacity-40">{getSourceBehaviorHint(item)}</span>
+              {isDirectory ? (
+                isAtomic ? (
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => void handleImportFromSource(item)}
+                    className="rounded-[6px] px-2 py-1 text-[10.5px] font-bold text-primary transition-colors hover:bg-primary/8"
+                  >
+                    改为导入里面的项
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => updateDirectorySourceMode(item.path, "atomic")}
+                    className="rounded-[6px] px-2 py-1 text-[10.5px] font-bold text-primary transition-colors hover:bg-primary/8"
+                  >
+                    改为整体移动
+                  </button>
+                )
+              ) : null}
+            </div>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => removeSource(item.path, item.source_type)}
+          disabled={loading}
+          className="shrink-0 rounded-[6px] p-2 text-on-surface-variant/50 transition-colors hover:bg-error/10 hover:text-error opacity-0 group-hover:opacity-100 focus:opacity-100"
+          title="移除"
+        >
+          <Trash2 className="h-4.5 w-4.5" />
+        </button>
+      </div>
+    );
   }
 
   function removeManualTargetDirectory(path: string) {
@@ -745,25 +1084,10 @@ export function SessionLauncherShell() {
     }
   }
 
-  function validateBeforeLaunch(): boolean {
-    if (sources.length === 0) {
-      setError("请先添加至少一个待整理来源。");
-      return false;
-    }
-    if (isFullCategorize && !effectiveNewDirectoryRoot) {
-      setError("生成新的分类结构前，必须先指定新目录生成位置。");
-      return false;
-    }
-    if (isAssignExisting && effectiveTargetDirectories.length === 0 && !selectedTargetProfileId.trim()) {
-      setError("归入现有目录时，至少需要选择一个目录配置或手动添加目标目录。");
-      return false;
-    }
-    if (isAssignExisting && !effectiveNewDirectoryRoot) {
-      setError("归入现有目录时，仍需要一个“新增目录默认放置位置”，用于 AI 必要时补充新目录，并作为 Review 的默认跟随路径。");
-      return false;
-    }
-    if (!effectiveReviewRoot) {
-      setError("当前任务没有可用的 Review 目录位置。");
+  function validateBeforeLaunch(mode: "default" | "direct" = "default"): boolean {
+    const message = getLaunchValidationMessage(mode);
+    if (message) {
+      setError(message);
       return false;
     }
     return true;
@@ -801,12 +1125,12 @@ export function SessionLauncherShell() {
     };
   }
 
-  async function launchCurrentRequest(resumeIfExists: boolean) {
+  async function launchCurrentRequest(resumeIfExists: boolean, options?: { directStart?: boolean }) {
     if (!textModelConfigured) {
       setError("请先在设置中配置文本模型，然后再开始整理分析。");
       return;
     }
-    if (!validateBeforeLaunch()) return;
+    if (!validateBeforeLaunch(options?.directStart ? "direct" : "default")) return;
 
     const launchRequest = buildLaunchRequest(resumeIfExists);
     setLoading(true);
@@ -883,23 +1207,15 @@ export function SessionLauncherShell() {
     setLoading(false);
   }
 
-  function handleHistoryItemClick(item: HistoryItem) {
-    router.push(getHistoryEntryHref(item));
-  }
-
-  function handleHistoryItemReadonly(item: HistoryItem) {
-    router.push(getHistoryEntryReadonlyHref(item));
-  }
-
   function handleDrop(event: React.DragEvent<HTMLDivElement>) {
     event.preventDefault();
     setIsDropActive(false);
     const droppedSources = extractDroppedSources(event.dataTransfer);
     if (!droppedSources.length) {
-      setError("当前环境暂时无法从拖拽内容里读取本地绝对路径。你可以改用“选择文件”“选择文件夹”或手动输入路径。");
+        setError("当前环境暂时无法从拖拽内容里读取本地绝对路径。你可以改用“添加文件夹”“添加文件”或手动输入路径。");
       return;
     }
-    addSources(droppedSources);
+      addSources(droppedSources);
     setError(null);
   }
 
@@ -939,91 +1255,6 @@ export function SessionLauncherShell() {
     setIsTargetDropActive(false);
   }
 
-  function getHistoryItemMeta(item: HistoryItem) {
-    const name = item.target_dir?.replace(/[\\/]$/, "").split(/[\\/]/).pop() || "任务";
-    const isSession = isHistorySessionEntry(item);
-    const failureCount = item.failure_count || 0;
-    const itemCount = item.item_count || 0;
-    const stageView = isSession ? getSessionStageView(item.status as SessionStage) : null;
-
-    let statusLabel = getHistoryEntrySummary(item);
-    let statusTone: "active" | "success" | "warning" | "muted" = "active";
-    let primaryActionLabel = isSession ? "继续任务" : "查看结果";
-    let helperText = isSession ? "可继续处理" : "打开历史详情";
-    let leadingIcon: typeof Activity = Activity;
-
-    if (isSession) {
-      if (stageView?.isStale) {
-        statusLabel = "方案过期";
-        statusTone = "warning";
-        primaryActionLabel = "恢复任务";
-        helperText = "需要重新进入任务";
-        leadingIcon = AlertTriangle;
-      } else if (stageView?.isInterrupted) {
-        statusLabel = "已中断";
-        statusTone = "warning";
-        primaryActionLabel = "恢复任务";
-        helperText = "上次处理中断";
-        leadingIcon = AlertTriangle;
-      } else if (stageView?.isReadyToExecute) {
-        statusLabel = "预检已完成";
-        statusTone = "success";
-        primaryActionLabel = "继续任务";
-        helperText = "可直接进入执行前确认";
-        leadingIcon = CheckCircle2;
-      } else if (stageView?.isAwaitingPrecheck) {
-        statusLabel = "等待预检";
-        statusTone = "active";
-        primaryActionLabel = "继续任务";
-        helperText = "方案已进入确认阶段";
-        leadingIcon = Activity;
-      } else if (stageView?.isBusyStage) {
-        statusTone = "active";
-        primaryActionLabel = "继续任务";
-        helperText = "任务仍在进行中";
-        leadingIcon = Activity;
-      } else {
-        statusTone = "active";
-        leadingIcon = Activity;
-      }
-    } else if (isHistoryRolledBackEntry(item)) {
-      statusTone = "muted";
-      primaryActionLabel = "查看回退";
-      helperText = "最近一次执行已撤销";
-      leadingIcon = RotateCcw;
-    } else if (isHistoryRollbackPartialFailureEntry(item)) {
-      statusTone = "warning";
-      primaryActionLabel = "查看回退";
-      helperText = "有部分内容未完全恢复";
-      leadingIcon = AlertTriangle;
-    } else if (isHistoryPartialFailureEntry(item) || failureCount > 0) {
-      statusTone = "warning";
-      primaryActionLabel = "查看结果";
-      helperText = "有条目执行失败";
-      leadingIcon = AlertTriangle;
-    } else if (isHistoryCompletedEntry(item)) {
-      statusTone = "success";
-      primaryActionLabel = "查看结果";
-      helperText = "已生成执行记录";
-      leadingIcon = CheckCircle2;
-    }
-
-    return {
-      name,
-      isSession,
-      statusLabel,
-      statusTone,
-      primaryActionLabel,
-      secondaryActionLabel: isSession ? "只读查看" : null,
-      helperText,
-      itemCount,
-      failureCount,
-      pathLabel: formatCompactHistoryPath(item.target_dir),
-      timeLabel: formatDisplayDate(item.created_at),
-      leadingIcon,
-    };
-  }
-
   function goToStepTwo() {
     if (!validateStepOne()) return;
     setError(null);
@@ -1043,13 +1274,15 @@ export function SessionLauncherShell() {
         "relative flex h-full w-full bg-surface antialiased transition-all duration-500",
         isDraggingGlobal ? "after:absolute after:inset-0 after:z-50 after:pointer-events-none after:ring-[4px] after:ring-inset after:ring-primary/40 after:bg-primary/[0.02] after:transition-all after:duration-300" : ""
       )}>
-        <div className="flex flex-1 flex-col overflow-y-auto px-6 xl:px-10">
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25 }}
-            className="mx-auto flex w-full max-w-[1040px] flex-col gap-3 pt-6 pb-10"
-          >
+        <div className="flex w-full flex-1 overflow-hidden">
+          {/* Main workspace section */}
+          <div className="flex flex-1 flex-col overflow-y-auto px-6 xl:px-10 scrollbar-thin relative bg-surface">
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25 }}
+              className="mx-auto flex w-full max-w-[860px] flex-col gap-3 py-6"
+            >
 
 
             {!textModelConfigured ? (
@@ -1077,73 +1310,109 @@ export function SessionLauncherShell() {
 
             <AnimatePresence>
               {error ? (
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98 }}>
-                  <div className="rounded-[10px] border border-error/14 bg-error-container/14 px-5 py-4 text-error">
-                    <div className="flex items-start gap-3">
-                      <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
-                      <p className="text-[14px] font-semibold leading-relaxed">{error}</p>
-                    </div>
-                  </div>
-                </motion.div>
+                <div className="mb-6">
+                  <ErrorAlert 
+                    title="操作未完成" 
+                    message={error} 
+                    onClose={() => setError(null)} 
+                  />
+                </div>
               ) : null}
             </AnimatePresence>
 
-            <div className="flex flex-col gap-4">
+            {!error && sourceFeedback ? (
+              <div
+                className={cn(
+                  "mb-6 flex items-start gap-3 rounded-[8px] border px-4 py-3",
+                  sourceFeedback.tone === "success"
+                    ? "border-success/18 bg-success/10 text-success-dim"
+                    : "border-primary/18 bg-primary/8 text-primary",
+                )}
+              >
+                <div className={cn(
+                  "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full",
+                  sourceFeedback.tone === "success" ? "bg-success/12" : "bg-primary/10",
+                )}>
+                  {sourceFeedback.tone === "success" ? (
+                    <CheckCircle2 className="h-4 w-4" />
+                  ) : (
+                    <Layers3 className="h-4 w-4" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-bold">
+                    {sourceFeedback.tone === "success" ? "来源已更新" : "来源提示"}
+                  </p>
+                  <p className="mt-1 text-[12px] font-medium leading-6">{sourceFeedback.message}</p>
+                </div>
+              </div>
+            ) : null}
+
+            {!error && fastStartValidationMessage ? (
+              <div className="mb-4">
+                <ErrorAlert
+                  title="默认配置还不完整"
+                  message={fastStartValidationMessage}
+                />
+              </div>
+            ) : null}
+
+            {!error && !fastStartValidationMessage && stepThreeValidationMessage ? (
+              <div className="mb-4">
+                <ErrorAlert
+                  title="继续前请先补全当前信息"
+                  message={stepThreeValidationMessage}
+                />
+              </div>
+            ) : null}
+
+            <div className="flex flex-col gap-3">
               {/* Desktop Native Header & Stepper */}
-              <div className="mb-3 border-b border-on-surface/8 pb-6">
-                <div className="flex items-center gap-1.5">
-                  {[
-                    { id: 1, title: "选择整理来源" },
-                    { id: 2, title: "决定整理方式" },
-                    { id: 3, title: "填写必要信息" },
-                  ].map((item, index) => {
+              <div className="mb-6 flex flex-col items-center border-b border-on-surface/5 pb-6">
+                <div className="flex items-center justify-center gap-2">
+                  {stepItems.map((item, index) => {
                     const active = step === item.id;
                     const completed = step > item.id;
                     return (
                       <div key={item.id} className="flex items-center">
                         <div className={cn(
-                          "flex items-center gap-2 rounded-full py-1 pl-1.5 pr-3 transition-all duration-300",
-                          active ? "bg-primary/[0.08]" : "bg-transparent"
+                          "flex items-center gap-2.5 rounded-full px-3 py-1.5 transition-all duration-300",
+                          active ? "bg-primary/10 ring-1 ring-primary/20" : "bg-transparent"
                         )}>
                           <div className={cn(
                             "flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black transition-all",
                             active 
-                              ? "bg-primary text-white shadow-md shadow-primary/20 scale-105" 
+                              ? "bg-primary text-white" 
                               : completed 
                                 ? "bg-success text-white" 
-                                : "bg-on-surface/5 text-on-surface/40"
+                                : "bg-on-surface/10 text-on-surface/40"
                           )}>
                             {completed ? <Check className="h-3 w-3 stroke-[3]" /> : item.id}
                           </div>
                           <span className={cn(
-                            "text-[12.5px] font-bold tracking-tight",
-                            active ? "text-primary" : completed ? "text-on-surface/80" : "text-on-surface/30"
+                            "text-[13px] font-black tracking-tight",
+                            active ? "text-primary" : completed ? "text-on-surface/80" : "text-on-surface/20"
                           )}>
                             {item.title}
                           </span>
                         </div>
-                        {index < 2 && (
-                          <div className="mx-3 h-px w-6 bg-on-surface/10" />
+                        {index < stepItems.length - 1 && (
+                          <div className="mx-4 flex items-center gap-1 opacity-20">
+                            {[1, 2, 3].map(i => <div key={i} className="h-1 w-1 rounded-full bg-on-surface/30" />)}
+                          </div>
                         )}
                       </div>
                     );
                   })}
                 </div>
-                <p className="mt-2.5 max-w-2xl text-[13px] font-medium leading-relaxed text-on-surface-variant/60">
-                  {step === 1
-                    ? "添加待处理的文件或文件夹路径，支持多选扫描。"
-                    : step === 2
-                      ? "配置本次任务的整理策略：增量归纳或全量重组。"
-                      : "确认最终输出规则，系统即将开始智能分析。"}
-                </p>
               </div>
 
               {/* Main Content Pane */}
-              <div className="flex-1 space-y-6">
-                <div className="space-y-6">
+              <div className="flex-1 space-y-4">
+                <div className="space-y-4">
                   {step === 1 ? (
                     <div className="space-y-4">
-                      <div className="mb-3 flex items-center gap-2">
+                      <div className="mb-1 flex items-center gap-2">
                         <div className="flex h-6 w-6 items-center justify-center rounded-[4px] bg-primary/10 text-primary">
                           <Upload className="h-3.5 w-3.5" />
                         </div>
@@ -1153,111 +1422,155 @@ export function SessionLauncherShell() {
                         <motion.div
                           ref={sourceDropZoneRef}
                           animate={{
-                            scale: isDropActive ? 1.015 : 1,
+                            scale: isDropActive ? 1.01 : 1,
                           }}
                           className={cn(
-                            "group mt-2 flex flex-col items-center justify-center rounded-[16px] border-2 border-dashed px-6 py-14 text-center transition-all duration-300",
+                            "group mt-1 flex flex-col items-center justify-center rounded-[8px] border border-dashed px-6 py-8 text-center transition-all duration-300",
                             isDropActive 
-                              ? "border-primary/50 bg-primary/5 shadow-2xl shadow-primary/20" 
+                              ? "border-primary/50 bg-primary/10" 
                               : isDraggingGlobal 
-                                ? "border-primary/40 bg-primary/[0.02] shadow-md shadow-primary/5" 
-                                : "border-on-surface/8 bg-surface-container-lowest shadow-none"
+                                ? "border-primary/40 bg-primary/[0.02]" 
+                                : "border-on-surface/10 bg-on-surface/[0.015] hover:bg-on-surface/[0.03]"
                           )}
                         >
                           <motion.div 
                             animate={{ 
-                              y: isDropActive ? [-4, 0, -4] : 0,
-                              scale: isDropActive ? 1.15 : 1
+                              y: isDropActive ? [-2, 0, -2] : 0,
                             }}
                             transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
                             className={cn(
-                              "mb-6 flex h-16 w-16 items-center justify-center rounded-[20px] transition-all duration-300 shadow-sm",
-                              isDropActive ? "bg-primary text-white" : "bg-primary/10 text-primary border border-primary/20"
+                              "mb-3 flex h-12 w-12 items-center justify-center rounded-[10px] transition-all duration-300",
+                              isDropActive ? "bg-primary text-white" : "bg-on-surface/5 text-on-surface/40"
                             )}
                           >
-                            <Upload className="h-8 w-8" />
+                            <Upload className="h-5 w-5" />
                           </motion.div>
                           <h3 className={cn(
-                            "text-[18px] font-black tracking-tight transition-colors duration-300",
+                            "text-[16px] font-black tracking-tight transition-colors duration-300",
                             isDropActive ? "text-primary" : "text-on-surface"
                           )}>
-                            {isDropActive ? "松手即刻添加整理来源" : "拖拽文件或文件夹到这里"}
+                            {isDropActive ? "松手即可加入这次整理" : "请将想要整理的文件或文件夹拖放到此"}
                           </h3>
-                          <p className="mt-2 text-[13px] font-medium text-ui-muted opacity-60">
-                            {isDropActive ? "RELEASE TO ADD" : "支持混合批量拖拽"}
-                          </p>
-                          
-                          <div className={cn("mt-8 flex flex-wrap justify-center gap-3 transition-opacity", isDropActive ? "opacity-20 pointer-events-none" : "opacity-100")}>
-                            <Button variant="primary" onClick={() => void handleChooseDirectories()} disabled={loading} className="h-10 rounded-[8px] px-8 text-[13px] font-black shadow-sm active:scale-95 transition-all">
-                              选择文件夹
-                            </Button>
-                            <Button variant="secondary" onClick={() => void handleChooseFiles()} disabled={loading} className="h-10 rounded-[8px] border border-on-surface/10 px-8 text-[13px] font-black hover:bg-surface-container-lowest active:scale-95 transition-all">
-                              选择文件
-                            </Button>
-                          </div>
-
-                          {commonDirs.length ? (
-                            <div className={cn("mt-10 animate-in fade-in slide-in-from-bottom-2 duration-500 flex flex-col items-center transition-opacity", isDropActive ? "opacity-10 pointer-events-none" : "opacity-100")}>
-                              <div className="mb-4 flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.2em] text-ui-muted/40">
-                                <span className="h-px w-6 bg-on-surface/10"></span>
-                                RECENTS
-                                <span className="h-px w-6 bg-on-surface/10"></span>
-                              </div>
-                              <div className="flex flex-wrap justify-center gap-2.5">
-                                {commonDirs.slice(0, 6).map((item) => (
-                                  <button
-                                    key={item.path}
-                                    type="button"
-                                    disabled={loading}
-                                    onClick={() => addSources([{ source_type: "directory", path: item.path }])}
-                                    className="group flex items-center gap-2 rounded-[6px] border border-on-surface/8 bg-surface-container-lowest px-3 py-2 text-[12px] font-bold text-on-surface shadow-sm transition-all hover:border-primary/40 hover:bg-primary/[0.04] hover:text-primary active:scale-95"
-                                  >
-                                    <FolderOpen className="h-3.5 w-3.5 text-on-surface/20 transition-colors group-hover:text-primary" />
-                                    {item.label || item.path.split(/[\\/]/).pop()}
-                                  </button>
-                                ))}
-                              </div>
+                          <div className={cn("mt-6 flex flex-col items-center gap-3 transition-opacity", isDropActive ? "opacity-20 pointer-events-none" : "opacity-100")}>
+                            {isDesktopEnvironment ? (
+                              <Button 
+                                variant="primary" 
+                                onClick={() => void handleImportDirectoryEntries()} 
+                                disabled={loading} 
+                                className="h-11 rounded-[8px] px-8 text-[14px] font-black border border-primary/20 bg-primary active:scale-95 transition-all"
+                              >
+                                导入文件夹下所有项 <Layers3 className="ml-2 h-4 w-4" />
+                              </Button>
+                            ) : null}
+                            
+                            <div className="flex flex-wrap justify-center gap-3">
+                              <Button variant="secondary" onClick={() => void handleChooseDirectories()} disabled={loading} className="h-9 rounded-[6px] border border-on-surface/8 bg-surface px-5 text-[12px] font-bold text-on-surface/70 hover:bg-on-surface/[0.04] hover:text-on-surface active:scale-95 transition-all">
+                                添加文件夹
+                              </Button>
+                              <Button variant="secondary" onClick={() => void handleChooseFiles()} disabled={loading} className="h-9 rounded-[6px] border border-on-surface/8 bg-surface px-5 text-[12px] font-bold text-on-surface/70 hover:bg-on-surface/[0.04] hover:text-on-surface active:scale-95 transition-all">
+                                添加文件
+                              </Button>
                             </div>
-                          ) : null}
+                          </div>
+                        
+                        
+                          <div className={cn("mt-auto pt-10 flex flex-col items-center gap-5 transition-opacity", isDropActive ? "opacity-10 pointer-events-none" : "opacity-100")}>
+                            {commonDirs.length ? (
+                              <div className="animate-in fade-in slide-in-from-bottom-2 duration-700 flex flex-col items-center">
+                                <div className="mb-3 flex items-center gap-3">
+                                  <div className="h-px w-6 bg-on-surface/5" />
+                                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-ui-muted/30">快捷入口</span>
+                                  <div className="h-px w-6 bg-on-surface/5" />
+                                </div>
+                                <div className="flex flex-wrap justify-center gap-2 max-w-2xl px-4">
+                                  {commonDirs.slice(0, 5).map((item) => (
+                                    <button
+                                      key={item.path}
+                                      type="button"
+                                      disabled={loading}
+                                      onClick={() => addSources([createDirectorySource(item.path, "atomic")])}
+                                      className="group flex items-center gap-2 rounded-full border border-on-surface/6 bg-on-surface/[0.015] px-3 py-1 text-[11px] font-bold text-on-surface/45 transition-all hover:border-primary/20 hover:bg-primary/[0.02] hover:text-primary active:scale-[0.98]"
+                                    >
+                                      <FolderOpen className="h-3 w-3 opacity-40 group-hover:opacity-100" />
+                                      <span className="truncate max-w-[100px]">{item.label || item.path.split(/[\\/]/).pop()}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
 
-                          <div className={cn("mt-8 transition-opacity", isDropActive ? "opacity-0" : "opacity-100")}>
                             <button
                               type="button"
                               onClick={() => setShowManualInput(!showManualInput)}
-                              className="text-[12px] font-bold text-ui-muted opacity-40 hover:text-primary hover:opacity-100 transition-all"
+                              className="text-[11px] font-bold text-ui-muted opacity-25 hover:text-primary hover:opacity-100 transition-all uppercase tracking-wider"
                             >
                               {showManualInput ? "[ 收起手动输入 ]" : "[ 手动输入路径 ]"}
                             </button>
                           </div>
-                        </motion.div>
+                      </motion.div>
                       ) : (
                         <div className="mt-2 space-y-3">
                           <div className="grid gap-2">
-                            {sources.map((item) => (
-                              <div
-                                key={`${item.source_type}:${item.path}`}
-                                className="group flex items-center justify-between gap-3 rounded-[8px] border border-on-surface/10 bg-surface-container-lowest px-4 py-3 shadow-sm transition-all hover:border-on-surface/20"
-                              >
-                                <div className="flex min-w-0 items-center gap-3">
-                                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[6px] bg-primary/10 text-primary">
-                                    {item.source_type === "directory" ? <FolderOpen className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
+                            {(() => {
+                              const renderedGroupIds = new Set<string>();
+                              return sources.map((item) => {
+                                const key = sourceSelectionKey(item);
+                                const group = sourceImportGroupByKey.get(key);
+                                if (!group) {
+                                  return renderSourceRow(item);
+                                }
+                                if (renderedGroupIds.has(group.group_id)) {
+                                  return null;
+                                }
+                                const firstVisibleKey = group.item_keys.find((candidate) => sourceKeyMap.has(candidate));
+                                if (firstVisibleKey !== key) {
+                                  return null;
+                                }
+                                renderedGroupIds.add(group.group_id);
+                                const previewItems = group.expanded ? group.items : group.items.slice(0, IMPORT_GROUP_PREVIEW_LIMIT);
+                                const remainingCount = group.items.length - previewItems.length;
+                                return (
+                                  <div key={group.group_id} className="rounded-xl border border-primary/20 bg-primary/[0.04] p-3 text-on-surface/80">
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="min-w-0">
+                                        <div className="flex items-center gap-2">
+                                          <Layers3 className="h-4 w-4 text-primary/70" />
+                                          <p className="text-[13px] font-black tracking-tight text-on-surface">
+                                            已从 {group.source_path.split(/[\\/]/).pop()} 导入 {group.items.length} 项
+                                          </p>
+                                        </div>
+                                        <p className="mt-1 font-mono text-[10px] font-bold text-ui-muted opacity-40 uppercase tracking-widest">
+                                          批量导入 · {group.source_path}
+                                        </p>
+                                      </div>
+                                      <div className="flex shrink-0 items-center gap-1.5">
+                                        {remainingCount > 0 ? (
+                                          <button
+                                            type="button"
+                                            disabled={loading}
+                                            onClick={() => toggleImportGroupExpanded(group.group_id)}
+                                            className="rounded-[6px] px-2 py-1 text-[10.5px] font-bold text-primary transition-colors hover:bg-primary/8"
+                                          >
+                                            {group.expanded ? "收起" : `展开其余 ${remainingCount} 项`}
+                                          </button>
+                                        ) : null}
+                                        <button
+                                          type="button"
+                                          disabled={loading}
+                                          onClick={() => removeImportGroup(group.group_id)}
+                                          className="rounded-[6px] px-2 py-1 text-[10.5px] font-bold text-error transition-colors hover:bg-error/10"
+                                        >
+                                          移除整组
+                                        </button>
+                                      </div>
+                                    </div>
+                                    <div className="mt-3 grid gap-2">
+                                      {previewItems.map((groupItem) => renderSourceRow(groupItem, { nested: true }))}
+                                    </div>
                                   </div>
-                                  <div className="min-w-0">
-                                    <div className="truncate text-[14px] font-bold text-on-surface">{item.path.split(/[\\/]/).pop() || item.path}</div>
-                                    <div className="truncate text-[12px] font-medium text-on-surface-variant/60" title={item.path}>{item.path}</div>
-                                  </div>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => removeSource(item.path, item.source_type)}
-                                  disabled={loading}
-                                  className="shrink-0 rounded-[6px] p-2 text-on-surface-variant/50 transition-colors hover:bg-error/10 hover:text-error opacity-0 group-hover:opacity-100 focus:opacity-100"
-                                  title="移除"
-                                >
-                                  <Trash2 className="h-4.5 w-4.5" />
-                                </button>
-                              </div>
-                            ))}
+                                );
+                              });
+                            })()}
                           </div>
 
                           <motion.div
@@ -1266,20 +1579,33 @@ export function SessionLauncherShell() {
                               scale: isDropActive ? 1.01 : 1,
                             }}
                             className={cn(
-                              "flex flex-col items-center justify-center gap-3 rounded-[12px] border-2 border-dashed py-8 transition-all duration-300 text-on-surface group/add-more",
+                              "flex flex-col items-center justify-center gap-2 rounded-[12px] border-2 border-dashed py-5 transition-all duration-300 text-on-surface group/add-more",
                               isDropActive 
-                                ? "border-primary/50 bg-primary/5 shadow-lg shadow-primary/10"
+                                ? "border-primary/25 bg-primary/5 text-primary"
                                 : "border-on-surface/8 bg-on-surface/[0.015]"
                             )}
                           >
                             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-on-surface/[0.03] text-on-surface/20 group-hover/add-more:bg-primary/10 group-hover/add-more:text-primary transition-colors">
                               <Plus className="h-5 w-5" />
                             </div>
-                            <div className="flex items-center gap-2 text-[14px] font-bold text-on-surface/60 group-hover/add-more:text-on-surface transition-colors">
-                              还可以拖拽更多到这里，或者 
-                              <button type="button" onClick={() => void handleChooseDirectories()} className="mx-1.5 font-black text-primary hover:underline underline-offset-4 decoration-2">文件夹</button>
-                              <span className="opacity-20">/</span>
-                              <button type="button" onClick={() => void handleChooseFiles()} className="mx-1.5 font-black text-primary hover:underline underline-offset-4 decoration-2">文件</button>
+                            <p className="text-[14px] font-bold text-on-surface/60 group-hover/add-more:text-on-surface transition-colors">
+                              还可以继续补充更多来源
+                            </p>
+                            <div className="flex flex-col items-center gap-2">
+                              {isDesktopEnvironment ? (
+                                <button
+                                  type="button"
+                                  onClick={() => void handleImportDirectoryEntries()}
+                                  className="rounded-[8px] bg-primary/8 px-3 py-1.5 text-[12px] font-black text-primary hover:bg-primary/12"
+                                >
+                                  导入文件夹下所有项
+                                </button>
+                              ) : null}
+                              <div className="flex flex-wrap items-center justify-center gap-2 text-[12px] font-bold text-on-surface/55">
+                                <button type="button" onClick={() => void handleChooseDirectories()} className="rounded-[6px] px-2.5 py-1 text-on-surface/65 hover:bg-on-surface/[0.04] hover:text-on-surface">添加文件夹</button>
+                                <span className="opacity-20">/</span>
+                                <button type="button" onClick={() => void handleChooseFiles()} className="rounded-[6px] px-2.5 py-1 text-on-surface/65 hover:bg-on-surface/[0.04] hover:text-on-surface">添加文件</button>
+                              </div>
                             </div>
                             <button
                               type="button"
@@ -1294,10 +1620,10 @@ export function SessionLauncherShell() {
 
                       {showManualInput && (
                         <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-200">
-                          <div className="flex items-center gap-2 rounded-[8px] border border-on-surface/10 bg-surface-container-lowest p-1 shadow-inner">
-                            <div className="flex shrink-0 rounded-[6px] border border-on-surface/5 bg-surface p-1 shadow-sm">
+                          <div className="flex items-center gap-2 rounded-[8px] border border-on-surface/12 bg-surface-container-lowest p-1">
+                            <div className="flex shrink-0 rounded-[6px] border border-on-surface/5 bg-surface p-1">
                               {([
-                                ["directory", "目录"],
+                                ["directory", "文件夹"],
                                 ["file", "文件"],
                               ] as const).map(([value, label]) => (
                                 <button
@@ -1306,7 +1632,7 @@ export function SessionLauncherShell() {
                                   onClick={() => setSourceDraftType(value)}
                                   className={[
                                     "rounded-[4px] px-3 py-1.5 text-[12px] font-bold transition-colors",
-                                    sourceDraftType === value ? "bg-primary/10 text-primary shadow-sm" : "text-on-surface-variant/60 hover:text-on-surface",
+                                    sourceDraftType === value ? "bg-primary/10 text-primary" : "text-on-surface-variant/60 hover:text-on-surface",
                                   ].join(" ")}
                                 >
                                   {label}
@@ -1340,7 +1666,7 @@ export function SessionLauncherShell() {
                   ) : null}
 
                   {step === 2 ? (
-                    <div className="space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
                       <div className="flex items-center gap-2">
                         <div className="flex h-6 w-6 items-center justify-center rounded-[4px] bg-primary/10 text-primary">
                           <Sparkles className="h-3.5 w-3.5" />
@@ -1367,28 +1693,27 @@ export function SessionLauncherShell() {
                               type="button"
                               disabled={loading}
                               onClick={() => updateStrategy((previous) => strategyForMethod(previous, option.method))}
-                              className={[
-                                "rounded-[10px] border-2 px-5 py-5 text-left transition-all disabled:opacity-50",
+                              className={cn(
+                                "rounded-xl border-2 px-4 py-4 text-left transition-all active:scale-[0.98] disabled:opacity-50",
                                 active
-                                  ? "border-primary/25 bg-primary/5 shadow-sm"
+                                  ? "border-primary/40 bg-primary/5 ring-1 ring-primary/10"
                                   : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/20",
-                              ].join(" ")}
+                              )}
                             >
                               <div className="flex items-center justify-between gap-3">
-                                <p className={active ? "text-[14px] font-black text-primary" : "text-[14px] font-black text-on-surface"}>{option.title}</p>
+                                <p className={cn("text-[14.5px] font-black tracking-tight", active ? "text-primary" : "text-on-surface/80")}>{option.title}</p>
                                 {active ? <Sparkles className="h-4 w-4 text-primary" /> : null}
                               </div>
-                              <p className="mt-2 text-[12px] font-medium leading-relaxed text-ui-muted">{option.description}</p>
+                              <p className="mt-2 text-[12px] font-medium leading-relaxed text-ui-muted opacity-60">{option.description}</p>
                             </button>
                           );
-                        })}
-                      </div>
+                        })}                      </div>
                     </div>
                   ) : null}
 
                   {step === 3 ? (
-                    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                      <div className="space-y-4">
+                    <div className="space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                      <div className="space-y-3">
                         <div className="flex items-center justify-between gap-3 border-b border-on-surface/10 pb-3">
                           <div className="flex items-center gap-2">
                             <div className="flex h-6 w-6 items-center justify-center rounded-[4px] bg-primary/10 text-primary">
@@ -1412,7 +1737,7 @@ export function SessionLauncherShell() {
                             <div className="break-all text-[12px] font-medium text-ui-muted">{effectiveNewDirectoryRoot || "尚未确定"}</div>
                           </div>
                           <div className="rounded-[8px] bg-surface-container-lowest px-3 py-3">
-                            <div className="mb-1 text-[11px] font-bold text-on-surface">Review 将默认保存到</div>
+                            <div className="mb-1 text-[11px] font-bold text-on-surface">待确认区将默认保存到</div>
                             <div className="break-all text-[12px] font-medium text-ui-muted">{effectiveReviewRoot || "尚未确定"}</div>
                           </div>
                         </div>
@@ -1441,13 +1766,13 @@ export function SessionLauncherShell() {
                               </div>
                               <p className="mt-2 text-[11px] font-medium text-ui-muted">
                                 {isAssignExisting
-                                  ? "这个位置用于 AI 必要时补充新目录，也决定默认的 Review 跟随路径。留空时会先使用设置页默认值；如果设置页也为空，就按当前任务类型自动推导。"
+                                  ? "这个位置用于必要时补充新目录，也决定待确认区（Review）的默认跟随路径。留空时会先使用设置页默认值；如果设置页也为空，就按当前任务类型自动推导。"
                                   : "留空时会先使用设置页默认值；如果设置页也为空，就按当前任务类型自动推导。"}
                               </p>
                             </div>
                             <div className="rounded-[8px] border border-on-surface/8 bg-surface-container-lowest p-4">
                               <div className="mb-3 flex items-center justify-between gap-3">
-                                <div className="text-[12px] font-bold text-on-surface">Review 目录位置</div>
+                                <div className="text-[12px] font-bold text-on-surface">待确认区（Review）位置</div>
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -1475,7 +1800,7 @@ export function SessionLauncherShell() {
                                     setReviewFollowsNewRoot(false);
                                   }}
                                   disabled={loading || reviewFollowsNewRoot}
-                                  placeholder={reviewFollowsNewRoot ? derivedReviewRoot || "会跟随新目录位置自动生成" : placementConfig.globalReviewRoot || derivedReviewRoot || "单独设置 Review 目录位置"}
+                                  placeholder={reviewFollowsNewRoot ? derivedReviewRoot || "会跟随新目录位置自动生成" : placementConfig.globalReviewRoot || derivedReviewRoot || "单独设置待确认区位置"}
                                   className="h-10 flex-1 rounded-[8px] border border-transparent bg-on-surface/[0.03] px-3 text-[13px] font-medium text-on-surface outline-none transition-all placeholder:text-on-surface-variant/35 focus:border-primary/40 focus:bg-surface focus:ring-4 focus:ring-primary/10 disabled:opacity-60"
                                 />
                                 <button
@@ -1488,7 +1813,7 @@ export function SessionLauncherShell() {
                                 </button>
                               </div>
                               <p className="mt-2 text-[11px] font-medium text-ui-muted">
-                                默认情况下，Review 会跟随新目录根路径，自动使用 `{derivedReviewRoot || "新目录位置/Review"}`。
+                                默认情况下，待确认区（Review）会跟随新目录根路径，自动使用 `{derivedReviewRoot || "新目录位置/Review"}`。
                               </p>
                             </div>
                           </div>
@@ -1497,7 +1822,7 @@ export function SessionLauncherShell() {
 
                       {isAssignExisting ? (
                         <div className="rounded-[8px] border border-on-surface/8 bg-surface p-4">
-                          <div className="mb-3 flex items-center justify-between gap-3">
+                          <div className="mb-2 flex items-center justify-between gap-3">
                             <div className="flex items-center gap-2">
                               <div className="flex h-6 w-6 items-center justify-center rounded-[4px] bg-primary/10 text-primary">
                                 <Layers3 className="h-3.5 w-3.5" />
@@ -1524,64 +1849,64 @@ export function SessionLauncherShell() {
                             </select>
                           </div>
 
-                          <div className="space-y-3">
+                          <div className="space-y-2">
                             <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-ui-muted">补充目标目录</div>
                             
                             {effectiveTargetDirectories.length > 0 && (
                               <div className="grid gap-2">
-                                {effectiveTargetDirectories.map((item) => {
-                                  const isFromProfile = profileDirectories.some(p => p.path === item.path);
-                                  return (
-                                    <div
-                                      key={item.path}
-                                      className="group flex items-center justify-between gap-3 rounded-[8px] border border-on-surface/10 bg-surface-container-lowest px-4 py-3 shadow-sm transition-all hover:border-on-surface/20"
-                                    >
-                                      <div className="flex min-w-0 items-center gap-3">
-                                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[6px] bg-primary/10 text-primary">
-                                          <FolderOpen className="h-5 w-5" />
-                                        </div>
-                                        <div className="min-w-0">
-                                          <div className="flex items-center gap-2">
-                                            <span className="truncate text-[14px] font-bold text-on-surface">{item.label || item.path.split(/[\\/]/).pop() || item.path}</span>
-                                            {isFromProfile && <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[9px] font-black uppercase text-primary">配置项</span>}
+                                  {effectiveTargetDirectories.map((item) => {
+                                    const isFromProfile = profileDirectories.some(p => p.path === item.path);
+                                    return (
+                                      <div
+                                        key={item.path}
+                                        className="group flex items-center justify-between gap-3 rounded-lg border border-on-surface/12 bg-surface-container-lowest px-3 py-2 transition-all hover:border-on-surface/20 active:scale-[0.99]"
+                                      >
+                                        <div className="flex min-w-0 items-center gap-3">
+                                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                                            <FolderOpen className="h-4.5 w-4.5" />
                                           </div>
-                                          <div className="truncate text-[12px] font-medium text-on-surface-variant/60" title={item.path}>{item.path}</div>
+                                          <div className="min-w-0">
+                                            <div className="flex items-center gap-2">
+                                              <span className="truncate text-[14px] font-black tracking-tight text-on-surface">{item.label || item.path.split(/[\\/]/).pop() || item.path}</span>
+                                              {isFromProfile && <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[9px] font-black uppercase text-primary tracking-widest leading-none">已保存</span>}
+                                            </div>
+                                            <div className="truncate font-mono text-[10.5px] font-medium text-ui-muted opacity-40 uppercase tracking-tighter" title={item.path}>{item.path}</div>
+                                          </div>
                                         </div>
+                                        {!isFromProfile && (
+                                          <button
+                                            type="button"
+                                            onClick={() => removeManualTargetDirectory(item.path)}
+                                            disabled={loading}
+                                            className="shrink-0 rounded-md p-2 text-on-surface-variant/40 transition-all hover:bg-error/10 hover:text-error opacity-0 group-hover:opacity-100 focus:opacity-100 active:scale-90"
+                                            title="移除"
+                                          >
+                                            <Trash2 className="h-4 w-4" />
+                                          </button>
+                                        )}
                                       </div>
-                                      {!isFromProfile && (
-                                        <button
-                                          type="button"
-                                          onClick={() => removeManualTargetDirectory(item.path)}
-                                          disabled={loading}
-                                          className="shrink-0 rounded-[6px] p-2 text-on-surface-variant/50 transition-colors hover:bg-error/10 hover:text-error opacity-0 group-hover:opacity-100 focus:opacity-100"
-                                          title="移除"
-                                        >
-                                          <Trash2 className="h-4.5 w-4.5" />
-                                        </button>
-                                      )}
-                                    </div>
-                                  );
-                                })}
+                                    );
+                                  })}
                               </div>
                             )}
 
-                            <motion.div
-                              ref={targetDropZoneRef}
-                              onDrop={handleTargetDrop}
-                              onDragOver={handleTargetDragOver}
-                              onDragLeave={handleTargetDragLeave}
-                              animate={{
-                                scale: isTargetDropActive ? 1.01 : 1,
-                              }}
-                              className={cn(
-                                "flex flex-col items-center justify-center rounded-[10px] border-2 border-dashed px-4 py-8 transition-all duration-300 sm:flex-row sm:justify-between sm:py-3",
-                                isTargetDropActive 
-                                  ? "border-primary/50 bg-primary/10 shadow-lg shadow-primary/10" 
-                                  : isDraggingGlobal 
-                                    ? "border-primary/40 bg-primary/[0.04] shadow-sm shadow-primary/5"
-                                    : "border-on-surface/10 bg-surface-container-lowest hover:border-on-surface/20"
-                              )}
-                            >
+                              <motion.div
+                                ref={targetDropZoneRef}
+                                onDrop={handleTargetDrop}
+                                onDragOver={handleTargetDragOver}
+                                onDragLeave={handleTargetDragLeave}
+                                animate={{
+                                  scale: isTargetDropActive ? 1.01 : 1,
+                                }}
+                                className={cn(
+                                  "flex flex-col items-center justify-center rounded-[10px] border-2 border-dashed px-4 py-6 transition-all duration-300 sm:flex-row sm:justify-between sm:py-2.5",
+                                  isTargetDropActive 
+                                    ? "border-primary/25 bg-primary/5 text-primary" 
+                                    : isDraggingGlobal 
+                                      ? "border-primary/40 bg-primary/[0.04]"
+                                      : "border-on-surface/10 bg-surface-container-lowest hover:border-on-surface/20"
+                                )}
+                              >
                               <div className="flex items-center gap-2 text-[13px] font-bold text-on-surface/60 mb-3 sm:mb-0">
                                 <Plus className={cn("hidden h-4 w-4 transition-colors sm:block", isTargetDropActive ? "text-primary" : "opacity-20")} />
                                 {isTargetDropActive ? "松手即刻作为目标候选" : "拖拽文件夹作为目标候选，或者"}
@@ -1656,12 +1981,12 @@ export function SessionLauncherShell() {
                         </div>
                       ) : null}
 
-                      <div className="space-y-4 pt-4">
-                        <div className="flex items-start justify-between gap-4 border-b border-on-surface/10 pb-3">
+                      <div className="space-y-3 pt-2">
+                        <div className="flex items-start justify-between gap-4 border-b border-on-surface/10 pb-2">
                           <div className="min-w-0">
-                            <h2 className="text-[14px] font-bold text-on-surface">更多高级设置</h2>
+                            <h2 className="text-[14px] font-bold text-on-surface">高级设置</h2>
                             <p className="mt-1 text-[11px] font-medium leading-relaxed text-ui-muted">
-                              若需微调模板、生成语言、分类粒度、归档倾向等内容分析参数，可打开面板修改。
+                              若需微调模板、生成语言、分类粒度等参数。
                             </p>
                           </div>
                           <button
@@ -1669,7 +1994,7 @@ export function SessionLauncherShell() {
                             onClick={() => setAdvancedSettingsDialogOpen(true)}
                             className="shrink-0 rounded-[6px] border border-on-surface/10 bg-surface px-4 py-1.5 text-[12px] font-bold text-on-surface transition-colors hover:border-primary/20 hover:text-primary"
                           >
-                            展开高级面板
+                            打开高级设置
                           </button>
                         </div>
                       </div>
@@ -1694,13 +2019,13 @@ export function SessionLauncherShell() {
                   ) : null}
 
                   {/* Desktop Action Bar */}
-                  <div className="sticky bottom-0 z-20 mt-6 flex items-center justify-between border-t border-on-surface/10 bg-surface/90 pt-6 pb-8 backdrop-blur-md">
+                  <div className="sticky bottom-0 z-20 mt-3 flex items-center justify-between border-t border-on-surface/10 bg-surface/90 pt-4 pb-6 backdrop-blur-md">
                     {step > 1 ? (
                       <Button
                         variant="secondary"
                         onClick={() => setStep((current) => (Math.max(1, current - 1) as 1 | 2 | 3))}
                         disabled={loading}
-                        className="h-10 px-6 font-bold shadow-sm"
+                        className="h-10 px-6 font-bold"
                       >
                         返回上一步
                       </Button>
@@ -1711,18 +2036,18 @@ export function SessionLauncherShell() {
                     {step === 1 ? (
                       <Button
                         variant="primary"
-                        onClick={goToStepTwo}
+                        onClick={skipStrategyPrompt ? () => void launchCurrentRequest(true, { directStart: true }) : goToStepTwo}
                         disabled={loading || sources.length === 0}
-                        className="h-10 px-8 font-bold shadow-md"
+                        className="h-10 px-8 font-bold border border-primary/20 bg-primary"
                       >
-                        下一步：选择整理方式
+                        {loading ? "正在启动..." : skipStrategyPrompt ? fastStartLabel : "下一步：选择整理方式"}
                       </Button>
                     ) : step === 2 ? (
                       <Button
                         variant="primary"
                         onClick={goToStepThree}
                         disabled={loading}
-                        className="h-10 px-8 font-bold shadow-md"
+                        className="h-10 px-8 font-bold border border-primary/20 bg-primary"
                       >
                         下一步：填写必要信息
                       </Button>
@@ -1732,7 +2057,7 @@ export function SessionLauncherShell() {
                         onClick={() => void launchCurrentRequest(true)}
                         disabled={loading || !textModelConfigured}
                         loading={loading}
-                        className="h-10 min-w-[200px] px-8 font-bold shadow-md"
+                        className="h-10 min-w-[200px] px-8 font-bold border border-primary/20 bg-primary"
                       >
                         {loading ? "正在启动..." : primaryLaunchLabel}
                       </Button>
@@ -1744,179 +2069,7 @@ export function SessionLauncherShell() {
           </motion.div>
         </div>
 
-        <AnimatePresence initial={false}>
-          {showHistorySidebar && (
-            <motion.div
-              initial={{ width: 0, opacity: 0 }}
-              animate={{ width: "auto", opacity: 1 }}
-              exit={{ width: 0, opacity: 0 }}
-              transition={{ type: "spring", bounce: 0, duration: 0.4 }}
-              className="flex w-[300px] shrink-0 flex-col border-l border-on-surface/8 bg-surface-container-lowest/90 2xl:w-[340px] overflow-hidden backdrop-blur-sm"
-            >
-              <div className="flex items-center justify-between border-b border-on-surface/6 bg-surface/90 px-4 py-4">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-[8px] bg-primary/10 text-primary">
-                      <History className="h-3.5 w-3.5" />
-                    </div>
-                    <h2 className="font-headline text-[15px] font-black tracking-tight text-on-surface">历史会话流</h2>
-                  </div>
-                  <p className="mt-1 text-[11px] font-medium text-ui-muted">最近任务、执行结果和回退记录</p>
-                </div>
-                <button
-                  onClick={() => setShowHistorySidebar(false)}
-                  className="rounded-full p-1.5 text-on-surface-variant/40 hover:bg-on-surface/5 hover:text-on-surface transition-colors"
-                  title="折叠"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
-
-              <div className="scrollbar-thin flex-1 space-y-3 overflow-y-auto px-3 py-4">
-                {historyLoading ? (
-                  <div className="flex items-center justify-center rounded-[14px] border border-on-surface/6 bg-surface px-4 py-10 opacity-60">
-                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                  </div>
-                ) : historyItems.length > 0 ? (
-                  historyItems.map((item) => {
-                    const {
-                      name,
-                      isSession,
-                      statusLabel,
-                      statusTone,
-                      primaryActionLabel,
-                      secondaryActionLabel,
-                      helperText,
-                      itemCount,
-                      failureCount,
-                      pathLabel,
-                      timeLabel,
-                      leadingIcon: LeadingIcon,
-                    } = getHistoryItemMeta(item);
-
-                    return (
-                      <div
-                        key={item.execution_id}
-                        className="group cursor-pointer rounded-[14px] border border-on-surface/7 bg-surface px-3.5 py-3.5 shadow-[0_4px_16px_rgba(15,23,42,0.04)] transition-all hover:-translate-y-[1px] hover:border-primary/18 hover:shadow-[0_10px_28px_rgba(14,165,233,0.10)]"
-                        onClick={() => handleHistoryItemClick(item)}
-                      >
-                        <div className="flex items-start gap-3">
-                          <div
-                            className={cn(
-                              "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border",
-                              statusTone === "success" && "border-success/18 bg-success/10 text-success-dim",
-                              statusTone === "warning" && "border-warning/18 bg-warning-container/28 text-warning",
-                              statusTone === "muted" && "border-on-surface/10 bg-surface-container text-on-surface-variant/70",
-                              statusTone === "active" && "border-primary/14 bg-primary/10 text-primary",
-                            )}
-                          >
-                            <LeadingIcon className="h-4 w-4" />
-                          </div>
-
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <h3 className="truncate text-[14px] font-black tracking-tight text-on-surface">
-                                  {name}
-                                </h3>
-                                <p className="mt-1 truncate text-[11px] font-medium text-ui-muted" title={item.target_dir}>
-                                  {pathLabel}
-                                </p>
-                              </div>
-                              <span
-                                className={cn(
-                                  "shrink-0 rounded-full px-2 py-1 text-[10px] font-black tracking-tight",
-                                  statusTone === "success" && "bg-success/10 text-success-dim",
-                                  statusTone === "warning" && "bg-warning-container/40 text-warning",
-                                  statusTone === "muted" && "bg-surface-container text-on-surface-variant/75",
-                                  statusTone === "active" && "bg-primary/8 text-primary/80",
-                                )}
-                              >
-                                {statusLabel}
-                              </span>
-                            </div>
-
-                            <div className="mt-2 flex flex-wrap items-center gap-2 text-[10.5px] font-semibold text-ui-muted">
-                              <span className="inline-flex items-center gap-1 rounded-full bg-surface-container px-2 py-1">
-                                <Clock3 className="h-3.5 w-3.5" />
-                                {timeLabel}
-                              </span>
-                              <span className="inline-flex items-center gap-1 rounded-full bg-surface-container px-2 py-1">
-                                <FolderOpen className="h-3.5 w-3.5 text-primary/70" />
-                                {itemCount} 项
-                              </span>
-                              {failureCount > 0 ? (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-error-container/35 px-2 py-1 text-error">
-                                  <AlertTriangle className="h-3.5 w-3.5" />
-                                  {failureCount} 项失败
-                                </span>
-                              ) : null}
-                            </div>
-
-                            <div className="mt-3 flex items-center justify-between gap-3 border-t border-on-surface/6 pt-3">
-                              <p className="min-w-0 truncate text-[11px] font-medium text-ui-muted">{helperText}</p>
-                              <div className="flex shrink-0 items-center gap-1.5">
-                                {secondaryActionLabel ? (
-                                  <button
-                                    type="button"
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      handleHistoryItemReadonly(item);
-                                    }}
-                                    className="inline-flex items-center gap-1 rounded-[8px] border border-on-surface/8 bg-surface-container-low px-2 py-1.5 text-[10.5px] font-bold text-on-surface-variant transition-colors hover:border-primary/16 hover:text-primary"
-                                  >
-                                    <Eye className="h-3.5 w-3.5" />
-                                    {secondaryActionLabel}
-                                  </button>
-                                ) : null}
-                                <button
-                                  type="button"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    handleHistoryItemClick(item);
-                                  }}
-                                  className={cn(
-                                    "inline-flex items-center gap-1 rounded-[8px] px-2.5 py-1.5 text-[10.5px] font-black transition-colors",
-                                    isSession
-                                      ? "bg-primary text-white hover:bg-primary/90"
-                                      : "bg-surface-container text-on-surface hover:bg-surface-container-high",
-                                  )}
-                                >
-                                  {isSession ? <Activity className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
-                                  {primaryActionLabel}
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="rounded-[14px] border border-dashed border-on-surface/8 bg-surface px-4 py-8 text-center">
-                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-[10px] bg-surface-container text-ui-muted">
-                      <History className="h-4.5 w-4.5" />
-                    </div>
-                    <p className="mt-3 text-[13px] font-semibold text-on-surface">还没有历史记录</p>
-                    <p className="mt-1 text-[11px] font-medium leading-5 text-ui-muted">
-                      第一次启动整理后，这里会显示最近任务和执行结果。
-                    </p>
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {!showHistorySidebar && (
-          <button
-            onClick={() => setShowHistorySidebar(true)}
-            className="fixed right-0 top-1/2 z-30 -translate-y-1/2 rounded-l-full border border-r-0 border-on-surface/8 bg-surface p-1.5 text-on-surface-variant/60 shadow-md transition-all hover:bg-primary/5 hover:text-primary"
-            title="展开历史流"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-        )}
+        </div>
       </div>
 
       <ResumePromptDialog
@@ -1934,7 +2087,7 @@ export function SessionLauncherShell() {
       <Dialog open={advancedSettingsDialogOpen} onOpenChange={setAdvancedSettingsDialogOpen}>
         <DialogContent className="max-w-[920px]">
           <DialogHeader>
-            <DialogTitle>更多设置</DialogTitle>
+            <DialogTitle>高级设置</DialogTitle>
             <DialogDescription>
               这里用于启动前微调模板、风格、目录深度、归档倾向和补充说明。关闭后会保留你已经改过的草稿。
             </DialogDescription>
@@ -1957,7 +2110,7 @@ export function SessionLauncherShell() {
                           className={[
                             "rounded-[8px] border px-3 py-2.5 text-left transition-all disabled:opacity-50",
                             active
-                              ? "border-primary/25 bg-primary/10 shadow-sm"
+                              ? "border-primary/25 bg-primary/10"
                               : "border-on-surface/8 bg-surface hover:border-primary/20 hover:bg-surface-container-low",
                           ].join(" ")}
                         >
@@ -1982,7 +2135,7 @@ export function SessionLauncherShell() {
                           className={[
                             "rounded-[8px] border px-3 py-2.5 text-left transition-all disabled:opacity-50",
                             active
-                              ? "border-primary/25 bg-primary/10 shadow-sm"
+                              ? "border-primary/25 bg-primary/10"
                               : "border-on-surface/8 bg-surface hover:border-primary/20 hover:bg-surface-container-low",
                           ].join(" ")}
                         >
@@ -2007,7 +2160,7 @@ export function SessionLauncherShell() {
                           className={[
                             "rounded-[8px] border px-3 py-2.5 text-left transition-all disabled:opacity-50",
                             active
-                              ? "border-primary/25 bg-primary/10 shadow-sm"
+                              ? "border-primary/25 bg-primary/10"
                               : "border-on-surface/8 bg-surface hover:border-primary/20 hover:bg-surface-container-low",
                           ].join(" ")}
                         >
@@ -2032,7 +2185,7 @@ export function SessionLauncherShell() {
                           className={[
                             "rounded-[8px] border px-3 py-2.5 text-left transition-all disabled:opacity-50",
                             active
-                              ? "border-primary/25 bg-primary/10 shadow-sm"
+                              ? "border-primary/25 bg-primary/10"
                               : "border-on-surface/8 bg-surface hover:border-primary/20 hover:bg-surface-container-low",
                           ].join(" ")}
                         >
@@ -2059,7 +2212,7 @@ export function SessionLauncherShell() {
                         className={[
                           "rounded-[8px] border px-3 py-2.5 text-left transition-all disabled:opacity-50",
                           active
-                            ? "border-primary/25 bg-primary/10 shadow-sm"
+                            ? "border-primary/25 bg-primary/10"
                             : "border-on-surface/8 bg-surface hover:border-primary/20 hover:bg-surface-container-low",
                         ].join(" ")}
                       >
@@ -2088,7 +2241,7 @@ export function SessionLauncherShell() {
                       className={[
                         "rounded-[8px] border px-3 py-2.5 text-left transition-all disabled:opacity-50",
                         active
-                          ? "border-primary/25 bg-primary/10 shadow-sm"
+                          ? "border-primary/25 bg-primary/10"
                           : "border-on-surface/8 bg-surface hover:border-primary/20 hover:bg-surface-container-low",
                       ].join(" ")}
                     >
@@ -2106,7 +2259,7 @@ export function SessionLauncherShell() {
                 value={strategy.note}
                 disabled={loading}
                 onChange={(event) => updateStrategy((previous) => ({ ...previous, note: event.target.value.slice(0, 200) }))}
-                placeholder={isAssignExisting ? "例如：拿不准的先放 Review；优先归入现有项目目录。" : "例如：课程资料按学期整理；图片素材按用途分层。"}
+                placeholder={isAssignExisting ? "例如：拿不准的先放待确认区（Review）；优先归入现有项目目录。" : "例如：课程资料按学期整理；图片素材按用途分层。"}
                 className="min-h-[96px] w-full resize-none rounded-[10px] border border-on-surface/8 bg-surface px-4 py-3 text-[13px] leading-relaxed text-on-surface outline-none transition-all placeholder:text-on-surface-variant/35 focus:border-primary/30"
               />
             </div>

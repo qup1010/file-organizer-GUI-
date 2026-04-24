@@ -219,4 +219,172 @@ describe("useSession assistant draft", () => {
       expect(result.current.assistantDraft).toBe("");
     });
   });
+
+  it("shows a local fallback reply when plan updated after tool-only model output", async () => {
+    const { result } = renderHook(() => useSession("session-1"));
+
+    await waitFor(() => {
+      expect(getSession).toHaveBeenCalledWith("session-1");
+      expect(latestStreamOptions).not.toBeNull();
+    });
+
+    act(() => {
+      latestStreamOptions?.onEvent(
+        createEvent("plan.action", {
+          action: { name: "submit_plan_diff" },
+          session_snapshot: createSnapshot(),
+        }),
+      );
+    });
+
+    act(() => {
+      latestStreamOptions?.onEvent(
+        createEvent("plan.updated", {
+          session_snapshot: createSnapshot({ messages: [] }),
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(result.current.assistantDraft).toBe("我已经更新了整理计划，请您查看。");
+    });
+  });
+
+  it("shows the fallback reply from a ready plan snapshot without assistant text", async () => {
+    const baseSnapshot = createSnapshot();
+    getSession.mockResolvedValue({
+      session_id: "session-1",
+      session_snapshot: createSnapshot({
+        stage: "ready_for_precheck",
+        messages: [],
+        plan_snapshot: {
+          ...baseSnapshot.plan_snapshot,
+          items: [
+            {
+              item_id: "F001",
+              display_name: "demo.png",
+              source_relpath: "demo.png",
+              target_slot_id: "T001",
+              suggested_purpose: "图片素材",
+              mapping_status: "planned",
+              status: "planned",
+            },
+          ],
+          target_slots: [
+            {
+              slot_id: "T001",
+              display_name: "素材",
+              relpath: "素材",
+              depth: 1,
+              is_new: true,
+            },
+          ],
+          stats: {
+            directory_count: 1,
+            move_count: 1,
+            unresolved_count: 0,
+          },
+          readiness: {
+            can_precheck: true,
+          },
+        },
+      }),
+    });
+
+    const { result } = renderHook(() => useSession("session-1"));
+
+    await waitFor(() => {
+      expect(result.current.chatMessages).toEqual([
+        expect.objectContaining({
+          role: "assistant",
+          content: "我已经更新了整理计划，请您查看。",
+        }),
+      ]);
+    });
+  });
+
+  it("renders assistant_message from the session snapshot", async () => {
+    getSession.mockResolvedValue({
+      session_id: "session-1",
+      session_snapshot: createSnapshot({
+        messages: [],
+        assistant_message: {
+          id: "assistant-current",
+          role: "assistant",
+          content: "这是后端快照中的当前回复",
+        },
+      }),
+    });
+
+    const { result } = renderHook(() => useSession("session-1"));
+
+    await waitFor(() => {
+      expect(result.current.chatMessages).toEqual([
+        expect.objectContaining({
+          id: "assistant-current",
+          content: "这是后端快照中的当前回复",
+        }),
+      ]);
+    });
+  });
+
+  it("does not show the local fallback for unrelated plan updates", async () => {
+    const { result } = renderHook(() => useSession("session-1"));
+
+    await waitFor(() => {
+      expect(getSession).toHaveBeenCalledWith("session-1");
+      expect(latestStreamOptions).not.toBeNull();
+    });
+
+    act(() => {
+      latestStreamOptions?.onEvent(
+        createEvent("plan.updated", {
+          session_snapshot: createSnapshot({ messages: [] }),
+        }),
+      );
+    });
+
+    expect(result.current.assistantDraft).toBe("");
+  });
+
+  it("clears stale chatError after the session returns to planning", async () => {
+    const { result } = renderHook(() => useSession("session-1"));
+
+    await waitFor(() => {
+      expect(getSession).toHaveBeenCalledWith("session-1");
+      expect(latestStreamOptions).not.toBeNull();
+    });
+
+    act(() => {
+      latestStreamOptions?.onEvent(
+        createEvent("session.interrupted", {
+          stage: "interrupted",
+          session_snapshot: createSnapshot({
+            stage: "interrupted",
+            last_error: "scanning_interrupted",
+          }),
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(result.current.chatError).toBe("scanning_interrupted");
+    });
+
+    act(() => {
+      latestStreamOptions?.onEvent(
+        createEvent("scan.completed", {
+          stage: "planning",
+          session_snapshot: createSnapshot({
+            stage: "planning",
+            last_error: null,
+          }),
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(result.current.chatError).toBeNull();
+    });
+  });
 });

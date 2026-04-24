@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -18,21 +19,29 @@ TEMPLATES_SCHEMA_VERSION = 1
 
 def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = path.with_suffix(path.suffix + ".tmp")
-    temp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    temp_path = path.with_suffix(f"{path.suffix}.{uuid.uuid4().hex}.tmp")
 
-    max_retries = 5
-    for attempt in range(max_retries):
-        try:
-            if path.exists():
-                os.replace(temp_path, path)
-            else:
-                os.rename(temp_path, path)
-            return
-        except PermissionError:
-            if attempt == max_retries - 1:
-                raise
-            time.sleep(0.05 * (attempt + 1))
+    try:
+        temp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        max_retries = 5
+        for attempt in range(max_retries):
+            try:
+                if path.exists():
+                    os.replace(temp_path, path)
+                else:
+                    os.rename(temp_path, path)
+                return
+            except PermissionError:
+                if attempt == max_retries - 1:
+                    raise
+                time.sleep(0.05 * (attempt + 1))
+    finally:
+        if temp_path.exists():
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
 
 
 class IconWorkbenchStore:

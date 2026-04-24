@@ -1,5 +1,6 @@
 ﻿import shutil
 import unittest
+import shutil
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -162,6 +163,62 @@ class StructuredAnalysisServiceTests(unittest.TestCase):
         self.assertIn("F001 |", messages[0]["content"])
         self.assertIn("F002 |", messages[0]["content"])
         self.assertNotIn(str(self.base_dir.resolve()), messages[0]["content"])
+
+    def test_run_analysis_cycle_logs_when_image_entries_are_not_requested_for_inspection(self):
+        image_path = self.base_dir / "IMG_001.png"
+        image_path.write_bytes(b"fake-image")
+        tool_call = SimpleNamespace(
+            function=SimpleNamespace(
+                name=analysis_service.SUBMIT_ANALYSIS_TOOL_NAME,
+                arguments='{"items": [{"entry_id": "F001", "entry_type": "file", "suggested_purpose": "财务/合同", "summary": "付款协议"}, {"entry_id": "F002", "entry_type": "dir", "suggested_purpose": "截图记录", "summary": "软件报错截图"}, {"entry_id": "F003", "entry_type": "file", "suggested_purpose": "待判断", "summary": "未查看图片"}]}'
+            )
+        )
+        response = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(tool_calls=[tool_call], content=""))]
+        )
+        client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=mock.Mock(return_value=response))))
+
+        with mock.patch.object(analysis_service, "get_client", return_value=client), mock.patch.object(
+            analysis_service, "_vision_prompt_enabled", return_value=True
+        ), mock.patch.object(analysis_service, "_write_analysis_debug_event") as write_debug_event:
+            analysis_service.run_analysis_cycle(self.base_dir)
+
+        event_kinds = [call.args[1] for call in write_debug_event.call_args_list]
+        self.assertIn("analysis.vision.skipped_not_requested", event_kinds)
+
+    def test_extract_image_probe_statuses_parses_structured_image_blocks(self):
+        result = (
+            "--- 条目 [F001 | IMG_001.png] 内容开始 ---\n"
+            "--- 图片识别结果开始 ---\n"
+            "status: failed\n"
+            "error_code: vision_request_failed\n"
+            "error_message: provider failed\n"
+            "--- 图片识别结果结束 ---\n"
+            "--- 内容结束 ---"
+        )
+
+        statuses = analysis_service._extract_image_probe_statuses(result)
+
+        self.assertEqual(statuses["F001"]["status"], "failed")
+        self.assertEqual(statuses["F001"]["error_code"], "vision_request_failed")
+
+    def test_validate_failed_image_probe_items_rejects_specific_scene_when_probe_failed(self):
+        items = [
+            AnalysisItem(
+                entry_id="F001",
+                entry_name="IMG_001.png",
+                entry_type="file",
+                suggested_purpose="图片/照片",
+                summary="聚餐场景照片，显示多人围坐圆桌用餐",
+            )
+        ]
+
+        failures = analysis_service._validate_failed_image_probe_items(
+            items,
+            {"F001": {"status": "failed", "error_code": "vision_request_failed", "error_message": "provider failed"}},
+        )
+
+        self.assertEqual(failures, ["F001"])
 
     def test_batch_read_tool_resolves_entry_ids_without_exposing_absolute_paths(self):
         entry_context = {

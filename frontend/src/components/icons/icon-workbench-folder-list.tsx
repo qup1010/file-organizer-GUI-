@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { FolderPlus, Palette, Plus } from "lucide-react";
+import { FolderOpen, FolderPlus, Palette, Plus, Sparkles } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 import { Button } from "@/components/ui/button";
@@ -77,121 +77,94 @@ export function IconWorkbenchFolderList({
 
   return (
     <div className="flex flex-1 flex-col min-h-0 overflow-hidden">
-      <div className="glass-surface flex flex-col gap-2 border-b border-on-surface/6 px-6 py-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-[16px] font-black tracking-tight text-on-surface">目标文件夹</p>
-          </div>
-          <span className="rounded-full border border-on-surface/8 bg-surface-container-low px-3 py-1 text-[12px] font-bold text-ui-muted">
-            {folders.length} 个目标
-          </span>
-        </div>
-      </div>
-
-      <div className="flex-1 relative min-h-0 overflow-y-auto px-6 py-4 scrollbar-thin">
+      <div className="flex-1 relative min-h-0 overflow-y-auto px-4 py-3 scrollbar-thin">
+        {/* 精简版：风格配置提醒 */}
         {!hasSelectedStyle && folders.length > 0 && !hasReadyVersions && (
-          <div className="mb-6 flex animate-in fade-in slide-in-from-top-2 duration-500 flex-col items-center gap-4 rounded-xl border border-dashed border-primary/20 bg-primary/2 p-10 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-[20px] bg-primary/10 text-primary shadow-sm ring-1 ring-primary/20">
-              <Palette className="h-8 w-8" />
-            </div>
-            <div className="max-w-[360px] space-y-2">
-              <p className="text-[18px] font-black tracking-tight text-on-surface">请先选择风格模板</p>
-              <p className="text-[14px] leading-relaxed text-ui-muted opacity-80">
-                你已经选择了目标文件夹。请先点击顶部的<b>“选择风格模板”</b>，系统将根据选定风格为你生成第一版图标。
-              </p>
-            </div>
+          <div className="mb-3 flex animate-in fade-in slide-in-from-top-2 duration-500 items-center gap-3 rounded-lg border border-primary/20 bg-primary/[0.03] px-4 py-2">
+            <Palette className="h-3.5 w-3.5 text-primary opacity-60" />
+            <p className="text-[11.5px] font-bold text-on-surface/80">请配置图标风格</p>
+            <p className="text-[10px] font-medium text-ui-muted opacity-50 flex-1">点击工具栏“选择风格模板”以开始生成预览方案</p>
           </div>
         )}
 
         {folders.length === 0 ? (
           <motion.div
-            ref={dropZoneRef}
-            data-testid="icon-target-dropzone"
-            onDrop={onTargetDrop}
-            onDragOver={onTargetDragOver}
-            onDragLeave={onTargetDragLeave}
-            className={cn(
-              "flex flex-col items-center justify-center rounded-[20px] border-2 border-dashed py-20 transition-all duration-300",
-              isTargetDropActive 
-                ? "border-primary/50 bg-primary/10 shadow-2xl shadow-primary/20" 
-                : isDraggingGlobal 
-                  ? "border-primary/40 bg-primary/[0.04] shadow-md shadow-primary/5" 
-                  : "border-on-surface/8 bg-surface-container-lowest"
-            )}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col items-center justify-center py-20 px-6 text-center"
           >
-            <motion.div 
-              animate={{ 
-                y: isTargetDropActive ? [-4, 0, -4] : isDraggingGlobal ? [-2, 0, -2] : 0,
-                scale: isTargetDropActive ? 1.15 : 1
-              }}
-              transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
-              className={cn(
-                "mb-6 flex h-14 w-14 items-center justify-center rounded-[12px] transition-all duration-300 shadow-sm",
-                isTargetDropActive
-                  ? "bg-primary text-white"
-                  : isDraggingGlobal 
-                    ? "bg-primary/10 text-primary border border-primary/20" 
-                    : "bg-on-surface/[0.03] text-on-surface/20 border border-on-surface/8 shadow-inner"
-              )}
-            >
-              <FolderPlus className="h-7 w-7" />
-            </motion.div>
-            <div className="max-w-[420px] text-center space-y-4">
-              <div className="space-y-1">
-                <h3 className={cn(
-                  "text-[17px] font-black tracking-tight transition-colors duration-300",
-                  isTargetDropActive ? "text-primary" : "text-on-surface"
-                )}>
-                  {isTargetDropActive ? "松手即刻导入目标" : "尚未添加目标文件夹"}
-                </h3>
-                <p className="text-[13px] font-medium leading-relaxed text-ui-muted opacity-60">
-                  图标工坊会自动检测文件夹的实际用途，并根据你定义的风格生成系统级图标预览。把文件夹拖到这里，或者点击下方按钮开始第一步。
-                </p>
+            {/* 视觉图形组 */}
+            <div className="relative mb-8 flex h-24 w-24 items-center justify-center">
+              <div className="absolute inset-0 rounded-[28px] border border-on-surface/5 bg-on-surface/[0.02]" />
+              <div className="relative flex h-20 w-20 items-center justify-center rounded-[20px] border border-on-surface/8 bg-surface-container-lowest">
+                <FolderOpen className="h-9 w-9 text-on-surface/10" />
+                <div className="absolute -right-1 -top-1 flex h-8 w-8 items-center justify-center rounded-xl border border-primary/20 bg-primary/8 text-primary">
+                  <Sparkles className="h-4.5 w-4.5" />
+                </div>
               </div>
-              <Button 
-                variant="primary" 
-                size="lg" 
-                onClick={onAddTargets} 
-                className="h-11 px-8 rounded-[6px] font-black text-[14px] shadow-sm hover:shadow-md transition-all active:scale-95"
+            </div>
+
+            {/* 文案说明 */}
+            <div className="max-w-[320px] mb-8">
+              <h2 className="text-[15px] font-black tracking-tight text-on-surface/90 mb-2">待命中的图标工坊</h2>
+              <p className="text-[12px] font-medium leading-relaxed text-on-surface/40">
+                通过 AI 技术分析文件夹语义，并为其自动匹配、生成或应用精美的定制图标。
+              </p>
+            </div>
+
+            {/* 操作区域 */}
+            <div className="flex flex-col gap-3 w-full max-w-[200px]">
+              <button
+                onClick={onAddTargets}
+                className="flex h-11 w-full items-center justify-center gap-3 rounded-lg border border-primary/25 bg-primary px-6 text-[13px] font-black uppercase tracking-wider text-white transition-all hover:bg-primary-dim active:scale-95"
               >
-                选择目标文件夹 <FolderPlus className="ml-2 h-4 w-4" />
-              </Button>
+                <Plus className="h-4 w-4 stroke-[3]" />
+                <span>载入目标</span>
+              </button>
+              
+              <div 
+                ref={dropZoneRef}
+                onDrop={onTargetDrop}
+                onDragOver={onTargetDragOver}
+                onDragLeave={onTargetDragLeave}
+                className={cn(
+                   "flex h-10 w-full items-center justify-center rounded-lg border border-dashed text-[11px] font-bold transition-all",
+                   isTargetDropActive 
+                     ? "border-primary bg-primary/10 text-primary" 
+                     : "border-on-surface/10 bg-on-surface/[0.02] text-on-surface/30 px-3 truncate"
+                )}
+              >
+                {isTargetDropActive ? "释放以载入" : "或将文件夹拖放至此"}
+              </div>
             </div>
           </motion.div>
         ) : (
-          <div className="flex flex-col gap-3 pb-24">
+          <div className="flex flex-col gap-1.5 pb-20">
+            {/* 紧凑型追加按钮 */}
             <motion.div
               ref={dropZoneRef}
               onDrop={onTargetDrop}
               onDragOver={onTargetDragOver}
               onDragLeave={onTargetDragLeave}
               className={cn(
-                "mb-2 flex flex-col items-center justify-center gap-2 rounded-[12px] border-2 border-dashed py-6 transition-all duration-300 group/add-more",
+                "mb-2 flex items-center justify-center gap-2 rounded-lg border border-dashed py-2.5 transition-all group/add-more",
                 isTargetDropActive 
-                  ? "border-primary/50 bg-primary/10 shadow-lg shadow-primary/10" 
-                  : isDraggingGlobal 
-                    ? "border-primary/40 bg-primary/[0.04] shadow-sm shadow-primary/5" 
-                    : "border-on-surface/8 bg-on-surface/[0.015]"
+                  ? "border-primary bg-primary/5" 
+                  : "border-on-surface/5 bg-on-surface/[0.02] hover:border-primary/10 hover:bg-on-surface/[0.04]"
               )}
             >
-              <div className={cn(
-                "flex h-8 w-8 items-center justify-center rounded-full transition-colors",
-                isTargetDropActive ? "bg-primary text-white" : isDraggingGlobal ? "bg-primary/20 text-primary" : "bg-on-surface/[0.03] text-on-surface/20 group-hover/add-more:bg-primary/10 group-hover/add-more:text-primary"
+              <Plus className={cn(
+                "h-3 w-3 transition-colors",
+                isTargetDropActive ? "text-primary" : "text-on-surface/20 group-hover/add-more:text-primary"
+              )} />
+              <span className={cn(
+                "text-[11px] font-black uppercase tracking-widest transition-colors",
+                isTargetDropActive ? "text-primary" : "text-on-surface/30 group-hover/add-more:text-primary/60"
               )}>
-                <Plus className="h-4 w-4" />
-              </div>
-              <div className="text-center">
-                <p className={cn(
-                  "text-[14px] font-black tracking-tight transition-colors",
-                  isTargetDropActive ? "text-primary" : isDraggingGlobal ? "text-primary/70" : "text-on-surface/70"
-                )}>
-                  {isTargetDropActive ? "松手即刻追加" : isDraggingGlobal ? "拖拽到这里追加" : "还可以继续拖拽文件夹到这里追加"}
-                </p>
-                <p className="text-[11px] font-bold text-ui-muted opacity-50">
-                  点击上方工具栏也可以手动选择
-                </p>
-              </div>
+                {isTargetDropActive ? "释放以追加" : "追加目标文件夹"}
+              </span>
             </motion.div>
+
             {folders.map((folder) => (
               <IconWorkbenchFolderCard
                 key={folder.folder_id}

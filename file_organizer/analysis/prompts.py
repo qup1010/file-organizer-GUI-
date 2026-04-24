@@ -1,7 +1,14 @@
 from pathlib import Path
 
 
-def build_system_prompt(files_info: str, target_dir: Path | None = None) -> str:
+def build_system_prompt(files_info: str, target_dir: Path | None = None, *, vision_enabled: bool = False) -> str:
+    vision_guidance = (
+        "- 对于图片条目：先根据文件名判断用途；只有当图片文件名不足以稳妥判断内容时，你才可以使用 read_local_files_batch 查看图片识别结果。\n"
+        "- 不要为了求稳对所有图片都看图；如果文件名已经足够清楚，就不要额外探查图片内容。\n"
+        if vision_enabled
+        else
+        "- 对于图片条目：当前未开启图片理解，请只根据文件名和扩展名判断用途，不要为了图片内容再调用工具探查。\n"
+    )
     return (
         "你是一个文件分析专家，负责对目标目录当前层的每个条目做用途摘要。\n"
         "## 已有信息\n"
@@ -17,7 +24,8 @@ def build_system_prompt(files_info: str, target_dir: Path | None = None) -> str:
         "5. 可能用途应基于文件名和已有列表做谨慎判断；信息不足时写'待判断'，不要编造。\n\n"
         "## 效率原则\n"
         "- 多数条目仅凭文件名和扩展名即可判断用途，**请优先直接提交**。\n"
-        "- 当条目名称无法推断用途时（如纯数字编号、无扩展名），才使用 read_local_files_batch 一次性探查关键条目。\n"
+        "- 当条目名称无法推断用途时，才使用 read_local_files_batch 一次性探查关键条目。\n"
+        f"{vision_guidance}"
         "  - 传入 entry_id → 返回该条目的内容摘要或目录结构。\n"
         "- 不要反复调用工具探索；不要探查你已经能从名称推断出用途的条目。\n"
         "- 上方列表已经给出了条目的 display_name 和类型，通常无需额外探查。\n"

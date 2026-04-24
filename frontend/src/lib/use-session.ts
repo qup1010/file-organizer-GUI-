@@ -30,6 +30,8 @@ function nowLabel(): string {
 }
 
 const INITIAL_PLAN_REQUEST_PREFIX = "请基于上述的目录扫描结果和整理规则，为我生成整理计划。简要聊聊你为何这样计划，以及你对此目录的理解和分析。";
+const TOOL_ONLY_PLAN_FALLBACK_REPLY = "我已经更新了整理计划，请您查看。";
+const PLAN_FALLBACK_MESSAGE_ID = "local-plan-fallback";
 
 function shouldDisplayMessage(message: AssistantMessage): boolean {
   const role = String(message.role || "").trim();
@@ -53,6 +55,45 @@ function shouldDisplayMessage(message: AssistantMessage): boolean {
   }
 
   return role === "assistant" || role === "user";
+}
+
+function collectSnapshotMessages(snapshot?: SessionSnapshot | null): AssistantMessage[] {
+  if (!snapshot) {
+    return [];
+  }
+  const messages = [...(snapshot.messages || [])];
+  if (snapshot.assistant_message && !messages.some((message) => message.id === snapshot.assistant_message?.id)) {
+    messages.push(snapshot.assistant_message);
+  }
+  return messages;
+}
+
+function hasDisplayableAssistantReply(snapshot?: SessionSnapshot | null): boolean {
+  const messages = collectSnapshotMessages(snapshot);
+  return messages.some((message) => String(message.role || "").trim() === "assistant" && shouldDisplayMessage(message));
+}
+
+function hasPlanContent(snapshot?: SessionSnapshot | null): boolean {
+  const plan = snapshot?.plan_snapshot;
+  if (!plan) {
+    return false;
+  }
+  return Boolean(
+    (plan.items || []).length > 0
+      || (plan.groups || []).length > 0
+      || (plan.target_slots || []).length > 0
+      || (plan.stats?.move_count || 0) > 0
+      || (plan.stats?.unresolved_count || 0) > 0,
+  );
+}
+
+function shouldShowPlanFallbackMessage(snapshot?: SessionSnapshot | null): boolean {
+  if (!snapshot || !hasPlanContent(snapshot) || hasDisplayableAssistantReply(snapshot)) {
+    return false;
+  }
+  return snapshot.stage === "planning"
+    || snapshot.stage === "ready_for_precheck"
+    || snapshot.stage === "ready_to_execute";
 }
 
 function humanizeActionTarget(value: unknown): string | undefined {
@@ -222,6 +263,7 @@ export function useSession(sessionId: string | null) {
   const streamRef = useRef<SessionEventStream | null>(null);
   const snapshotRef = useRef<SessionSnapshot | null>(null);
   const offlineTimerRef = useRef<number | null>(null);
+  const planReplyFallbackPendingRef = useRef(false);
   const hasConnectedRef = useRef(false);
   const api = useMemo(() => createApiClient(getApiBaseUrl(), getApiToken()), []);
 
@@ -261,6 +303,9 @@ export function useSession(sessionId: string | null) {
     setStreamStatus("connected");
     const snapshotPlannerProgress = normalizePlannerProgress(event.session_snapshot?.planner_progress);
     const shouldPreserveAssistantDraft = snapshotPlannerProgress.status === "running" && snapshotPlannerProgress.phase === "streaming_reply";
+    if (snapshotPlannerProgress.status === "running" && runtimePhaseFromEvent(event) === "plan") {
+      planReplyFallbackPendingRef.current = true;
+    }
 
     if (event.event_type === "scan.started") {
       setAssistantRuntime({
@@ -272,6 +317,9 @@ export function useSession(sessionId: string | null) {
     }
 
     if (event.event_type === "scan.action" || event.event_type === "plan.action") {
+      if (event.event_type === "plan.action") {
+        planReplyFallbackPendingRef.current = true;
+      }
       if (event.session_snapshot) {
         setSnapshot(event.session_snapshot);
       }
@@ -291,6 +339,7 @@ export function useSession(sessionId: string | null) {
     }
 
     if (event.event_type === "plan.ai_typing") {
+      planReplyFallbackPendingRef.current = true;
       if (event.session_snapshot) {
         setSnapshot(event.session_snapshot);
       }
@@ -301,6 +350,9 @@ export function useSession(sessionId: string | null) {
 
     if (event.session_snapshot) {
       setSnapshot(event.session_snapshot);
+      if (event.session_snapshot.stage !== "interrupted" && event.event_type !== "session.error") {
+        setChatError(null);
+      }
     }
 
     if (event.event_type === "session.error" || event.event_type === "session.interrupted") {
@@ -319,8 +371,22 @@ export function useSession(sessionId: string | null) {
       setChatError(null);
     }
 
+    const shouldShowToolOnlyFallback =
+      event.event_type === "plan.updated"
+      && planReplyFallbackPendingRef.current
+      && !hasDisplayableAssistantReply(event.session_snapshot);
+
     if (!shouldPreserveAssistantDraft) {
-      setAssistantDraft("");
+      setAssistantDraft((current) => {
+        if (shouldShowToolOnlyFallback) {
+          return current.trim() ? current : TOOL_ONLY_PLAN_FALLBACK_REPLY;
+        }
+        return "";
+      });
+    }
+
+    if (event.event_type === "plan.updated" || event.event_type === "session.error" || event.event_type === "session.interrupted") {
+      planReplyFallbackPendingRef.current = false;
     }
   }, [clearOfflineTimer]);
 
@@ -396,18 +462,30 @@ export function useSession(sessionId: string | null) {
 
   const stage = snapshot?.stage || "idle";
   const stageView = useMemo(() => getSessionStageView(stage), [stage]);
-  const plannerProgress = useMemo(
-    () => normalizePlannerProgress(snapshot?.planner_progress),
-    [snapshot?.planner_progress],
-  );
+  const plannerProgress = useMemo(() => {
+    if (!stageView.isPlanningConversation) {
+      return IDLE_PLANNER_PROGRESS;
+    }
+    return normalizePlannerProgress(snapshot?.planner_progress);
+  }, [snapshot?.planner_progress, stageView.isPlanningConversation]);
   const plannerStatus = useMemo(
     () => buildPlannerStatus(plannerProgress, plannerClock),
     [plannerClock, plannerProgress],
   );
-  const chatMessages = useMemo(
-    () => (snapshot?.messages || []).filter(shouldDisplayMessage),
-    [snapshot?.messages],
-  );
+  const chatMessages = useMemo(() => {
+    const visibleMessages = collectSnapshotMessages(snapshot).filter(shouldDisplayMessage);
+    if (!assistantDraft.trim() && shouldShowPlanFallbackMessage(snapshot)) {
+      return [
+        ...visibleMessages,
+        {
+          id: PLAN_FALLBACK_MESSAGE_ID,
+          role: "assistant",
+          content: TOOL_ONLY_PLAN_FALLBACK_REPLY,
+        },
+      ];
+    }
+    return visibleMessages;
+  }, [assistantDraft, snapshot]);
   const composerMode = stageView.composerMode;
   const composerStatus = useMemo<AssistantRuntimeStatus | null>(() => {
     if (plannerStatus.isRunning && composerMode === "editable") {
@@ -500,6 +578,7 @@ export function useSession(sessionId: string | null) {
     setLoading(true);
     setChatError(null);
     setAssistantDraft("");
+    planReplyFallbackPendingRef.current = true;
     setAssistantRuntime({
       phase: "plan",
       mode: "waiting",
@@ -551,6 +630,7 @@ export function useSession(sessionId: string | null) {
     }
     setLoading(true);
     resetConversationTransientState();
+    planReplyFallbackPendingRef.current = true;
     try {
       const response = await api.refreshSession(sessionId);
       setSnapshot(response.session_snapshot);
@@ -568,6 +648,7 @@ export function useSession(sessionId: string | null) {
     setLoading(true);
     setChatError(null);
     setAssistantDraft("");
+    planReplyFallbackPendingRef.current = true;
     setAssistantRuntime({
       phase: "plan",
       mode: "waiting",
@@ -598,7 +679,7 @@ export function useSession(sessionId: string | null) {
       const response = await api.runPrecheck(sessionId);
       setSnapshot(response.session_snapshot);
     } catch (err) {
-      setChatError(err instanceof Error ? err.message : "运行预检失败，请重试。");
+      setChatError(err instanceof Error ? err.message : "安全检查失败，请重试。");
     } finally {
       setLoading(false);
     }

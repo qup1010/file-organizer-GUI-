@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, FileText, Folder, FolderOpen, Layers, Search, Sparkles, Edit2, Info, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, ChevronDown, ChevronRight, ChevronUp, FileText, Folder, FolderOpen, Layers, Search, Sparkles, Edit2, Info, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { MarkdownProse } from "./markdown-prose";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose } from "@/components/ui/dialog";
@@ -266,6 +266,9 @@ function TreeBranch({
   onSelectItem,
   onEditItem,
   acceptedReviewItemIds,
+  viewMode,
+  targetSlotById,
+  placement,
 }: {
   node: TreeNode;
   depth: number;
@@ -275,62 +278,112 @@ function TreeBranch({
   onSelectItem: (itemId: string) => void;
   onEditItem: (itemId: string) => void;
   acceptedReviewItemIds: string[];
+  viewMode: "before" | "after";
+  targetSlotById: TargetSlotLookup;
+  placement: PlacementConfig;
 }) {
+  const [isHovered, setIsHovered] = useState(false);
+  
   if (node.kind === "file") {
     if (node.item) {
       const status = itemStatusMeta(node.item, acceptedReviewItemIds);
       const ItemIcon = normalizeEntryKind(node.item.entry_type) === "directory" ? Folder : FileText;
+      const active = selectedItemId === node.item.item_id;
+      const hasMoved = viewMode === "after" && isItemChanged(node.item, targetSlotById, placement);
+
       return (
-        <button
-          type="button"
-          onClick={() => onSelectItem(node.item!.item_id)}
-          className={cn(
-            "group flex w-full items-center gap-3 py-1.5 pr-2 text-left transition-colors relative border-b border-on-surface/[0.04] last:border-0",
-            selectedItemId === node.item.item_id ? "bg-primary/6" : "hover:bg-on-surface/[0.025]",
-          )}
-          style={{ paddingLeft: 12 + depth * 16 }}
+        <div
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+          className="flex flex-col"
         >
-          {selectedItemId === node.item.item_id && (
-            <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-primary" />
-          )}
-          <ItemIcon className="h-3.5 w-3.5 shrink-0 text-on-surface-variant/50" />
-          <div className="min-w-0 flex-1 py-0.5">
-            <p className="truncate text-[12.5px] font-medium text-on-surface leading-tight">{node.item.display_name}</p>
-            <p className="mt-0.5 truncate text-[10.5px] text-ui-muted opacity-80 leading-tight">{node.item.suggested_purpose || "未提供归类理由"}</p>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            {node.item.status !== "assigned" && node.item.status !== "skipped" && (
-              <span className={cn("rounded-[4px] border px-1.5 py-0.5 text-[10px] font-bold shrink-0", status.tone)}>{status.label}</span>
+          <button
+            type="button"
+            onClick={() => onSelectItem(node.item!.item_id)}
+            className={cn(
+              "group relative flex w-full items-center gap-3 py-1.5 pr-2 text-left transition-all border-b border-on-surface/[0.04] last:border-0",
+              active ? "bg-primary/[0.06] border-l-2 border-primary" : "hover:bg-on-surface/[0.02]",
             )}
-            
-            <div
-              role="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onEditItem(node.item!.item_id);
-              }}
-              className={cn(
-                "flex h-6 w-6 shrink-0 items-center justify-center rounded-[4px] border border-on-surface/10 bg-surface shadow-sm transition-opacity hover:bg-on-surface/[0.02] active:scale-95",
-                selectedItemId === node.item.item_id ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus:opacity-100"
-              )}
-            >
-              <Edit2 className="h-3 w-3 text-on-surface-variant" />
+            style={{ paddingLeft: 12 + depth * 16 }}
+          >
+            <ItemIcon className={cn("h-3.5 w-3.5 shrink-0 transition-colors", active ? "text-primary/70" : "text-on-surface-variant/30")} />
+            <div className="min-w-0 flex-1 py-0.5">
+              <div className="flex items-center gap-2">
+                <p className={cn("truncate font-mono text-[12.5px] tracking-tight transition-colors", active ? "text-primary font-bold" : "text-on-surface/80")}>
+                  {node.item.display_name}
+                </p>
+                {hasMoved && (
+                   <span className="truncate text-[9px] font-bold uppercase tracking-tighter text-ui-muted opacity-25 group-hover:opacity-50 transition-opacity whitespace-nowrap">
+                      ← {node.item.source_relpath.split('/').slice(0, -1).pop() || "ROOT"}
+                   </span>
+                )}
+              </div>
             </div>
-          </div>
-        </button>
+
+            <div className="flex items-center gap-2 shrink-0">
+              {node.item.status !== "assigned" && node.item.status !== "skipped" && (
+                <span className={cn("rounded-[3px] border px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest shrink-0", status.tone)}>
+                  {status.label}
+                </span>
+              )}
+              
+              <div
+                role="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEditItem(node.item!.item_id);
+                }}
+                className={cn(
+                  "flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-on-surface/10 bg-surface transition-all hover:bg-on-surface/[0.02] active:scale-90",
+                  active ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus:opacity-100"
+                )}
+              >
+                <Edit2 className="h-3 w-3 text-on-surface-variant/60" />
+              </div>
+            </div>
+          </button>
+          
+          <AnimatePresence>
+            {(active || isHovered) && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden"
+                style={{ paddingLeft: 34 + depth * 16 }}
+              >
+                <div className="space-y-1 pb-1.5 pt-0.5 pr-4 border-b border-on-surface/[0.02]">
+                  <div className="flex items-center gap-2">
+                    <span className="shrink-0 rounded-sm bg-primary/10 px-1 text-[8px] font-black tracking-wider text-primary/70">用途判断</span>
+                    <p className="truncate text-[10.5px] font-medium text-ui-muted/70 leading-tight italic">
+                      {node.item.suggested_purpose || "根据文件名和内容线索预测"}
+                    </p>
+                  </div>
+                  {node.item.content_summary ? (
+                    <div className="flex items-center gap-2">
+                      <span className="shrink-0 rounded-sm bg-on-surface/[0.04] px-1 text-[8px] font-black tracking-wider text-ui-muted/50">内容摘要</span>
+                      <p className="truncate text-[10.5px] font-medium text-ui-muted/55 leading-tight" title={node.item.content_summary}>
+                        {node.item.content_summary}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       );
     }
 
     return (
       <div
-        className="flex w-full items-center gap-3 rounded-[8px] border border-transparent py-2 pr-3 text-left"
+        className="flex w-full items-center gap-3 border-b border-on-surface/[0.04] py-2 pr-3 text-left"
         style={{ paddingLeft: 12 + depth * 16 }}
       >
-        <FileText className="h-4 w-4 shrink-0 text-on-surface-variant/55" />
+        <FileText className="h-3.5 w-3.5 shrink-0 text-on-surface-variant/20" />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-medium text-on-surface">{node.sourceEntry?.display_name || node.name}</p>
-          <p className="truncate text-[11px] text-ui-muted">整理前原始条目</p>
+          <p className="truncate font-mono text-[12.5px] tracking-tight text-on-surface/50">{node.sourceEntry?.display_name || node.name}</p>
+          <p className="truncate text-[10px] font-bold uppercase tracking-wider text-ui-muted opacity-30">Original Item</p>
         </div>
       </div>
     );
@@ -338,23 +391,47 @@ function TreeBranch({
 
   const isExpanded = expanded[node.path] ?? depth < 1;
   return (
-    <div className="space-y-1">
+    <div className="space-y-0.5">
       <button
         type="button"
         onClick={() => onToggle(node.path)}
-        className="flex w-full items-center gap-2 py-1 pr-2 text-left transition-colors hover:bg-on-surface/[0.02]"
+        className="group flex w-full items-center gap-2.5 py-1.5 pr-2 text-left transition-colors hover:bg-on-surface/[0.035]"
         style={{ paddingLeft: 8 + depth * 16 }}
       >
-        {isExpanded ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-on-surface/30" /> : <ChevronUp className="h-3.5 w-3.5 shrink-0 text-on-surface/30 rotate-90" />}
-        <Folder className={cn("h-3.5 w-3.5 shrink-0", isExpanded ? "text-primary/70" : "text-ui-muted/60")} />
-        <span className="min-w-0 flex-1 truncate text-[12px] font-bold text-on-surface/90">{node.name}</span>
-        <span className="text-[10px] font-bold text-ui-muted/40 font-mono">{node.children.length}</span>
+        <div className="flex h-4 w-4 shrink-0 items-center justify-center">
+            {isExpanded ? (
+                <ChevronDown className="h-3 w-3 text-on-surface-variant/40" />
+            ) : (
+                <ChevronRight className="h-3 w-3 text-on-surface-variant/40" />
+            )}
+        </div>
+        <Folder className={cn("h-3.5 w-3.5 shrink-0 transition-colors", isExpanded ? "text-primary/70" : "text-on-surface/30")} />
+        <span className="min-w-0 flex-1 truncate font-mono text-[12.5px] font-black tracking-tight text-on-surface/80">{node.name}</span>
+        <span className="font-mono text-[10px] font-bold text-ui-muted/30">{node.children.length}</span>
       </button>
       <AnimatePresence initial={false}>
         {isExpanded ? (
-            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="space-y-1 overflow-hidden">
+            <motion.div 
+              initial={{ opacity: 0, height: 0 }} 
+              animate={{ opacity: 1, height: "auto" }} 
+              exit={{ opacity: 0, height: 0 }} 
+              className="flex flex-col overflow-hidden"
+            >
               {node.children.map((child) => (
-              <TreeBranch key={child.path} node={child} depth={depth + 1} expanded={expanded} selectedItemId={selectedItemId} onToggle={onToggle} onSelectItem={onSelectItem} onEditItem={onEditItem} acceptedReviewItemIds={acceptedReviewItemIds} />
+              <TreeBranch 
+                key={child.path} 
+                node={child} 
+                depth={depth + 1} 
+                expanded={expanded} 
+                selectedItemId={selectedItemId} 
+                onToggle={onToggle} 
+                onSelectItem={onSelectItem} 
+                onEditItem={onEditItem} 
+                acceptedReviewItemIds={acceptedReviewItemIds}
+                viewMode={viewMode}
+                targetSlotById={targetSlotById}
+                placement={placement}
+              />
             ))}
           </motion.div>
         ) : null}
@@ -382,43 +459,50 @@ function QueueCard({
 }) {
   if (items.length === 0) return null;
   return (
-    <section className={cn("rounded-[10px] border p-3", tone)}>
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <h3 className="text-[13px] font-bold text-on-surface">{title}</h3>
-            <span className="rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-bold text-on-surface/70">{items.length}</span>
-          </div>
-          <p className="text-[12px] text-ui-muted">点击条目后，右侧会显示更详细的检查信息。</p>
+    <section className={cn("rounded-lg border overflow-hidden", tone)}>
+      <div className="flex items-center justify-between gap-3 border-b border-inherit bg-on-surface/[0.03] px-4 py-2">
+        <div className="flex items-center gap-2">
+          <h3 className="text-[12px] font-black uppercase tracking-wider opacity-80">{title}</h3>
+          <span className="rounded-full bg-on-surface/10 px-2 py-0.5 text-[10px] font-black tabular-nums">{items.length}</span>
         </div>
-        <button type="button" onClick={onShowAll} className="rounded-[6px] border border-on-surface/8 bg-surface px-2.5 py-1 text-[11px] font-semibold text-on-surface">
-          查看
+        <button 
+          type="button" 
+          onClick={onShowAll} 
+          className="rounded-[4px] bg-on-surface/5 px-2.5 py-1 text-[10px] font-black uppercase tracking-tight hover:bg-on-surface/10 transition-all"
+        >
+          查看全部
         </button>
       </div>
-      <div className="mt-3 space-y-1.5">
+      <div className="p-1.5 flex flex-col gap-1">
         {items.slice(0, 4).map((item) => (
           <button
             key={item.item_id}
             type="button"
             onClick={() => onSelectItem(item.item_id)}
             className={cn(
-              "flex w-full items-center justify-between gap-3 rounded-[8px] border px-3 py-2 text-left transition-colors",
-              selectedItemId === item.item_id ? "border-primary/18 bg-surface" : "border-transparent bg-surface/60 hover:border-on-surface/8 hover:bg-surface",
+              "group relative flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left transition-all",
+              selectedItemId === item.item_id 
+                ? "border-on-surface/20 bg-surface ring-1 ring-on-surface/5" 
+                : "border-transparent hover:bg-on-surface/5",
             )}
           >
-            <div className="min-w-0">
-              <p className="truncate text-[12px] font-semibold text-on-surface">{item.display_name}</p>
-              <p className="truncate text-[11px] text-ui-muted">{resolveTargetLabel(item)}</p>
-              {itemMetaLabel(item) ? (
-                <p className="truncate text-[10px] font-bold text-ui-muted/80">{itemMetaLabel(item)}</p>
-              ) : null}
+            <div className="min-w-0 flex-1">
+              <p className={cn("truncate font-mono text-[12px] tracking-tight", selectedItemId === item.item_id ? "font-black text-on-surface" : "font-bold text-on-surface/70")}>
+                {item.display_name}
+              </p>
+              <p className="mt-0.5 truncate font-mono text-[10px] text-ui-muted opacity-50">
+                {resolveTargetLabel(item)}
+              </p>
             </div>
-            <span className="text-[11px] text-ui-muted">{fileExtension(item)}</span>
+            <div className="flex items-center gap-2 shrink-0">
+               <span className="font-mono text-[10px] font-bold text-ui-muted/40 uppercase">{fileExtension(item)}</span>
+               <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-30 transition-opacity" />
+            </div>
           </button>
         ))}
         {items.length > 4 && (
-          <button type="button" onClick={onShowAll} className="w-full text-center text-[11px] text-ui-muted/70 hover:text-ui-muted transition-colors pt-1">
-            还有 {items.length - 4} 项，点击查看全部
+          <button type="button" onClick={onShowAll} className="w-full py-2 text-[10.5px] font-black uppercase tracking-widest text-ui-muted/50 hover:text-ui-muted hover:bg-on-surface/5 transition-all rounded-lg">
+            还有 {items.length - 4} 项 · 点击展开
           </button>
         )}
       </div>
@@ -448,16 +532,15 @@ function QueuePanel({
   if (queueCount === 0) return null;
   return (
     <aside className="w-full shrink-0 min-w-0">
-      <section className="rounded-[10px] border border-on-surface/8 bg-surface shadow-sm">
-        <div className="flex items-center justify-between gap-3 border-b border-on-surface/6 px-3 py-2.5">
+      <section className="rounded-lg border border-on-surface/10 bg-surface overflow-hidden">
+        <div className="flex items-center justify-between gap-3 border-b border-on-surface/8 bg-on-surface/[0.02] px-4 py-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h3 className="text-[13px] font-bold text-on-surface">待处理队列</h3>
-              <span className="rounded-full bg-warning/10 px-2 py-0.5 text-[10px] font-bold text-warning">{queueCount}</span>
+              <h3 className="text-[13px] font-black uppercase tracking-widest text-on-surface/80">待处理队列</h3>
+              <span className="rounded-full bg-warning/10 px-2 py-0.5 text-[10px] font-black text-warning ring-1 ring-warning/20">
+                {queueCount}
+              </span>
             </div>
-            <p className="mt-0.5 text-[11px] text-ui-muted">
-              {invalidatedCount > 0 ? `重新确认 ${invalidatedCount}` : unresolvedCount > 0 ? `待决策 ${unresolvedCount}` : `待核对 ${reviewCount}`}
-            </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {actions}
@@ -465,42 +548,41 @@ function QueuePanel({
               type="button"
               onClick={onToggle}
               aria-expanded={!collapsed}
-              aria-controls="preview-queue-panel"
-              className="inline-flex h-8 shrink-0 items-center gap-1 rounded-[8px] border border-on-surface/8 bg-surface px-2.5 text-[11px] font-semibold text-on-surface transition-colors hover:bg-on-surface/[0.03]"
+              className="inline-flex items-center gap-1.5 rounded-[8px] border border-on-surface/10 bg-surface/95 px-3 py-1.5 text-[11px] font-bold text-on-surface-variant backdrop-blur transition-colors hover:bg-surface-container-low hover:text-on-surface"
             >
               {collapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
-              {collapsed ? "展开" : "收起"}
+              {collapsed ? "展开列表" : "收起"}
             </button>
           </div>
         </div>
         <AnimatePresence initial={false}>
           {!collapsed ? (
             <motion.div
-              id="preview-queue-panel"
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
               className="overflow-hidden"
             >
-              <div className="space-y-3 p-3">{children}</div>
+              <div className="space-y-4 p-4 bg-surface-container-lowest/30">
+                {children}
+              </div>
             </motion.div>
           ) : (
             <motion.div
-              id="preview-queue-panel"
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
               className="overflow-hidden"
             >
-              <div className="flex flex-wrap gap-2 px-3 py-2.5">
+              <div className="flex flex-wrap gap-2 px-4 py-3">
                 {invalidatedCount > 0 ? (
-                  <span className="rounded-full border border-error/12 bg-error-container/20 px-2 py-1 text-[10px] font-bold text-error">需重新确认 {invalidatedCount}</span>
+                  <span className="rounded-md border border-error/15 bg-error/5 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-error">需重新确认 {invalidatedCount}</span>
                 ) : null}
                 {unresolvedCount > 0 ? (
-                  <span className="rounded-full border border-warning/12 bg-warning-container/25 px-2 py-1 text-[10px] font-bold text-warning">待决策 {unresolvedCount}</span>
+                  <span className="rounded-md border border-warning/20 bg-warning/5 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-warning-dim">待决策 {unresolvedCount}</span>
                 ) : null}
                 {reviewCount > 0 ? (
-                  <span className="rounded-full border border-primary/12 bg-primary/5 px-2 py-1 text-[10px] font-bold text-primary">待核对 {reviewCount}</span>
+                  <span className="rounded-md border border-primary/15 bg-primary/5 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-primary">待核对 {reviewCount}</span>
                 ) : null}
               </div>
             </motion.div>
@@ -517,12 +599,14 @@ function IncrementalMappingPanel({
   onSelectItem,
   onEditItem,
   resolveTargetLabel,
+  readOnly = false,
 }: {
   items: PlanItem[];
   selectedItemId: string | null;
   onSelectItem: (itemId: string) => void;
   onEditItem: (itemId: string) => void;
   resolveTargetLabel: (item: PlanItem) => string;
+  readOnly?: boolean;
 }) {
   if (items.length === 0) return null;
 
@@ -533,79 +617,89 @@ function IncrementalMappingPanel({
   });
 
   return (
-    <section className="rounded-[10px] border border-on-surface/8 bg-surface p-3">
+    <section className="rounded-xl border border-on-surface/10 bg-surface-container-low/20 p-4">
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-[13px] font-bold text-on-surface">归属映射</h3>
-          <p className="text-[12px] text-ui-muted">清楚显示每个待整理项将被归到哪个目标目录。</p>
+        <div className="space-y-0.5">
+          <h3 className="text-[13px] font-black uppercase tracking-wider text-on-surface/80">归属映射清单</h3>
+          <p className="text-[11.5px] font-medium text-ui-muted opacity-60">实时显示文件与目标目录的映射关系。</p>
         </div>
-        <span className="rounded-full border border-on-surface/8 bg-on-surface/[0.02] px-2 py-0.5 text-[10px] font-bold text-ui-muted">
-          {items.length} 项
+        <span className="rounded-full border border-on-surface/12 bg-on-surface/5 px-2.5 py-0.5 text-[10px] font-black text-ui-muted">
+          {items.length} 条目
         </span>
       </div>
 
-      <div className="mt-3 flex flex-wrap gap-2">
+      <div className="mt-4 flex flex-wrap gap-1.5">
         {Array.from(assignmentCounts.entries())
           .sort((a, b) => a[0].localeCompare(b[0], "zh-CN"))
-          .slice(0, 6)
+          .slice(0, 8)
           .map(([label, count]) => (
-            <span key={label} className="rounded-full border border-primary/10 bg-primary/[0.045] px-2.5 py-1 text-[11px] font-semibold text-on-surface">
+            <span key={label} className="rounded-md border border-primary/15 bg-primary/[0.03] px-2 py-0.5 text-[10px] font-black text-primary/80 transition-colors hover:bg-primary/[0.06]">
               {label} · {count}
             </span>
           ))}
       </div>
 
-      <div className="mt-3 space-y-2">
+      <div className="mt-4 space-y-1">
         {items.map((item) => {
           const status = statusMeta(item.status);
           const targetLabel = resolveTargetLabel(item);
           const slotLabel = item.target_slot_id && item.target_slot_id !== "Review" ? item.target_slot_id : "";
+          const active = selectedItemId === item.item_id;
+
           return (
             <button
               key={item.item_id}
               type="button"
               onClick={() => onSelectItem(item.item_id)}
               className={cn(
-                "group flex w-full items-center gap-3 py-2 pr-2 text-left transition-colors relative border-b border-on-surface/[0.04] last:border-0",
-                selectedItemId === item.item_id ? "bg-primary/6" : "hover:bg-on-surface/[0.025]",
+                "group relative flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition-all",
+                active 
+                  ? "border-primary/30 bg-surface ring-1 ring-primary/10" 
+                  : "border-transparent bg-transparent hover:bg-on-surface/[0.025] hover:border-on-surface/8",
               )}
-              style={{ paddingLeft: 8 }}
             >
-              {selectedItemId === item.item_id && (
-                <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-primary" />
-              )}
-              <FileText className="h-3.5 w-3.5 shrink-0 text-on-surface-variant/50" />
+              <FileText className={cn("h-3.5 w-3.5 shrink-0 transition-colors", active ? "text-primary/70" : "text-on-surface-variant/30")} />
               <div className="min-w-0 flex-1 py-0.5">
-                <p className="truncate text-[12.5px] font-medium text-on-surface leading-tight">{item.display_name}</p>
-                <p className="mt-0.5 truncate text-[10.5px] text-ui-muted opacity-80 leading-tight">
-                  {item.source_relpath} {"->"} {targetLabel}
-                </p>
+                <p className={cn("truncate text-[13px] font-black tracking-tight", active ? "text-primary" : "text-on-surface/90")}>{item.display_name}</p>
+                <div className="mt-1 flex items-center gap-1.5 overflow-hidden">
+                  <p className="truncate font-mono text-[10.5px] font-medium text-ui-muted opacity-50">
+                    {item.source_relpath}
+                  </p>
+                  <ArrowRight className="h-2.5 w-2.5 shrink-0 text-on-surface/10" />
+                  <p className={cn("truncate font-mono text-[10.5px] font-bold", active ? "text-primary/60" : "text-primary/40")}>
+                    {targetLabel}
+                  </p>
+                </div>
               </div>
               
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 {slotLabel ? (
-                  <span className="shrink-0 rounded-[4px] border border-primary/10 bg-primary/[0.045] px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                  <span className="rounded-[4px] border border-primary/10 bg-primary/[0.045] px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-primary">
                     {slotLabel}
                   </span>
                 ) : null}
                 
                 {item.status !== "assigned" && item.status !== "skipped" && (
-                  <span className={cn("shrink-0 rounded-[4px] border px-1.5 py-0.5 text-[10px] font-bold", status.tone)}>{status.label}</span>
+                  <span className={cn("rounded-[4px] border px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest", status.tone)}>
+                    {status.label}
+                  </span>
                 )}
                 
-                <div
-                  role="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onEditItem(item.item_id);
-                  }}
-                  className={cn(
-                    "flex h-6 w-6 shrink-0 items-center justify-center rounded-[4px] border border-on-surface/10 bg-surface shadow-sm transition-opacity hover:bg-on-surface/[0.02] active:scale-95",
-                    selectedItemId === item.item_id ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus:opacity-100",
-                  )}
-                >
-                  <Edit2 className="h-3 w-3 text-on-surface-variant" />
-                </div>
+                {!readOnly && (
+                  <div
+                    role="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onEditItem(item.item_id);
+                    }}
+                    className={cn(
+                      "flex h-6 w-6 items-center justify-center rounded-md border border-on-surface/10 bg-surface transition-all hover:bg-on-surface/[0.02] active:scale-90",
+                      active ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                    )}
+                  >
+                    <Edit2 className="h-3 w-3 text-on-surface-variant/60" />
+                  </div>
+                )}
               </div>
             </button>
           );
@@ -742,7 +836,7 @@ export function PreviewPanel(props: PreviewPanelProps) {
   const groupedByTargetSlot = useMemo(() => groupItemsByTargetSlot(allItems, targetSlotById, placement), [allItems, placement, targetSlotById]);
   const availableTargetOptions = useMemo<AvailableTargetOption[]>(() => {
     const options = new Map<string, AvailableTargetOption>();
-    options.set("Review", { key: "review", label: "Review", directory: "Review" });
+    options.set("Review", { key: "review", label: "待确认区", directory: "Review" });
     (plan.target_slots || []).forEach((slot: PlanTargetSlot) => {
       const directory = normalizePath(slot.relpath);
       if (!directory) return;
@@ -839,6 +933,12 @@ export function PreviewPanel(props: PreviewPanelProps) {
   };
 
   const isAcceptedReviewItem = (item: PlanItem) => item.status === "review" && acceptedReviewItemIds.includes(item.item_id);
+  const canAcceptReviewsAndRunPrecheck =
+    !readOnly &&
+    canRunPrecheck &&
+    invalidatedItems.length === 0 &&
+    unresolvedItems.length === 0 &&
+    activeReviewItems.length > 0;
 
   const acceptAllReviewItems = async () => {
     const reviewCandidateIds = [
@@ -853,6 +953,9 @@ export function PreviewPanel(props: PreviewPanelProps) {
     }
     setAcceptedReviewItemIds((current) => Array.from(new Set([...current, ...reviewCandidateIds])));
     setQueueCollapsed(true);
+    if (canAcceptReviewsAndRunPrecheck) {
+      await Promise.resolve(onRunPrecheck());
+    }
   };
 
   const focusQueue = () => {
@@ -873,7 +976,7 @@ export function PreviewPanel(props: PreviewPanelProps) {
   const pendingQueueCount = invalidatedItems.length + unresolvedItems.length + activeReviewItems.length;
   const reviewQueueCount = activeReviewItems.length;
   const precheckNotice = canRunPrecheck
-    ? "待处理队列已经清空，可以开始预检。"
+    ? "待处理项目已清空，可以做移动前安全检查。"
     : invalidatedItems.length > 0
       ? `仍有 ${invalidatedItems.length} 项需重新确认。`
       : unresolvedItems.length > 0
@@ -881,8 +984,8 @@ export function PreviewPanel(props: PreviewPanelProps) {
       : reviewQueueCount > 0
           ? `仍有 ${reviewQueueCount} 项待核对。`
           : isPlanSyncing
-            ? "方案正在同步，稍后即可预检。"
-            : "当前方案尚未进入预检阶段。";
+            ? "方案正在更新，稍后即可检查。"
+            : "方案还没准备好做安全检查。";
   const visibleCount = viewMode === "before" ? filteredSourceEntries.length : filteredItems.length;
   const totalCount = viewMode === "before" ? sourceTreeEntries.length : allItems.length;
   const hasAfterPlanData = allItems.length > 0 || mkdirPreview.length > 0;
@@ -909,7 +1012,7 @@ export function PreviewPanel(props: PreviewPanelProps) {
   return (
     <div className="flex h-full w-full min-w-0 flex-col bg-transparent @container overflow-hidden">
         <div className="mx-auto flex h-full w-full max-w-[1440px] flex-col min-w-0 px-4 py-4 lg:px-6 overflow-hidden">
-          <section className="min-w-0 flex flex-col h-full rounded-[12px] border border-on-surface/8 bg-surface-container-lowest shadow-[0_20px_40px_rgba(0,0,0,0.04)] overflow-hidden">
+          <section className="min-w-0 flex flex-col h-full rounded-[12px] border border-on-surface/8 bg-surface-container-lowest overflow-hidden">
             <div className="shrink-0">
             {plannerStatus?.isRunning && plannerStatus.preservingPreviousPlan ? (
               <div className="border-b border-primary/10 bg-primary/[0.045] px-4 py-3 @lg:px-5">
@@ -927,19 +1030,19 @@ export function PreviewPanel(props: PreviewPanelProps) {
             <div className="border-b border-on-surface/6 px-6 py-3">
               <div className="flex flex-col gap-2">
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-primary/70">
+                  <div className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.15em] text-primary/70">
                     <Layers className="h-3.5 w-3.5" />
                     方案预览
                   </div>
-                  <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold", pendingQueueCount > 0 || !canRunPrecheck ? "bg-warning/10 text-warning" : "bg-success/10 text-success-dim")}>
-                    {pendingQueueCount > 0 ? `待处理 ${pendingQueueCount}` : canRunPrecheck ? "可预检" : isPlanSyncing ? "同步中" : "待预检"}
+                  <span className={cn("rounded-[3px] border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest", pendingQueueCount > 0 || !canRunPrecheck ? "border-warning/30 bg-warning/5 text-warning" : "border-success/30 bg-success/5 text-success-dim")}>
+                    {pendingQueueCount > 0 ? `待处理 ${pendingQueueCount}` : canRunPrecheck ? "可检查" : isPlanSyncing ? "更新中" : "待检查"}
                   </span>
-                  <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-on-surface/8 bg-surface px-2 py-0.5 text-[10px] font-semibold text-on-surface">
-                    <Sparkles className="h-3 w-3 text-primary/60" />
+                  <div className="flex shrink-0 items-center gap-1.5 rounded-[3px] border border-on-surface/8 bg-on-surface/[0.02] px-2 py-0.5 text-[9px] font-bold text-on-surface uppercase tracking-widest">
+                    <Sparkles className="h-2.5 w-2.5 text-primary/60" />
                     <span>移动 {plan.stats.move_count}</span>
                   </div>
-                  <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-on-surface/8 bg-surface px-2 py-0.5 text-[10px] font-semibold text-on-surface">
-                    <Folder className="h-3 w-3 text-primary/60" />
+                  <div className="flex shrink-0 items-center gap-1.5 rounded-[3px] border border-on-surface/8 bg-on-surface/[0.02] px-2 py-0.5 text-[9px] font-bold text-on-surface uppercase tracking-widest">
+                    <Folder className="h-2.5 w-2.5 text-primary/60" />
                     <span>新目录 {plan.stats.directory_count}</span>
                   </div>
                 </div>
@@ -970,56 +1073,84 @@ export function PreviewPanel(props: PreviewPanelProps) {
               ) : null}
             </div>
 
-            <div className="border-b border-on-surface/6 bg-on-surface/[0.01] px-6 py-2.5">
-              <div className="flex flex-wrap items-center gap-2 min-w-0">
-                <div className="flex shrink-0 items-center rounded-lg border border-on-surface/8 bg-surface p-0.5 shadow-sm">
-                  <button type="button" onClick={() => setViewMode("before")} className={cn("rounded-md px-2.5 py-1 text-[11px] font-bold transition-all", viewMode === "before" ? "bg-on-surface text-surface shadow-sm" : "text-on-surface-variant hover:bg-on-surface/5")}>前</button>
-                  <button type="button" onClick={() => setViewMode("after")} className={cn("rounded-md px-2.5 py-1 text-[11px] font-bold transition-all", viewMode === "after" ? "bg-primary text-white shadow-sm" : "text-on-surface-variant hover:bg-on-surface/5")}>后</button>
+            <div className="border-b border-on-surface/8 bg-on-surface/[0.02] px-4 py-2">
+              <div className="flex flex-wrap items-center gap-3">
+                {/* View Switcher: Mechanical Style */}
+                <div className="flex shrink-0 items-center rounded-md border border-on-surface/10 bg-on-surface/[0.02] p-0.5">
+                  <button 
+                    type="button" 
+                    onClick={() => setViewMode("before")} 
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-[4px] px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all", 
+                      viewMode === "before" ? "bg-on-surface/10 text-on-surface" : "text-on-surface/40 hover:bg-on-surface/5"
+                    )}
+                  >
+                    <span className={cn("opacity-40", viewMode === "before" && "opacity-60")}>RAW</span>
+                    <span className="hidden @sm:inline">原始</span>
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={() => setViewMode("after")} 
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-[4px] px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all", 
+                      viewMode === "after" ? "bg-primary/10 text-primary font-black" : "text-on-surface/40 hover:bg-on-surface/5"
+                    )}
+                  >
+                    <span className={cn("opacity-40", viewMode === "after" && "opacity-60")}>PLAN</span>
+                    <span className="hidden @sm:inline">建议</span>
+                  </button>
                 </div>
                 
+                <div className="h-4 w-px bg-on-surface/8 mx-1" />
+
                 <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <div className="relative flex min-w-0 flex-1 items-center group">
+                    <Search className="absolute left-2.5 h-3.5 w-3.5 text-ui-muted pointer-events-none opacity-40 group-focus-within:text-primary transition-colors" />
+                    <input 
+                      value={search} 
+                      onChange={(event) => setSearch(event.target.value)} 
+                      placeholder="搜索节点..." 
+                      className="h-8 w-full rounded-md border border-on-surface/8 bg-surface-container-lowest pl-8 pr-2.5 text-[11px] font-black text-on-surface outline-none transition-all placeholder:text-ui-muted/50 focus:border-primary/40 focus:ring-1 focus:ring-primary/10" 
+                    />
+                  </div>
+
                   <div className="relative flex shrink-0 items-center">
                     <select
                       value={filter}
                       onChange={(event) => setFilter(event.target.value as PreviewFilter)}
-                      className="h-8 min-w-[100px] appearance-none rounded-lg border border-on-surface/8 bg-surface pl-2.5 pr-8 text-[11px] font-bold text-on-surface outline-none transition-all hover:bg-on-surface/[0.02] focus:border-primary/40 focus:ring-4 focus:ring-primary/[0.015]"
+                      className="h-8 min-w-[90px] appearance-none rounded-md border border-on-surface/8 bg-surface-container-lowest pl-2.5 pr-8 text-[11px] font-black text-on-surface outline-none transition-all hover:bg-on-surface/[0.02] focus:border-primary/40"
                     >
-                      <option value="all">全部条目</option>
-                      <option value="changed">只看变更</option>
-                      <option value="unresolved">只看待决策</option>
-                      <option value="review">只看待核对</option>
-                      <option value="invalidated">只看重新确认</option>
+                      <option value="all">全部</option>
+                      <option value="changed">变更</option>
+                      <option value="unresolved">待定</option>
+                      <option value="review">核对</option>
+                      <option value="invalidated">需确认</option>
                     </select>
-                    <ChevronDown className="absolute right-2.5 h-3 w-3 text-ui-muted pointer-events-none opacity-60" />
-                  </div>
-                  
-                  <div className="relative flex min-w-0 flex-1 items-center">
-                    <Search className="absolute left-2.5 h-3.5 w-3.5 text-ui-muted pointer-events-none opacity-60" />
-                    <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索文件名..." className="h-8 w-full rounded-lg border border-on-surface/8 bg-surface pl-8 pr-2.5 text-[11px] text-on-surface outline-none transition-all placeholder:text-ui-muted focus:border-primary/40 focus:ring-4 focus:ring-primary/[0.015]" />
+                    <ChevronDown className="absolute right-2.5 h-3 w-3 text-ui-muted pointer-events-none opacity-40" />
                   </div>
 
                   <div className="relative hidden shrink-0 items-center @3xl:flex">
                     <select
                       value={extensionFilter}
                       onChange={(event) => setExtensionFilter(event.target.value)}
-                      className="h-8 appearance-none rounded-lg border border-on-surface/8 bg-surface pl-2.5 pr-8 text-[11px] font-bold text-on-surface outline-none transition-all hover:bg-on-surface/[0.02] focus:border-primary/40 focus:ring-4 focus:ring-primary/[0.015]"
+                      className="h-8 appearance-none rounded-md border border-on-surface/8 bg-surface-container-lowest pl-2.5 pr-8 text-[11px] font-black text-on-surface outline-none transition-all hover:bg-on-surface/[0.02] focus:border-primary/40"
                     >
                       {extensionOptions.map((option) => (
-                        <option key={option} value={option}>{option === "all" ? "全部类型" : option}</option>
+                        <option key={option} value={option}>{option === "all" ? "类型" : option}</option>
                       ))}
                     </select>
-                    <ChevronDown className="absolute right-2.5 h-3 w-3 text-ui-muted pointer-events-none opacity-60" />
+                    <ChevronDown className="absolute right-2.5 h-3 w-3 text-ui-muted pointer-events-none opacity-40" />
                   </div>
                 </div>
 
-                <div className="hidden shrink-0 items-center px-1 text-[10px] font-bold text-ui-muted/60 @5xl:flex">
+                <div className="hidden shrink-0 items-center px-1 font-mono text-[10px] font-bold text-ui-muted/40 @5xl:flex">
                   {visibleCount} / {totalCount}
                 </div>
               </div>
             </div>
           </div>
 
-          <div data-testid="preview-scroll-region" className="flex-1 min-h-0 overflow-y-auto">
+          <div data-testid="preview-scroll-region" className="flex-1 min-h-0 overflow-y-auto bg-surface-container-lowest/30">
             <div className="flex min-w-0 flex-col gap-4 p-4">
               {organizeMode === "incremental" && viewMode === "after" ? (
                 <IncrementalMappingPanel
@@ -1028,6 +1159,7 @@ export function PreviewPanel(props: PreviewPanelProps) {
                   onSelectItem={setSelectedItemId}
                   onEditItem={setEditingItemId}
                   resolveTargetLabel={resolveTargetLabel}
+                  readOnly={readOnly}
                 />
               ) : null}
               <section className="min-w-0 min-h-[280px] @4xl:min-h-[340px] px-2 py-3">
@@ -1095,6 +1227,9 @@ export function PreviewPanel(props: PreviewPanelProps) {
                       onSelectItem={setSelectedItemId}
                       onEditItem={setEditingItemId}
                       acceptedReviewItemIds={acceptedReviewItemIds}
+                      viewMode={viewMode}
+                      targetSlotById={targetSlotById}
+                      placement={placement}
                     />
                   )) : (
                     <div className="flex h-[360px] flex-col items-center justify-center gap-3 rounded-[10px] border border-dashed border-on-surface/10 bg-on-surface/[0.02] text-center">
@@ -1141,7 +1276,7 @@ export function PreviewPanel(props: PreviewPanelProps) {
                         }}
                         className="inline-flex h-8 shrink-0 items-center gap-1 rounded-[8px] border border-primary/12 bg-primary/[0.05] px-2.5 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/[0.08]"
                       >
-                        全部保留在 Review，稍后查看
+                        {canAcceptReviewsAndRunPrecheck ? "全部留在待确认区，并开始检查" : "全部留在待确认区，稍后查看"}
                       </button>
                     ) : undefined
                   }
@@ -1159,7 +1294,7 @@ export function PreviewPanel(props: PreviewPanelProps) {
         </div>
 
       <Dialog open={!!editingItemId} onOpenChange={(open) => !open && setEditingItemId(null)}>
-        <DialogContent className="max-w-2xl sm:rounded-[16px] p-0 overflow-hidden border-on-surface/10 shadow-[0_32px_80px_rgba(0,0,0,0.12)]">
+        <DialogContent className="max-w-2xl sm:rounded-[16px] p-0 overflow-hidden border-on-surface/10 border">
           <DialogHeader className="border-b border-on-surface/6 bg-surface-container-lowest px-6 py-5">
             <div className="flex items-start justify-between pr-6">
               <div>
@@ -1212,7 +1347,7 @@ export function PreviewPanel(props: PreviewPanelProps) {
                                 (option.targetSlotId && editingItem.target_slot_id === option.targetSlotId) ||
                                 (!option.targetSlotId && resolveTargetLabel(editingItem) === option.directory)
                               )
-                                ? "border-primary/30 bg-primary/10 text-primary shadow-sm"
+                                ? "border-primary/30 bg-primary/10 text-primary"
                                 : "border-on-surface/10 bg-surface text-on-surface hover:border-primary/20 hover:bg-surface-container",
                             )}
                           >
@@ -1238,7 +1373,7 @@ export function PreviewPanel(props: PreviewPanelProps) {
                               />
                               {/* 目标路径建议 */}
                               {manualTargetTrimmed && !manualTargetInvalid && availableDirectories.filter(d => d.toLowerCase().includes(manualTargetTrimmed.toLowerCase()) && d !== manualTargetTrimmed && d !== "Review").length > 0 && (
-                                <div className="absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-[8px] border border-on-surface/10 bg-surface shadow-[0_12px_24px_rgba(0,0,0,0.1)] py-1 scrollbar-thin animate-in fade-in slide-in-from-top-2">
+                                <div className="absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-[8px] border border-on-surface/10 bg-surface py-1 scrollbar-thin animate-in fade-in slide-in-from-top-2">
                                   <div className="px-3 py-1.5 text-[10px] font-bold text-ui-muted uppercase tracking-wider bg-on-surface/[0.02]">建议目标目录</div>
                                   {availableDirectories
                                     .filter(d => d.toLowerCase().includes(manualTargetTrimmed.toLowerCase()) && d !== manualTargetTrimmed && d !== "Review")
@@ -1272,7 +1407,7 @@ export function PreviewPanel(props: PreviewPanelProps) {
                               应用此路径
                             </button>
                           </div>
-                          <p className="mt-1.5 text-[10.5px] text-ui-muted px-0.5">填写的是相对“新目录生成位置”的路径（不支持绝对路径或 Review/...）。</p>
+                          <p className="mt-1.5 text-[10.5px] text-ui-muted px-0.5">填写的是相对“新目录生成位置”的路径（不支持绝对路径或 Review/...）。Review 是待确认区。</p>
                         </div>
                       ) : null}
                     </div>
@@ -1322,7 +1457,7 @@ export function PreviewPanel(props: PreviewPanelProps) {
                       </div>
                     </div>
                     <div>
-                      <div className="text-[10px] font-bold tracking-[0.08em] uppercase text-ui-muted opacity-60 mb-1">完整部署路径</div>
+                      <div className="text-[10px] font-bold tracking-[0.08em] uppercase text-ui-muted opacity-60 mb-1">完整目标路径</div>
                       <div className="break-all font-mono text-[11px] text-on-surface-variant leading-relaxed">{editingTargetMeta?.fullTargetPath}</div>
                     </div>
                   </div>
@@ -1388,9 +1523,9 @@ export function PreviewPanel(props: PreviewPanelProps) {
               <span>{precheckNotice}</span>
             </div>
           )}
-          <button type="button" onClick={onRunPrecheck} disabled={isBusy || !canRunPrecheck} className={cn("flex w-full items-center justify-center gap-2 rounded-[6px] py-3 text-[14px] font-bold transition-all active:scale-[0.98]", canRunPrecheck && !isBusy ? "bg-primary text-white shadow-md shadow-primary/15" : "cursor-not-allowed border border-on-surface/8 bg-on-surface/[0.05] text-ui-muted")}>
+          <button type="button" onClick={onRunPrecheck} disabled={isBusy || !canRunPrecheck} className={cn("flex w-full items-center justify-center gap-2 rounded-md py-3 text-[14px] font-black uppercase tracking-widest transition-all active:scale-[0.98]", canRunPrecheck && !isBusy ? "bg-primary text-white" : "cursor-not-allowed border border-on-surface/8 bg-on-surface/[0.05] text-ui-muted")}>
             <Layers className="h-4 w-4" />
-            {isBusy ? "正在更新方案" : canRunPrecheck ? "开始预检" : pendingQueueCount > 0 ? "先处理待处理队列" : isPlanSyncing ? "等待方案同步完成" : "等待进入预检阶段"}
+            {isBusy ? "正在更新方案" : canRunPrecheck ? "检查移动风险" : pendingQueueCount > 0 ? "先处理待处理项" : isPlanSyncing ? "等待方案更新完成" : "等待方案准备好"}
           </button>
         </div>
       ) : null}

@@ -73,7 +73,7 @@ describe("ResumePromptDialog", () => {
   it("uses readonly result viewing as the primary action for completed sessions", () => {
     render(<ResumePromptDialog {...baseProps} isCompletedResume />);
 
-    expect(screen.getByRole("button", { name: "只读查看结果" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看整理结果" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "只读打开" })).not.toBeInTheDocument();
   });
 
@@ -94,7 +94,7 @@ describe("ResumePromptDialog", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "只读打开" }));
 
-    expect(screen.getByRole("button", { name: "继续上一次整理" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "继续整理" })).toBeInTheDocument();
     expect(baseProps.onReadOnlyView).toHaveBeenCalledTimes(1);
   });
 });

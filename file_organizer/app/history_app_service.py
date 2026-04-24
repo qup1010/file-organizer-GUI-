@@ -118,7 +118,7 @@ class HistoryAppService:
                     "action_type": item.action_type,
                     "status": item.status,
                     "source": item.source_before,
-                    "target": item.target_after,
+                    "target": item.target_after or item.created_path,
                     "display_name": str(
                         item.display_name
                         or (Path(item.source_before).name if item.source_before else (Path(item.created_path).name if item.created_path else "unknown"))

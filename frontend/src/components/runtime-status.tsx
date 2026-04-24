@@ -13,15 +13,15 @@ export function RuntimeStatus() {
     setBaseUrl(config.base_url?.trim() || getApiBaseUrl());
     setSource(
       typeof window !== "undefined" && window.__FILE_ORGANIZER_RUNTIME__
-        ? "tauri runtime"
+        ? "桌面应用注入"
         : process.env.NEXT_PUBLIC_API_BASE_URL
-          ? "NEXT_PUBLIC_ENV"
-          : "fallback",
+          ? "环境变量"
+          : "默认地址",
     );
   }, []);
 
   return (
-    <details className="group rounded-[8px] border border-on-surface/8 bg-surface-container-lowest shadow-[0_4px_14px_rgba(0,0,0,0.03)]">
+    <details className="group rounded-[8px] border border-on-surface/8 bg-surface-container-lowest">
       <summary className="flex list-none cursor-pointer items-center justify-between gap-3 px-4 py-3 select-none">
         <div className="flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-[9px] border border-on-surface/8 bg-surface-container text-primary">
@@ -46,15 +46,15 @@ export function RuntimeStatus() {
           <span className="text-ui-meta text-ui-muted">v1.0</span>
         </div>
         <div className="mt-3 grid gap-2 font-mono text-[12px] text-on-surface-variant">
-          <div className="grid gap-1 rounded-[8px] bg-surface-container-low px-3 py-2">
+          <div className="grid gap-1 rounded-[8px] border border-on-surface/8 bg-surface-container-low px-3 py-2">
             <span>服务地址</span>
             <span className="break-all text-on-surface">{baseUrl}</span>
           </div>
-          <div className="flex items-center justify-between gap-4 rounded-[8px] bg-surface-container-low px-3 py-2">
+          <div className="flex items-center justify-between gap-4 rounded-[8px] border border-on-surface/8 bg-surface-container-low px-3 py-2">
             <span>来源</span>
             <span className="text-primary">{source}</span>
           </div>
-          <div className="flex items-center justify-between gap-4 rounded-[8px] bg-surface-container-low px-3 py-2">
+          <div className="flex items-center justify-between gap-4 rounded-[8px] border border-on-surface/8 bg-surface-container-low px-3 py-2">
             <span>环境</span>
             <span>{process.env.NODE_ENV || "development"}</span>
           </div>

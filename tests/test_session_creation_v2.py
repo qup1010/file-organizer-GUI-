@@ -220,3 +220,99 @@ class SessionCreationV2Tests(unittest.TestCase):
         self.service._ensure_planner_items(session, scan_lines)
         tree_relpaths = {item["source_relpath"] for item in session.source_tree_entries}
         self.assertEqual(tree_relpaths, {"future_architecture.md", "分析.png"})
+
+    def test_create_session_uses_parent_workspace_for_atomic_directory_source(self):
+        atomic_dir = self.sources_dir / "ProjectBundle"
+        atomic_dir.mkdir(parents=True, exist_ok=True)
+        (atomic_dir / "README.md").write_text("bundle", encoding="utf-8")
+
+        created = self.service.create_session(
+            [{"source_type": "directory", "path": str(atomic_dir), "directory_mode": "atomic"}],
+            resume_if_exists=False,
+            organize_method="assign_into_existing_categories",
+            strategy={
+                "template_id": "general_downloads",
+                "organize_method": "assign_into_existing_categories",
+                "organize_mode": "incremental",
+            },
+            target_directories=[str(self.target_a)],
+        )
+        session = created.session
+        assert session is not None
+
+        self.assertEqual(Path(session.target_dir).resolve(), atomic_dir.parent.resolve())
+        self.assertEqual(session.placement.new_directory_root, str(atomic_dir.parent.resolve()))
+        self.assertEqual(session.placement.review_root, str((atomic_dir.parent / "Review").resolve()))
+
+    def test_scan_source_collection_treats_atomic_directory_as_single_entry(self):
+        atomic_dir = self.sources_dir / "project.v1"
+        atomic_dir.mkdir(parents=True, exist_ok=True)
+        (atomic_dir / "notes.txt").write_text("bundle", encoding="utf-8")
+
+        created = self.service.create_session(
+            [{"source_type": "directory", "path": str(atomic_dir), "directory_mode": "atomic"}],
+            resume_if_exists=False,
+            organize_method="categorize_into_new_structure",
+            strategy={"template_id": "general_downloads"},
+            output_dir=str(self.output_dir),
+        )
+        session = created.session
+        assert session is not None
+
+        def fail_directory_scan(_path: Path, session_id: str | None = None):
+            del _path, session_id
+            raise AssertionError("atomic directory source should not use directory scan")
+
+        with mock.patch(
+            "file_organizer.app.session_service.analysis_service.run_analysis_cycle_for_entries",
+            return_value="project.v1 | dir | 项目目录 | 整体项目目录",
+        ) as analyze_entries:
+            scan_lines, entries = self.service._scan_source_collection(session, scan_runner=fail_directory_scan)
+
+        analyze_entries.assert_called_once()
+        args, kwargs = analyze_entries.call_args
+        self.assertEqual(args[0], atomic_dir.parent.resolve())
+        self.assertEqual(args[1], ["project.v1"])
+        self.assertEqual(kwargs["session_id"], None)
+        self.assertEqual(scan_lines, "project.v1 | dir | 项目目录 | 整体项目目录")
+        self.assertEqual(entries[0]["source_relpath"], "project.v1")
+        self.assertEqual(entries[0]["entry_type"], "dir")
+
+    def test_execute_moves_atomic_directory_source_as_single_item(self):
+        atomic_dir = self.sources_dir / "ProjectBundle"
+        atomic_dir.mkdir(parents=True, exist_ok=True)
+        (atomic_dir / "README.md").write_text("bundle", encoding="utf-8")
+
+        created = self.service.create_session(
+            [{"source_type": "directory", "path": str(atomic_dir), "directory_mode": "atomic"}],
+            resume_if_exists=False,
+            organize_method="categorize_into_new_structure",
+            strategy={
+                "template_id": "general_downloads",
+                "organize_method": "categorize_into_new_structure",
+            },
+            output_dir=str(self.output_dir),
+        )
+        session = created.session
+        assert session is not None
+        session.stage = "planning"
+        session.scan_lines = "ProjectBundle | dir | 项目目录 | 需要整体移动"
+        session.pending_plan = {
+            "directories": ["Projects"],
+            "moves": [{"source": "ProjectBundle", "target": "Projects/ProjectBundle"}],
+            "unresolved_items": [],
+            "summary": "已规划 1 项",
+        }
+        self.store.save(session)
+
+        precheck = self.service.run_precheck(session.session_id)
+        preview = precheck.session_snapshot["precheck_summary"]["move_preview"][0]
+        self.assertTrue(precheck.session_snapshot["precheck_summary"]["can_execute"])
+        self.assertTrue(preview["source"].endswith("/ProjectBundle"))
+        self.assertEqual(preview["target"], "Projects/ProjectBundle")
+
+        execution = self.service.execute(session.session_id, confirm=True)
+        self.assertEqual(execution.session_snapshot["stage"], "completed")
+        self.assertFalse(atomic_dir.exists())
+        self.assertTrue((self.output_dir / "Projects" / "ProjectBundle").is_dir())
+        self.assertTrue((self.output_dir / "Projects" / "ProjectBundle" / "README.md").exists())

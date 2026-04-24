@@ -1,10 +1,15 @@
 "use client";
 
 import React, { ReactNode } from "react";
+import { PageTransition } from "@/components/page-transition";
 import { usePathname, useSearchParams } from "next/navigation";
+import { motion } from "framer-motion";
+
+// ... (existing imports)
 import Link from "next/link";
 import { LayoutGrid, History, ChevronRight, Settings, Palette, Sun, Moon, Monitor } from "lucide-react";
 import { WindowControls } from "./ui/window-controls";
+import { GlobalTaskIndicator } from "./global-task-indicator";
 import { useTheme } from "@/lib/theme";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
@@ -236,7 +241,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         className="z-50 grid h-[40px] shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center border-b border-on-surface/5 bg-surface-container-lowest px-2 backdrop-blur sm:px-3"
       >
         <div className="flex shrink-0 items-center gap-2 pr-3 select-none">
-           <div className="flex h-5.5 w-5.5 items-center justify-center rounded-[6px] bg-primary/10 ring-1 ring-primary/20 shadow-sm">
+           <div className="flex h-5.5 w-5.5 items-center justify-center rounded-[6px] bg-primary/10 ring-1 ring-primary/20">
               <img src="/app-icon.png" alt="FilePilot" className="h-[14px] w-[14px] object-contain" />
            </div>
            
@@ -249,17 +254,17 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
 
         <div className="flex min-w-0 flex-1 items-center gap-2 border-none px-1 overflow-hidden pointer-events-none">
-          <p className="truncate text-[13px] font-bold tracking-tight text-on-surface/85">
+          <p className="truncate text-ui-h2 text-on-surface/85">
             {moduleCopy.title}
           </p>
-          <span className="text-[12px] leading-none text-on-surface/15 select-none font-thin mt-0.5">/</span>
-          <p className="truncate text-[11px] font-medium text-on-surface/40 tracking-normal">
+          <span className="text-ui-meta leading-none opacity-20 select-none mt-0.5">/</span>
+          <p className="truncate text-ui-meta font-bold">
             {moduleCopy.detail}
           </p>
         </div>
 
         <div className="flex items-center justify-end gap-1 sm:gap-2">
-          <nav className="flex items-center rounded-[6px] bg-on-surface/[0.04] p-1 shadow-[inset_0_1px_2px_rgba(0,0,0,0.02)]">
+          <nav className="flex items-center rounded-lg bg-on-surface/[0.03] p-1 ring-1 ring-black/[0.02]">
             {navItems.map((item) => {
               const isActive = isNavActive(item.href);
               return (
@@ -267,14 +272,22 @@ export function AppShell({ children }: { children: ReactNode }) {
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "inline-flex items-center gap-2 rounded-[4px] px-2.5 py-1 text-[11.5px] font-black tracking-tight transition-all duration-200",
+                    "relative inline-flex items-center gap-2 rounded-[6px] px-3 py-1.5 text-[11.5px] font-black tracking-tight transition-all duration-300",
                     isActive
-                      ? "bg-surface-container-lowest text-on-surface shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04),inset_0_0_0_1px_rgba(0,0,0,0.04)]"
-                      : "text-on-surface/40 hover:bg-on-surface/5 hover:text-on-surface",
+                      ? "bg-surface-container-lowest text-on-surface ring-1 ring-black/[0.03]"
+                      : "text-on-surface/40 hover:bg-on-surface/5 hover:text-on-surface border border-transparent hover:border-on-surface/8",
                   )}
                 >
-                  <item.icon className={cn("h-3 w-3", isActive ? "text-primary" : "text-current")} />
+                  <item.icon className={cn("h-3.5 w-3.5", isActive ? "text-primary" : "text-current")} />
                   <span className="hidden lg:inline">{item.label}</span>
+                  {isActive && (
+                    <motion.div
+                      layoutId="nav-active-glow"
+                      className="absolute inset-0 rounded-[6px] bg-primary/[0.03] ring-1 ring-primary/10"
+                      initial={false}
+                      transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                    />
+                  )}
                 </Link>
               );
             })}
@@ -284,8 +297,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           <WindowControls />
         </div>
       </header>
+      <GlobalTaskIndicator />
 
-      <main className="relative flex flex-1 flex-col overflow-hidden">{children}</main>
+      <main className="relative flex flex-1 flex-col overflow-hidden">
+        <PageTransition>{children}</PageTransition>
+      </main>
     </div>
   );
 }

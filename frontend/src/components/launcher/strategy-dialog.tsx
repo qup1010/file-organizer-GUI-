@@ -75,7 +75,7 @@ export function StrategyDialog({
             exit={{ opacity: 0, scale: 0.97, y: 20 }}
             className="ui-dialog flex h-[min(92vh,820px)] w-full max-w-[1080px] flex-col overflow-hidden bg-surface-container-lowest"
           >
-            <div className="flex items-start justify-between gap-6 border-b border-on-surface/8 bg-surface px-5 py-3 lg:px-6 shadow-sm">
+            <div className="flex items-start justify-between gap-6 border-b border-on-surface/8 bg-surface px-5 py-3 lg:px-6">
               <div className="space-y-1.5">
                 <div className="inline-flex items-center gap-1.5 rounded-[6px] border border-primary/12 bg-primary/8 px-2 py-0.5 text-[11px] font-bold text-primary">
                   <Layers3 className="h-3 w-3" />
@@ -104,7 +104,7 @@ export function StrategyDialog({
 
             <div className="min-h-0 flex-1 overflow-auto px-5 py-4 lg:px-6 bg-surface-container-lowest/30">
               {error ? (
-                <div className="mb-4 rounded-[10px] border border-error/14 bg-error-container/14 px-4 py-3 text-error shadow-sm">
+                <div className="mb-4 rounded-[10px] border border-error/14 bg-error-container/14 px-4 py-3 text-error">
                   <div className="flex items-start gap-2.5">
                     <AlertTriangle className="mt-0.5 h-4.5 w-4.5 shrink-0" />
                     <p className="text-[12.5px] font-semibold leading-relaxed">{error}</p>
@@ -128,7 +128,7 @@ export function StrategyDialog({
                             disabled={loading}
                             className={cn(
                               "flex w-full flex-col rounded-[8px] border px-3 py-2.5 text-left transition-all disabled:opacity-50",
-                              active ? "border-primary/25 bg-primary/10 shadow-sm" : "border-transparent bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
+                              active ? "border-primary/25 bg-primary/10" : "border-transparent bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
                             )}
                           >
                             <div className="mb-1 flex items-center justify-between gap-3">
@@ -223,7 +223,7 @@ export function StrategyDialog({
                               disabled={loading}
                               className={cn(
                                 "rounded-[8px] border px-3 py-2.5 text-left transition-all disabled:opacity-50",
-                                active ? "border-primary/25 bg-primary/10 shadow-sm" : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
+                                active ? "border-primary/25 bg-primary/10" : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
                               )}
                             >
                               <div className="flex items-center justify-between gap-3">
@@ -247,7 +247,7 @@ export function StrategyDialog({
                                 disabled={loading}
                                 className={cn(
                                   "rounded-[8px] border px-3 py-2 text-left transition-all disabled:opacity-50",
-                                  active ? "border-primary/25 bg-primary/10 shadow-sm" : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
+                                  active ? "border-primary/25 bg-primary/10" : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
                                 )}
                               >
                                 <p className={cn("text-[12px] font-bold", active ? "text-primary" : "text-on-surface")}>目标目录深度 {depth}</p>
@@ -274,7 +274,7 @@ export function StrategyDialog({
                                   disabled={loading}
                                   className={cn(
                                     "rounded-[8px] border px-3 py-2 text-left transition-all disabled:opacity-50",
-                                    active ? "border-primary/25 bg-primary/10 shadow-sm" : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
+                                    active ? "border-primary/25 bg-primary/10" : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
                                   )}
                                 >
                                   <div className="flex items-center justify-between gap-3">
@@ -301,7 +301,7 @@ export function StrategyDialog({
                                   disabled={loading}
                                   className={cn(
                                     "rounded-[8px] border px-3 py-2 text-left transition-all disabled:opacity-50",
-                                    active ? "border-primary/25 bg-primary/10 shadow-sm" : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
+                                    active ? "border-primary/25 bg-primary/10" : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
                                   )}
                                 >
                                   <div className="flex items-center justify-between gap-3">
@@ -328,7 +328,7 @@ export function StrategyDialog({
                                   disabled={loading}
                                   className={cn(
                                     "rounded-[8px] border px-3 py-2 text-left transition-all disabled:opacity-50",
-                                    active ? "border-primary/25 bg-primary/10 shadow-sm" : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
+                                    active ? "border-primary/25 bg-primary/10" : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
                                   )}
                                 >
                                   <div className="flex items-center justify-between gap-3">
@@ -359,7 +359,7 @@ export function StrategyDialog({
                               disabled={loading}
                               className={cn(
                                 "rounded-[8px] border px-3 py-2 text-left transition-all disabled:opacity-50",
-                                active ? "border-primary/25 bg-primary/10 shadow-sm" : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
+                                active ? "border-primary/25 bg-primary/10" : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
                               )}
                             >
                               <div className="flex items-center justify-between gap-3">
@@ -383,15 +383,15 @@ export function StrategyDialog({
                       value={strategy.note}
                       disabled={loading}
                       onChange={(event) => onChangeNote(event.target.value.slice(0, 200))}
-                      placeholder="例如：项目文件尽量放在一起；拿不准的先放 Review。"
+                      placeholder="例如：项目文件尽量放在一起；拿不准的先放待确认区（Review）。"
                       className="min-h-[70px] w-full resize-none rounded-[10px] border border-on-surface/8 bg-surface-container-low px-4 py-3 text-[13px] leading-relaxed text-on-surface outline-none transition-all placeholder:text-on-surface-variant/35 focus:border-primary/30"
                     />
                     <div className="mt-3 flex items-start gap-3 rounded-[8px] border border-primary/10 bg-primary/4 p-2.5">
-                      <div className="flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-[6px] bg-primary/10 text-primary shadow-sm border border-primary/10">
+                      <div className="flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-[6px] bg-primary/10 text-primary border border-primary/20">
                         <Sparkles className="h-3.5 w-3.5" />
                       </div>
                       <p className="text-[11px] leading-tight text-primary/80">
-                        只补充会影响结果的偏好，例如“拿不准的先放 Review”“课程资料按学期整理”。
+                        只补充会影响结果的偏好，例如“拿不准的先放待确认区（Review）”“课程资料按学期整理”。
                       </p>
                     </div>
                   </div>

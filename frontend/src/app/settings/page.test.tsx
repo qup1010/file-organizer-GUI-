@@ -4,13 +4,14 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ApiClient } from "@/lib/api";
-import type { SettingsSnapshot } from "@/types/settings";
+import type { SettingsSnapshot, SettingsTestResult } from "@/types/settings";
 
 import SettingsPage from "./page";
 
 const getSettings = vi.fn<() => Promise<SettingsSnapshot>>();
 const createSettingsPreset = vi.fn();
 const updateSettings = vi.fn();
+const testSettings = vi.fn();
 
 vi.mock("framer-motion", () => ({
   AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -38,7 +39,7 @@ vi.mock("@/lib/api", () => ({
       updateSettings,
       activateSettingsPreset: vi.fn(),
       deleteSettingsPreset: vi.fn(),
-      testSettings: vi.fn(),
+      testSettings,
     }) satisfies Partial<ApiClient>,
 }));
 
@@ -145,6 +146,12 @@ function createSnapshot(): SettingsSnapshot {
       icon_image_configured: false,
       bg_removal_configured: false,
     },
+    runtime: {
+      log_paths: {
+        runtime_log: "D:/code/projects/active/FilePilot/logs/backend/runtime.log",
+        debug_log: "D:/code/projects/active/FilePilot/logs/backend/debug.jsonl",
+      },
+    },
   };
 }
 
@@ -153,6 +160,7 @@ describe("SettingsPage preset flow", () => {
     getSettings.mockReset();
     createSettingsPreset.mockReset();
     updateSettings.mockReset();
+    testSettings.mockReset();
     getSettings.mockResolvedValue(createSnapshot());
     updateSettings.mockImplementation(async (payload) => ({
       ...createSnapshot(),
@@ -161,6 +169,17 @@ describe("SettingsPage preset flow", () => {
         ...(payload?.global_config || {}),
       },
     }));
+    testSettings.mockResolvedValue({
+      status: "ok",
+      family: "vision",
+      code: "ok",
+      message: '已验证模型能够识别测试图中的 "VISION TEST 42"。',
+      details: {
+        verification_type: "vision_text",
+        expected: "VISION TEST 42",
+        actual: "VISION TEST 42",
+      },
+    });
   });
 
   it("shows an empty-state prompt instead of editing the default text preset", async () => {
@@ -263,12 +282,68 @@ describe("SettingsPage preset flow", () => {
   it("shows launch placement default controls in the launch settings tab", async () => {
     render(<SettingsPage />);
 
-    const launchTab = await screen.findByRole("button", { name: "启动默认值" });
-    await userEvent.click(launchTab);
+    const launchTabs = await screen.findAllByRole("button", { name: /启动默认值/ });
+    await userEvent.click(launchTabs[0]);
 
     expect(await screen.findByText("默认放置规则")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("例如：D:/archive/sorted")).toBeInTheDocument();
-    expect(screen.getByText("Review 默认跟随新目录位置")).toBeInTheDocument();
+    expect(screen.getByText("待确认区默认跟随新目录位置")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("新目录生成位置/Review")).toBeDisabled();
+  });
+
+  it("shows vision verification result details after running the test", async () => {
+    const user = userEvent.setup();
+
+    render(<SettingsPage />);
+
+    const visionLabel = (await screen.findAllByText("图片理解")).find((node) => node.closest("button")) ?? null;
+    const visionTab = visionLabel?.closest("button") ?? null;
+    expect(visionTab).not.toBeNull();
+    await user.click(visionTab!);
+    await user.click(screen.getAllByRole("button", { name: /测试连接/i })[1]);
+
+    expect(await screen.findByText("图片能力已验证")).toBeInTheDocument();
+    expect(screen.getByText('期望结果：VISION TEST 42')).toBeInTheDocument();
+    expect(screen.getByText('实际返回：VISION TEST 42')).toBeInTheDocument();
+  });
+
+  it("shows vision-specific loading copy while verifying image capability", async () => {
+    const user = userEvent.setup();
+    const deferred: { resolve?: (value: SettingsTestResult) => void } = {};
+    testSettings.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          deferred.resolve = resolve;
+        }),
+    );
+
+    render(<SettingsPage />);
+
+    const visionLabel = (await screen.findAllByText("图片理解")).find((node) => node.closest("button")) ?? null;
+    const visionTab = visionLabel?.closest("button") ?? null;
+    expect(visionTab).not.toBeNull();
+    await user.click(visionTab!);
+    await user.click(screen.getAllByRole("button", { name: /测试连接/i })[1]);
+
+    expect(await screen.findByText("正在验证图片理解能力...")).toBeInTheDocument();
+    expect(screen.getByText("图片能力验证")).toBeInTheDocument();
+
+    if (deferred.resolve) {
+      deferred.resolve({
+        status: "ok",
+        family: "vision",
+        code: "ok",
+        message: '已验证模型能够识别测试图中的 "VISION TEST 42"。',
+        details: {
+          verification_type: "vision_text",
+          expected: "VISION TEST 42",
+          actual: "VISION TEST 42",
+        },
+      });
+    }
+
+    await waitFor(() => {
+      expect(screen.queryByText("正在验证图片理解能力...")).not.toBeInTheDocument();
+    });
   });
 });
