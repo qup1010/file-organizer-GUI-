@@ -63,7 +63,7 @@ function normalizePath(path: string | null | undefined): string {
 
 function isAbsolutePath(path: string | null | undefined): boolean {
   const value = String(path || "").trim();
-  return /^[a-zA-Z]:[\\/]/.test(value) || value.startsWith("/");
+  return /^[a-zA-Z]:($|[\\/])/.test(value) || value.startsWith("/");
 }
 
 function normalizeEntryKind(entryType: string | null | undefined): "directory" | "file" {

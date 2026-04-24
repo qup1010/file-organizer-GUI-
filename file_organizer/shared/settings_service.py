@@ -278,10 +278,10 @@ class SettingsService:
             else:
                 flat[key] = raw
         self._global_config = self._sanitize_global(flat)
-        self._text_presets = {}
-        self._vision_presets = {}
-        self._active_text_preset_id = EMPTY_PRESET_ID
-        self._active_vision_preset_id = EMPTY_PRESET_ID
+        self._text_presets = {DEFAULT_PRESET_ID: self._sanitize_text_preset(flat)}
+        self._vision_presets = {DEFAULT_PRESET_ID: self._sanitize_vision_preset(flat)}
+        self._active_text_preset_id = DEFAULT_PRESET_ID
+        self._active_vision_preset_id = DEFAULT_PRESET_ID
 
     def _load_legacy_icon_payload(self) -> tuple[dict[str, dict[str, Any]], str] | None:
         if not self._legacy_icon_config_path.exists():
@@ -690,7 +690,7 @@ class SettingsService:
         if TEXT_FAMILY in families:
             family_payload = dict(families.get(TEXT_FAMILY) or {})
             if next_active_text_preset_id not in next_text and ("preset" in family_payload or "secret" in family_payload):
-                next_active_text_preset_id = str(uuid.uuid4())[:8]
+                next_active_text_preset_id = DEFAULT_PRESET_ID if DEFAULT_PRESET_ID not in next_text else str(uuid.uuid4())[:8]
                 next_text[next_active_text_preset_id] = copy.deepcopy(DEFAULT_TEXT_PRESET)
             if next_active_text_preset_id in next_text:
                 current = copy.deepcopy(next_text[next_active_text_preset_id])
@@ -703,7 +703,7 @@ class SettingsService:
         if VISION_FAMILY in families:
             family_payload = dict(families.get(VISION_FAMILY) or {})
             if next_active_vision_preset_id not in next_vision and ("preset" in family_payload or "secret" in family_payload):
-                next_active_vision_preset_id = str(uuid.uuid4())[:8]
+                next_active_vision_preset_id = DEFAULT_PRESET_ID if DEFAULT_PRESET_ID not in next_vision else str(uuid.uuid4())[:8]
                 next_vision[next_active_vision_preset_id] = copy.deepcopy(DEFAULT_VISION_PRESET)
             if next_active_vision_preset_id in next_vision:
                 current = copy.deepcopy(next_vision[next_active_vision_preset_id])
@@ -720,7 +720,7 @@ class SettingsService:
         if ICON_IMAGE_FAMILY in families:
             family_payload = dict(families.get(ICON_IMAGE_FAMILY) or {})
             if next_active_icon_image_preset_id not in next_icon and ("preset" in family_payload or "secret" in family_payload):
-                next_active_icon_image_preset_id = str(uuid.uuid4())[:8]
+                next_active_icon_image_preset_id = DEFAULT_PRESET_ID if DEFAULT_PRESET_ID not in next_icon else str(uuid.uuid4())[:8]
                 next_icon[next_active_icon_image_preset_id] = copy.deepcopy(DEFAULT_ICON_IMAGE_PRESET)
             if next_active_icon_image_preset_id in next_icon:
                 current = copy.deepcopy(next_icon[next_active_icon_image_preset_id])

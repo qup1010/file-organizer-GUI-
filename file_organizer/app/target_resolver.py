@@ -134,9 +134,7 @@ class TargetResolver:
 
         if is_within(normalized, selected_roots):
             return True
-        if is_within(normalized, existing_roots):
-            return False
-        return True
+        return False
 
     def normalized_target(
         self,

@@ -41,8 +41,9 @@ logger = logging.getLogger(__name__)
 
 class CreateSessionPayload(BaseModel):
     sources: list[dict[str, Any]] = Field(default_factory=list)
+    target_dir: str | None = None
     resume_if_exists: bool = False
-    organize_method: str
+    organize_method: str | None = None
     strategy: dict[str, Any] | None = None
     output_dir: str | None = None
     target_profile_id: str | None = None
@@ -480,9 +481,21 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
 
     @app.post("/api/sessions")
     def create_session(payload: CreateSessionPayload):
+        if not payload.sources and not str(payload.target_dir or "").strip():
+            raise HTTPException(
+                status_code=422,
+                detail=[
+                    {
+                        "type": "missing",
+                        "loc": ["body", "target_dir"],
+                        "msg": "Field required",
+                        "input": payload.model_dump(),
+                    }
+                ],
+            )
         try:
             result = app.state.service.create_session(
-                payload.sources,
+                payload.sources or str(payload.target_dir or ""),
                 payload.resume_if_exists,
                 payload.organize_method,
                 payload.strategy,
@@ -631,8 +644,7 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
         except RuntimeError:
             return _error_response(app.state.service, session_id, "SESSION_STAGE_CONFLICT", 409)
 
-    @app.post("/api/sessions/{session_id}/confirm-targets")
-    def confirm_target_directories(session_id: str, payload: ConfirmTargetsPayload):
+    def _confirm_target_directories(session_id: str, payload: ConfirmTargetsPayload):
         try:
             result = app.state.service.confirm_target_directories(session_id, payload.selected_target_dirs)
             return {
@@ -652,6 +664,14 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
             }:
                 return _error_response(app.state.service, session_id, code, 409)
             raise
+
+    @app.post("/api/sessions/{session_id}/incremental-selection")
+    def submit_incremental_selection(session_id: str, payload: ConfirmTargetsPayload):
+        return _confirm_target_directories(session_id, payload)
+
+    @app.post("/api/sessions/{session_id}/confirm-targets")
+    def confirm_target_directories(session_id: str, payload: ConfirmTargetsPayload):
+        return _confirm_target_directories(session_id, payload)
 
     @app.post("/api/sessions/{session_id}/update-item")
     def update_item(session_id: str, payload: UpdateItemPayload):
@@ -1249,7 +1269,7 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
                     "family": family,
                     "code": "ok",
                     "message": "图像端点连通性测试已通过。",
-                }
+            }
 
             return JSONResponse(status_code=400, content={"status": "error", "family": family, "code": "invalid_family", "message": "不支持的测试类型。"})
         except Exception as exc:

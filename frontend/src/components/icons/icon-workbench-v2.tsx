@@ -90,6 +90,7 @@ export default function IconWorkbenchV2() {
   const noticeFadeTimerRef = useRef<number | null>(null);
   const noticeDismissTimerRef = useRef<number | null>(null);
   const hasConnectedRef = useRef(false);
+  const hasUserInteractedRef = useRef(false);
   const [streamStatus, setStreamStatus] = useState<IconWorkbenchStreamStatus>("offline");
   const [isNoticeFading, setIsNoticeFading] = useState(false);
   const [isTargetDropActive, setIsTargetDropActive] = useState(false);
@@ -217,6 +218,10 @@ export default function IconWorkbenchV2() {
     return session.folders.some((folder) => isFolderReady(folder));
   }, [session]);
   const canRemoveBgBatch = canApplyBatch;
+  const previewFolder = useMemo(
+    () => session?.folders.find((folder) => folder.versions.some((version) => version.version_id === previewVersion?.version_id)) ?? null,
+    [previewVersion?.version_id, session],
+  );
 
   const applySession = useCallback((nextSession: IconWorkbenchSession) => {
     setSession(nextSession);
@@ -275,11 +280,16 @@ export default function IconWorkbenchV2() {
       if (!parsed?.sessionId) { setRestoringSession(false); return; }
       if (parsed.selectedTemplateId) setSelectedTemplateId(parsed.selectedTemplateId);
       setExpandedFolderId(parsed.expandedFolderId);
-      iconApi.getSession(parsed.sessionId).then(applySession).catch(() => window.localStorage.removeItem(ICONS_WORKSPACE_STATE_KEY)).finally(() => setRestoringSession(false));
+      iconApi.getSession(parsed.sessionId).then((nextSession) => {
+        applySession(nextSession);
+        if (nextSession.folders.length > 0 && !hasUserInteractedRef.current) {
+          showNotice("已恢复上次图标工作区，目标列表和展开状态已还原。");
+        }
+      }).catch(() => window.localStorage.removeItem(ICONS_WORKSPACE_STATE_KEY)).finally(() => setRestoringSession(false));
     } catch {
       setRestoringSession(false);
     }
-  }, [applySession, iconApi, setSelectedTemplateId]);
+  }, [applySession, iconApi, setSelectedTemplateId, showNotice]);
 
   useEffect(() => {
     if (restoringSession || !session) return;
@@ -292,7 +302,7 @@ export default function IconWorkbenchV2() {
     closeEventStream();
     setStreamStatus("connecting");
     scheduleOfflineState();
-    streamRef.current = createIconWorkbenchEventStream({ baseUrl, sessionId: session.session_id, accessToken: apiToken, onEvent: handleWorkbenchEvent, onError: () => { setStreamStatus("reconnecting"); scheduleOfflineState(); } });
+    streamRef.current = createIconWorkbenchEventStream({ baseUrl, sessionId: session.session_id, accessToken: apiToken, onEvent: handleWorkbenchEvent, onError: () => { setStreamStatus("reconnecting"); showNotice("图标工坊实时连接已断开，当前进度可能不是最新状态。"); scheduleOfflineState(); } });
     return closeEventStream;
   }, [apiToken, baseUrl, closeEventStream, handleWorkbenchEvent, scheduleOfflineState, session?.session_id]);
 
@@ -346,13 +356,31 @@ export default function IconWorkbenchV2() {
       
       nextSession = await iconApi.generatePreviews(session.session_id, folderIds);
       applySession(nextSession);
-      showNotice("图标生成已完成");
+      const generatedFolders = nextSession.folders.filter((folder) => folderIds.includes(folder.folder_id));
+      const successCount = generatedFolders.filter((folder) => {
+        const currentVersion = folder.versions.find((version) => version.version_id === folder.current_version_id);
+        return currentVersion?.status === "ready";
+      }).length;
+      const failedFolders = generatedFolders.filter((folder) => {
+        const currentVersion = folder.versions.find((version) => version.version_id === folder.current_version_id);
+        return currentVersion?.status === "error";
+      });
+      const failedCount = failedFolders.length;
+      const skippedCount = Math.max(0, folderIds.length - successCount - failedCount);
+      const failedDetail = failedFolders.length
+        ? `生成失败：${failedFolders.map((folder) => `「${folder.folder_name}」`).join("、")}。`
+        : null;
+      showNotice(`图标生成已完成：成功 ${successCount}，失败 ${failedCount}，跳过 ${skippedCount}。`, failedDetail);
     } catch (err) { setError(err instanceof Error ? err.message : "生成失败"); } finally { setGenerateProgress(null); }
   };
 
-  const reportClientAction = async (type: string, results: IconWorkbenchClientActionResult[]) => {
+  const reportClientAction = async (
+    type: string,
+    results: IconWorkbenchClientActionResult[],
+    skippedItems: IconWorkbenchClientActionResult[] = [],
+  ) => {
     if (!session) return null;
-    return iconApi.reportClientAction(session.session_id, { action_type: type, results, skipped_items: [] }).catch(() => null);
+    return iconApi.reportClientAction(session.session_id, { action_type: type, results, skipped_items: skippedItems }).catch(() => null);
   };
 
   const handleApplyVersion = async (folderId: string, version: IconPreviewVersion) => {
@@ -362,9 +390,15 @@ export default function IconWorkbenchV2() {
       const folder = session.folders.find(f => f.folder_id === folderId);
       if (!folder) return;
       await invokeTauriCommand("apply_folder_icon", { folderPath: folder.folder_path, imagePath: version.image_path });
-      const nextSession = await iconApi.selectVersion(session.session_id, folderId, version.version_id);
-      applySession(nextSession);
-      showNotice(`「${folder.folder_name}」图标已更新`);
+      try {
+        const nextSession = await iconApi.selectVersion(session.session_id, folderId, version.version_id);
+        applySession(nextSession);
+        showNotice(`「${folder.folder_name}」图标已更新`);
+      } catch {
+        const syncedSession = await iconApi.scanSession(session.session_id);
+        applySession(syncedSession);
+        showNotice(`「${folder.folder_name}」图标已应用，工作区状态已重新同步。`);
+      }
     } catch (err) { setError(err instanceof Error ? err.message : "应用失败"); } finally { setActiveProcessingId(null); setIsApplyingId(null); }
   };
 
@@ -390,9 +424,40 @@ export default function IconWorkbenchV2() {
     try {
       await invokeTauriCommand("restore_last_folder_icon", { folderPath: folder.folder_path });
       const nextSession = await reportClientAction("restore_icons", [{ folder_id: folder.folder_id, status: "restored", message: "已恢复上一次图标状态" }]);
-      if (nextSession) applySession(nextSession);
-      showNotice(`「${folder.folder_name}」已恢复`);
+      if (nextSession) {
+        applySession(nextSession);
+        showNotice(`「${folder.folder_name}」已恢复`);
+      } else if (session) {
+        const syncedSession = await iconApi.scanSession(session.session_id);
+        applySession(syncedSession);
+        showNotice(`「${folder.folder_name}」已恢复上一次图标状态，工作区状态已重新同步。`);
+      }
     } catch (err) { setError(err instanceof Error ? err.message : "恢复失败"); }
+  };
+
+  const handleApplyBatch = async () => {
+    if (!session) return;
+    hasUserInteractedRef.current = true;
+    setBatchApplyLoading(true);
+    try {
+      const prep = await iconApi.prepareApplyReady(session.session_id, allFolderIds);
+      const rawResults = await invokeTauriCommand<ApplyIconResult[]>("apply_ready_icons", { tasks: prep.tasks });
+      const taskByFolderId = new Map(prep.tasks.map((task) => [task.folder_id, task] as const));
+      const results = (rawResults ?? []).map((result) => {
+        const task = result.folder_id ? taskByFolderId.get(result.folder_id) : null;
+        return {
+          ...result,
+          version_id: result.version_id ?? task?.version_id ?? null,
+        };
+      });
+      const nextSession = await reportClientAction("apply_icons", results, prep.skipped_items);
+      if (nextSession) {
+        applySession(nextSession);
+        showNotice(nextSession.last_client_action?.summary.message ?? "批量应用已完成");
+      }
+    } finally {
+      setBatchApplyLoading(false);
+    }
   };
 
   const retryEventStream = useCallback(async () => {
@@ -428,7 +493,10 @@ export default function IconWorkbenchV2() {
       {shouldShowNotice && (
         <div className={cn("flex h-8 items-center gap-3 border-b border-primary/10 bg-primary/[0.03] px-5 transition-all text-on-surface/70", isNoticeFading ? "opacity-0" : "opacity-100")}>
           <Sparkles className="h-3 w-3 shrink-0 text-primary opacity-50" />
-          <p className="truncate text-[11px] font-bold flex-1">{notice?.message}</p>
+          <p className="truncate text-[11px] font-bold flex-1">
+            {notice?.message}
+            {notice?.detail ? <span className="ml-2 text-ui-muted/60">{notice.detail}</span> : null}
+          </p>
           <button onClick={() => showNotice(null)} className="text-ui-muted/30 hover:text-on-surface" title="忽略通知"><X className="h-3 w-3" /></button>
         </div>
       )}
@@ -444,6 +512,11 @@ export default function IconWorkbenchV2() {
             <span className="text-[9px] font-black uppercase tracking-widest text-primary/40 shrink-0">正在生成</span>
             <p className="truncate text-[11.5px] font-black text-on-surface/80">{generatePresentation.title}</p>
             <span className="text-[10px] font-medium text-ui-muted/40 truncate shrink-0">{generatePresentation.detail}</span>
+            {generatePresentation.steps.map((step) => (
+              <span key={step.key} className="text-[9px] font-bold text-ui-muted/35">
+                {step.label}
+              </span>
+            ))}
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -487,14 +560,14 @@ export default function IconWorkbenchV2() {
       </div>
 
       {hasTargets && (hasSelectedStyle || canApplyBatch || canRemoveBgBatch) && (
-        <IconWorkbenchFooterBar targetCount={targetCount} isGenerating={isGeneratingFlow} generateProgressHint={generatePresentation?.detail || null} isApplying={batchApplyLoading} onGenerate={() => void runGenerateFlow(allFolderIds)} onApplyBatch={() => { setBatchApplyLoading(true); iconApi.prepareApplyReady(session!.session_id, allFolderIds).then(prep => invokeTauriCommand<ApplyIconResult[]>("apply_ready_icons", { tasks: prep.tasks })).then(res => reportClientAction("apply_icons", res ?? [])).then(s => s && applySession(s)).finally(() => setBatchApplyLoading(false))}} canApplyBatch={canApplyBatch} onRemoveBgBatch={handleRemoveBgBatch} canRemoveBgBatch={canRemoveBgBatch} isRemovingBgBatch={isRemovingBgBatch} removeBgBatchProgress={removeBgBatchProgress} selectedTemplateName={selectedTemplate?.name || null} generateBlockedReason={generateBlockedReason} />
+        <IconWorkbenchFooterBar targetCount={targetCount} isGenerating={isGeneratingFlow} generateProgressHint={generatePresentation?.detail || null} isApplying={batchApplyLoading} onGenerate={() => void runGenerateFlow(allFolderIds)} onApplyBatch={() => void handleApplyBatch()} canApplyBatch={canApplyBatch} onRemoveBgBatch={handleRemoveBgBatch} canRemoveBgBatch={canRemoveBgBatch} isRemovingBgBatch={isRemovingBgBatch} removeBgBatchProgress={removeBgBatchProgress} selectedTemplateName={selectedTemplate?.name || null} generateBlockedReason={generateBlockedReason} />
       )}
 
       <IconWorkbenchStylePanel isOpen={stylePanelOpen} onClose={() => setStylePanelOpen(false)} templates={templates} selectedTemplateId={selectedTemplateId} onSelect={setSelectedTemplateId} onRequestManageTemplate={(id) => { setSelectedTemplateId(id); setStylePanelOpen(false); setTemplateDrawerOpen(true); }} />
       <IconWorkbenchTemplateDrawer open={templateDrawerOpen} templates={templates} templatesLoading={templatesLoading} selectedTemplate={selectedTemplate} templateNameDraft={templateNameDraft} templateDescriptionDraft={templateDescriptionDraft} templatePromptDraft={templatePromptDraft} templateActionLoading={templateActionLoading} onClose={() => setTemplateDrawerOpen(false)} onSelectTemplate={setSelectedTemplateId} onTemplateNameChange={setTemplateNameDraft} onTemplateDescriptionChange={setTemplateDescriptionDraft} onTemplatePromptChange={setTemplatePromptDraft} onReloadTemplates={() => void reloadTemplates(selectedTemplateId)} onCreateTemplate={createTemplate} onUpdateTemplate={updateTemplate} onDeleteTemplate={deleteTemplate} />
       
       {previewVersion && (
-        <IconWorkbenchPreviewModal src={buildImageSrc(previewVersion, baseUrl, apiToken)} title={`v${previewVersion.version_number}`} subtitle={selectedTemplate?.name || "预览"} localImagePath={previewVersion.image_path} folderName="预览" onOpenFolder={openDirectoryWithTauri} onClose={() => setPreviewVersion(null)} onApply={() => handleApplyVersion(session!.folders.find(f => f.versions.some(v => v.version_id === previewVersion.version_id))!.folder_id, previewVersion)} onRegenerate={() => runGenerateFlow([session!.folders.find(f => f.versions.some(v => v.version_id === previewVersion.version_id))!.folder_id])} regenerateDisabled={!!generationConfigBlockedReason || isBusy} isApplying={isApplyingId === previewVersion.version_id} imageModelName={workbenchConfig?.image_model.model || "默认模型"} />
+        <IconWorkbenchPreviewModal src={buildImageSrc(previewVersion, baseUrl, apiToken)} title={`v${previewVersion.version_number}`} subtitle={selectedTemplate?.name || "预览"} localImagePath={previewVersion.image_path} folderName="预览" onOpenFolder={openDirectoryWithTauri} onClose={() => setPreviewVersion(null)} onApply={() => handleApplyVersion(previewFolder!.folder_id, previewVersion)} onRegenerate={() => runGenerateFlow([previewFolder!.folder_id])} regenerateDisabled={!!generationConfigBlockedReason || isBusy} isApplying={isApplyingId === previewVersion.version_id} imageModelName={workbenchConfig?.image_model.model || "默认模型"} isApplied={previewFolder?.applied_version_id === previewVersion.version_id} isCurrentVersion={previewFolder?.current_version_id === previewVersion.version_id} />
       )}
 
       <ConfirmDialog open={restoreConfirmOpen} title="恢复上一次图标状态？" description={`确定要将「${folderToRestore?.folder_name}」恢复到进入前状态吗？`} onClose={() => setRestoreConfirmOpen(false)} onConfirm={() => { if(folderToRestore) handleRestoreIcon(folderToRestore); setRestoreConfirmOpen(false); }} />

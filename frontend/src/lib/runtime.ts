@@ -129,7 +129,8 @@ export async function invokeTauriCommand<T>(
   try {
     const { invoke } = await import("@tauri-apps/api/core");
     return await invoke<T>(command, args);
-  } catch {
+  } catch (error) {
+    console.warn(`Tauri command failed: ${command}`, error);
     return null;
   }
 }
@@ -150,11 +151,28 @@ export type TauriInspectedPath = {
   path: string;
   is_dir: boolean;
   is_file: boolean;
+  error_code?: string | null;
+  message?: string | null;
 };
 
+export type TauriResultEnvelope<T> = {
+  ok: boolean;
+  items: T[];
+  ignored_count: number;
+  error_code?: string | null;
+  message?: string | null;
+};
+
+function unwrapTauriItems<T>(result: T[] | TauriResultEnvelope<T> | null): T[] {
+  if (!result) {
+    return [];
+  }
+  return Array.isArray(result) ? result : result.items;
+}
+
 export async function inspectPathsWithTauri(paths: string[]): Promise<TauriInspectedPath[]> {
-  const result = await invokeTauriCommand<TauriInspectedPath[]>("inspect_paths", { paths });
-  return result ?? [];
+  const result = await invokeTauriCommand<TauriInspectedPath[] | TauriResultEnvelope<TauriInspectedPath>>("inspect_paths", { paths });
+  return unwrapTauriItems(result);
 }
 
 export type TauriDirectoryEntry = {
@@ -164,8 +182,25 @@ export type TauriDirectoryEntry = {
 };
 
 export async function listDirectoryEntriesWithTauri(path: string): Promise<TauriDirectoryEntry[]> {
-  const result = await invokeTauriCommand<TauriDirectoryEntry[]>("list_directory_entries", { path });
-  return result ?? [];
+  const result = await listDirectoryEntriesResultWithTauri(path);
+  return result.items;
+}
+
+export async function listDirectoryEntriesResultWithTauri(path: string): Promise<TauriResultEnvelope<TauriDirectoryEntry>> {
+  const result = await invokeTauriCommand<TauriDirectoryEntry[] | TauriResultEnvelope<TauriDirectoryEntry>>("list_directory_entries", { path });
+  if (!result) {
+    return {
+      ok: false,
+      items: [],
+      ignored_count: 0,
+      error_code: "TAURI_COMMAND_FAILED",
+      message: "无法读取桌面端目录列表。",
+    };
+  }
+  if (Array.isArray(result)) {
+    return { ok: true, items: result, ignored_count: 0, error_code: null, message: null };
+  }
+  return result;
 }
 
 export async function openDirectoryWithTauri(path: string): Promise<void> {

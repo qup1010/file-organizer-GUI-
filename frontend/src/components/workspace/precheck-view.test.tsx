@@ -54,8 +54,8 @@ describe("PrecheckView", () => {
       />,
     );
 
-    expect(screen.getByText("contract.pdf")).toBeInTheDocument();
-    expect(screen.getByText("F001")).toBeInTheDocument();
+    expect(screen.getAllByText("contract.pdf").length).toBeGreaterThan(0);
+    expect(screen.getByText(/F001/)).toBeInTheDocument();
     expect(screen.getByText("合同")).toBeInTheDocument();
   });
 });

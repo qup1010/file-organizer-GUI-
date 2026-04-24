@@ -8,7 +8,7 @@ import type {
   SessionStrategySelection,
 } from "@/types/session";
 
-export async function createSessionAndStartScan(
+export async function createLaunchSession(
   api: Pick<ApiClient, "createSession">,
   payload: CreateSessionRequest & { strategy: SessionStrategySelection },
 ): Promise<CreateSessionResponse> {
