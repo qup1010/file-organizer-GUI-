@@ -51,6 +51,11 @@ export function ComposerBar({
     plannerStatus && plannerStatus.attempt > 1 && (plannerStatus.phase === "retrying" || plannerStatus.phase === "repairing")
       ? `第 ${plannerStatus.attempt} 次尝试`
       : null;
+  const inputPlaceholder = shouldShowPlannerStatus
+    ? "系统正在更新方案，完成后会自动恢复输入"
+    : isComposerLocked
+      ? "系统正在处理，请稍候..."
+      : "输入调整意见，或说明你希望修改的地方...";
 
   // Auto-resize textarea logic can be added if needed or just use simple rows
   if (composerMode === "hidden") {
@@ -95,6 +100,23 @@ export function ComposerBar({
             {composerStatus.detail && (
               <span className="opacity-40 italic">— {composerStatus.detail}</span>
             )}
+          </motion.div>
+        ) : null}
+
+        {plannerStatus && shouldShowPlannerStatus ? (
+          <motion.div
+            key="planner-status-badge"
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 5 }}
+            className="mb-2 mt-4 flex flex-wrap items-center gap-2.5 px-1 text-[11px] font-black uppercase tracking-widest text-primary opacity-80"
+          >
+            <Loader2 className="h-3 w-3 animate-spin" />
+            <span>{plannerStatus.label}</span>
+            {plannerAttemptLabel ? <span className="rounded-full bg-primary/10 px-2 py-0.5">{plannerAttemptLabel}</span> : null}
+            {plannerStatus.elapsedLabel ? <span className="opacity-50">{plannerStatus.elapsedLabel}</span> : null}
+            {plannerStatus.detail ? <span className="normal-case tracking-normal opacity-45">— {plannerStatus.detail}</span> : null}
+            {plannerStatus.reassureText ? <span className="normal-case tracking-normal opacity-55">{plannerStatus.reassureText}</span> : null}
           </motion.div>
         ) : null}
 
@@ -151,7 +173,7 @@ export function ComposerBar({
                 "min-h-[40px] flex-1 resize-none bg-transparent px-2 py-1.5 text-[13.5px] font-medium leading-relaxed text-on-surface outline-none placeholder:text-on-surface-variant/40",
                 isComposerLocked && "cursor-not-allowed",
               )}
-              placeholder={isComposerLocked ? "系统正在处理，请稍候..." : "输入调整意见，或说明你希望修改的地方..."}
+              placeholder={inputPlaceholder}
               value={messageInput}
               disabled={isComposerLocked}
               onChange={(event) => setMessageInput(event.target.value)}

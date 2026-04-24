@@ -25,7 +25,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { createApiClient } from "@/lib/api";
 import {
   firstSourcePath,
-  createSessionAndStartScan,
+  createLaunchSession,
   startFreshSession,
 } from "@/lib/session-launcher-actions";
 import {
@@ -33,13 +33,14 @@ import {
   getApiToken,
   inspectPathsWithTauri,
   isTauriDesktop,
-  listDirectoryEntriesWithTauri,
+  listDirectoryEntriesResultWithTauri,
   pickDirectoriesWithTauri,
   pickDirectoryWithTauri,
   pickFilesWithTauri,
 } from "@/lib/runtime";
 import { findDropZoneForPosition, listenToTauriDragDrop } from "@/lib/tauri-drag-drop";
 import { getSessionStageView } from "@/lib/session-view-model";
+import { deriveWorkspaceRoot } from "@/lib/path-normalization";
 import {
   buildStrategySummary,
   CAUTION_LEVEL_OPTIONS,
@@ -191,44 +192,6 @@ function strategyForMethod(previous: SessionStrategySelection, organizeMethod: O
     task_type: "organize_full_directory",
     organize_method: organizeMethod,
   };
-}
-
-function normalizeSlashes(value: string): string {
-  return value.replace(/\\/g, "/").replace(/\/+$/, "");
-}
-
-function getPathParent(path: string): string {
-  const normalized = normalizeSlashes(path);
-  if (!normalized) return "";
-  const parts = normalized.split("/");
-  if (parts.length <= 1) return normalized;
-  return parts.slice(0, -1).join("/");
-}
-
-function deriveWorkspaceRoot(sources: SessionSourceSelection[]): string {
-  const normalizedPaths = sources
-    .map((item) => {
-      const path = item.path.trim();
-      if (!path) return "";
-      return item.source_type === "directory" && normalizeDirectoryMode(item) === "contents"
-        ? normalizeSlashes(path)
-        : getPathParent(path);
-    })
-    .filter(Boolean);
-  if (!normalizedPaths.length) return "";
-  if (normalizedPaths.length === 1) return normalizedPaths[0];
-  const pathSegments = normalizedPaths.map((path) => path.split("/").filter(Boolean));
-  const first = pathSegments[0];
-  const common: string[] = [];
-  for (let index = 0; index < first.length; index += 1) {
-    const segment = first[index];
-    if (pathSegments.every((parts) => parts[index] === segment)) {
-      common.push(segment);
-      continue;
-    }
-    break;
-  }
-  return common.join("/");
 }
 
 function inferDropSourceType(path: string, entry: { isDirectory?: boolean; isFile?: boolean } | null): SourceDraftType {
@@ -698,7 +661,7 @@ export function SessionLauncherShell() {
         void resolveNativeDroppedSources(payload.paths).then((droppedSources) => {
           if (cancelled) return;
           if (!droppedSources.length) {
-            setError("当前环境暂时无法从拖拽内容里读取本地绝对路径。你可以改用“添加文件夹”“添加文件”或手动输入路径。");
+            setError("当前环境暂时无法从拖拽内容里读取本地绝对路径。你可以改用“添加文件夹本身”“添加文件”或手动输入路径。");
             return;
           }
           addSources(droppedSources);
@@ -794,7 +757,12 @@ export function SessionLauncherShell() {
     }
 
     try {
-      const entries = await listDirectoryEntriesWithTauri(path);
+      const directoryResult = await listDirectoryEntriesResultWithTauri(path);
+      if (!directoryResult.ok) {
+        setError(directoryResult.message || "现在还不能读取这个文件夹的内容，请检查权限或路径是否存在。");
+        return;
+      }
+      const entries = directoryResult.items;
       const nextItems = dedupeSources(entries.map(mapDirectoryEntryToSource).filter((item): item is SessionSourceSelection => Boolean(item)));
       if (!nextItems.length) {
         setSourceFeedback({
@@ -850,8 +818,8 @@ export function SessionLauncherShell() {
 
       setSourceFeedback({
         tone: "success",
-        message: skippedCount > 0
-          ? `已导入“${path}”下的 ${importedItems.length} 个顶层项目，已跳过 ${skippedCount} 个已在列表中的项目。`
+        message: skippedCount > 0 || directoryResult.ignored_count > 0
+          ? `已导入“${path}”下的 ${importedItems.length} 个顶层项目，已跳过 ${skippedCount} 个重复项，另有 ${directoryResult.ignored_count} 个条目因权限或读取失败被忽略。`
           : `已导入“${path}”下的 ${importedItems.length} 个顶层项目。`,
       });
     } catch {
@@ -1139,7 +1107,7 @@ export function SessionLauncherShell() {
 
     try {
       const api = createApiClient(apiBaseUrl, getApiToken());
-      const response = await createSessionAndStartScan(api, launchRequest);
+      const response = await createLaunchSession(api, launchRequest);
       if (response.mode === "resume_available" && response.restorable_session?.session_id) {
         setLaunchTransitionOpen(false);
         setResumePrompt({
@@ -1212,7 +1180,7 @@ export function SessionLauncherShell() {
     setIsDropActive(false);
     const droppedSources = extractDroppedSources(event.dataTransfer);
     if (!droppedSources.length) {
-        setError("当前环境暂时无法从拖拽内容里读取本地绝对路径。你可以改用“添加文件夹”“添加文件”或手动输入路径。");
+        setError("当前环境暂时无法从拖拽内容里读取本地绝对路径。你可以改用“添加文件夹本身”“添加文件”或手动输入路径。");
       return;
     }
       addSources(droppedSources);
@@ -1465,7 +1433,7 @@ export function SessionLauncherShell() {
                             
                             <div className="flex flex-wrap justify-center gap-3">
                               <Button variant="secondary" onClick={() => void handleChooseDirectories()} disabled={loading} className="h-9 rounded-[6px] border border-on-surface/8 bg-surface px-5 text-[12px] font-bold text-on-surface/70 hover:bg-on-surface/[0.04] hover:text-on-surface active:scale-95 transition-all">
-                                添加文件夹
+                                添加文件夹本身
                               </Button>
                               <Button variant="secondary" onClick={() => void handleChooseFiles()} disabled={loading} className="h-9 rounded-[6px] border border-on-surface/8 bg-surface px-5 text-[12px] font-bold text-on-surface/70 hover:bg-on-surface/[0.04] hover:text-on-surface active:scale-95 transition-all">
                                 添加文件
@@ -1488,7 +1456,7 @@ export function SessionLauncherShell() {
                                       key={item.path}
                                       type="button"
                                       disabled={loading}
-                                      onClick={() => addSources([createDirectorySource(item.path, "atomic")])}
+                                      onClick={() => void importDirectoryEntries(item.path)}
                                       className="group flex items-center gap-2 rounded-full border border-on-surface/6 bg-on-surface/[0.015] px-3 py-1 text-[11px] font-bold text-on-surface/45 transition-all hover:border-primary/20 hover:bg-primary/[0.02] hover:text-primary active:scale-[0.98]"
                                     >
                                       <FolderOpen className="h-3 w-3 opacity-40 group-hover:opacity-100" />
@@ -1602,7 +1570,7 @@ export function SessionLauncherShell() {
                                 </button>
                               ) : null}
                               <div className="flex flex-wrap items-center justify-center gap-2 text-[12px] font-bold text-on-surface/55">
-                                <button type="button" onClick={() => void handleChooseDirectories()} className="rounded-[6px] px-2.5 py-1 text-on-surface/65 hover:bg-on-surface/[0.04] hover:text-on-surface">添加文件夹</button>
+                                <button type="button" onClick={() => void handleChooseDirectories()} className="rounded-[6px] px-2.5 py-1 text-on-surface/65 hover:bg-on-surface/[0.04] hover:text-on-surface">添加文件夹本身</button>
                                 <span className="opacity-20">/</span>
                                 <button type="button" onClick={() => void handleChooseFiles()} className="rounded-[6px] px-2.5 py-1 text-on-surface/65 hover:bg-on-surface/[0.04] hover:text-on-surface">添加文件</button>
                               </div>
@@ -1678,7 +1646,7 @@ export function SessionLauncherShell() {
                           {
                             method: "assign_into_existing_categories" as const,
                             title: "归入现有目录",
-                            description: "把这批内容归入你已经有的目录体系里；如果现有结构不够用，系统会按默认放置位置补充少量新目录。",
+                            description: "把这批内容归入你已经选定的现有目录池；拿不准的项目会进入待确认区，不会自动投递到未知新目录。",
                           },
                           {
                             method: "categorize_into_new_structure" as const,

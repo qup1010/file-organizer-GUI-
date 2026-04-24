@@ -4,6 +4,7 @@ import json
 import logging
 import re
 import sys
+from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
@@ -54,6 +55,10 @@ def _sanitize_string(value: str) -> str:
 
 
 def sanitize_for_logging(value: Any) -> Any:
+    if is_dataclass(value) and not isinstance(value, type):
+        return sanitize_for_logging(asdict(value))
+    if hasattr(value, "model_dump") and callable(value.model_dump):
+        return sanitize_for_logging(value.model_dump())
     if isinstance(value, dict):
         sanitized: dict[str, Any] = {}
         for key, item in value.items():
@@ -85,6 +90,16 @@ def _close_handlers(logger: logging.Logger) -> None:
             handler.close()
         except Exception:
             pass
+
+
+def close_backend_logging() -> None:
+    _close_handlers(logging.getLogger())
+    for name in _MANAGED_LOGGERS:
+        managed_logger = logging.getLogger(name)
+        _close_handlers(managed_logger)
+        managed_logger.propagate = True
+    _close_handlers(logging.getLogger("uvicorn.access"))
+    logging.captureWarnings(False)
 
 
 def setup_backend_logging(

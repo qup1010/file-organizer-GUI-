@@ -87,6 +87,7 @@ class FinalPlan:
     directories: list[str] = field(default_factory=list)
     moves: list[PlanMove] = field(default_factory=list)
     unresolved_items: list[str] = field(default_factory=list)
+    summary: str = ""
 
     @classmethod
     def from_dict(cls, data: dict) -> "FinalPlan":
@@ -94,6 +95,7 @@ class FinalPlan:
             directories=list(data.get("directories", [])),
             moves=[PlanMove.from_dict(item) for item in data.get("moves", [])],
             unresolved_items=list(data.get("unresolved_items", [])),
+            summary=data.get("summary", ""),
         )
 
 

@@ -62,6 +62,7 @@ let latestStreamOptions: null | {
 } = null;
 
 vi.mock("framer-motion", () => ({
+  AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   motion: {
     div: ({ children, ...props }: React.ComponentProps<"div">) => <div {...props}>{children}</div>,
     button: ({ children, whileTap: _whileTap, ...props }: React.ComponentProps<"button"> & { whileTap?: unknown }) => (
@@ -72,6 +73,11 @@ vi.mock("framer-motion", () => ({
 
 vi.mock("next/link", () => ({
   default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a>,
+}));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 vi.mock("@/lib/runtime", () => ({
@@ -277,6 +283,7 @@ describe("IconWorkbenchV2", () => {
   beforeEach(() => {
     latestStreamOptions = null;
     localStorage.clear();
+    Object.values(iconApiMock).forEach((mockFn) => mockFn.mockReset());
     vi.mocked(isTauriDesktop).mockReturnValue(false);
     vi.mocked(invokeTauriCommand).mockReset();
     iconApiMock.getConfig.mockResolvedValue({
@@ -563,7 +570,9 @@ describe("IconWorkbenchV2", () => {
         },
       ],
     });
-    expect(screen.getByText("应用图标已完成：成功 1，失败 0，跳过 1。")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("应用图标已完成：成功 1，失败 0，跳过 1。")).toBeInTheDocument();
+    });
   });
 
   it("restores the previous icon state instead of clearing to default", async () => {

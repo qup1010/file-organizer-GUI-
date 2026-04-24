@@ -9,7 +9,7 @@ from file_organizer.app.models import OrganizerSession, PendingPlanPayload, Plan
 from file_organizer.app.session_service import OrganizerSessionService
 from file_organizer.app.session_store import SessionStore
 from file_organizer.organize.models import PendingPlan, PlanMove
-from file_organizer.shared.logging_utils import setup_backend_logging
+from file_organizer.shared.logging_utils import close_backend_logging, setup_backend_logging
 
 
 class ImmediateScanner:
@@ -34,6 +34,7 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         self.service = OrganizerSessionService(self.store)
 
     def tearDown(self):
+        close_backend_logging()
         if self.root.exists():
             last_error = None
             for _ in range(5):
@@ -492,10 +493,11 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         self.assertEqual(len(progress["recent_analysis_items"]), 4)
         self.assertEqual(progress["message"], "正在读取本次整理来源")
 
-    def test_start_scan_in_incremental_mode_enters_target_selection_without_auto_planning(self):
+    def test_start_scan_in_incremental_mode_prepares_selection_without_auto_planning(self):
         created = self.service.create_session(
             str(self.target_dir),
             resume_if_exists=False,
+            organize_method="assign_into_existing_categories",
             strategy={"organize_mode": "incremental", "destination_index_depth": 2},
         )
         session = created.session
@@ -512,12 +514,13 @@ class OrganizerSessionServiceTests(unittest.TestCase):
 
         self.assertIsNotNone(scanned)
         assert scanned is not None
-        self.assertEqual(scanned.stage, "selecting_incremental_scope")
-        self.assertEqual(scanned.incremental_selection["status"], "pending")
-        self.assertEqual(scanned.incremental_selection["root_directory_options"], ["docs"])
-        self.assertEqual(scanned.incremental_selection["target_directories"], [])
-        self.assertFalse(scanned.incremental_selection["source_scan_completed"])
-        self.assertEqual(scanned.planner_items, [])
+        self.assertEqual(scanned.stage, "planning")
+        self.assertEqual(scanned.incremental_selection["status"], "ready")
+        self.assertEqual(scanned.incremental_selection["target_directories"], [str(self.target_dir)])
+        self.assertTrue(scanned.incremental_selection["source_scan_completed"])
+        self.assertEqual([item["source_relpath"] for item in scanned.planner_items], ["docs", "new.txt"])
+        self.assertEqual(scanned.pending_plan.moves, [])
+        self.assertEqual(scanned.pending_plan.unresolved_items, [])
 
     def test_confirm_target_directories_builds_planner_items_for_unselected_roots(self):
         created = self.service.create_session(
@@ -1134,7 +1137,7 @@ class OrganizerSessionServiceTests(unittest.TestCase):
             result = self.service.submit_user_intent(session.session_id, "放到文档")
 
         self.assertEqual(result.assistant_message["content"], "已更新计划")
-        self.assertEqual(result.session_snapshot["plan_snapshot"]["summary"], "moved")
+        self.assertEqual(result.session_snapshot["plan_snapshot"]["summary"], "已分类 1 项，调整 1 项，仍剩 0 项待定")
         self.assertEqual(result.session_snapshot["messages"][-1]["content"], "已更新计划")
         self.assertTrue(all(message["role"] != "tool" for message in result.session_snapshot["messages"]))
 
@@ -1535,7 +1538,7 @@ class OrganizerSessionServiceTests(unittest.TestCase):
             "file_organizer.shared.logging_utils.is_debug_logging_enabled",
             return_value=True,
         ), mock.patch(
-            "file_organizer.app.session_service.logger.exception",
+            "file_organizer.app.session_orchestrator.logger.exception",
         ) as logger_exception:
             service.start_scan(session.session_id)
 
@@ -2158,7 +2161,7 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         self.assertEqual(result.session_snapshot["integrity_flags"]["is_stale"], False)
         self.assertEqual(
             [item["item_id"] for item in result.session_snapshot["plan_snapshot"]["invalidated_items"]],
-            ["b.txt"],
+            ["F002"],
         )
         self.assertEqual(
             result.session_snapshot["plan_snapshot"]["invalidated_items"][0]["mapping_status"],
@@ -2253,7 +2256,7 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         )
         self.assertEqual(
             [item["status"] for item in snapshot["plan_snapshot"]["items"]],
-            ["planned", "planned"],
+            ["planned", "planned", "planned", "planned"],
         )
         self.assertTrue(all("target_relpath" not in item for item in snapshot["plan_snapshot"]["items"]))
 

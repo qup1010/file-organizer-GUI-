@@ -74,6 +74,19 @@ class TargetResolverTests(unittest.TestCase):
                 target_dir="Review/NeedCheck",
             )
 
+    def test_incremental_target_validation_rejects_unknown_paths(self):
+        selection = {
+            "root_directory_options": ["Docs", "Archive"],
+            "target_directories": ["Docs"],
+        }
+
+        resolver = self.service.target_resolver
+
+        self.assertTrue(resolver.validate_incremental_target_dir("Review", selection))
+        self.assertTrue(resolver.validate_incremental_target_dir("Docs/Notes", selection))
+        self.assertFalse(resolver.validate_incremental_target_dir("Archive/Old", selection))
+        self.assertFalse(resolver.validate_incremental_target_dir("NewFolder", selection))
+
     def test_target_dir_from_slot_id_falls_back_to_absolute_real_path(self):
         docs_dir = (self.target_dir / "Docs").resolve()
         archive_dir = (self.root / "Archive").resolve()

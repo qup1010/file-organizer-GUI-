@@ -5,6 +5,7 @@ mod runtime;
 mod bg_removal;
 
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
@@ -53,6 +54,8 @@ struct InspectedPath {
     path: String,
     is_dir: bool,
     is_file: bool,
+    error_code: Option<String>,
+    message: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -62,48 +65,118 @@ struct DirectoryEntry {
     is_file: bool,
 }
 
-#[tauri::command]
-fn inspect_paths(paths: Vec<String>) -> Vec<InspectedPath> {
-    paths
-        .into_iter()
-        .map(|path| {
-            let metadata = fs::metadata(&path).ok();
-            let is_dir = metadata.as_ref().is_some_and(|item| item.is_dir());
-            let is_file = metadata.as_ref().is_some_and(|item| item.is_file());
+#[derive(Serialize)]
+struct InspectPathsResult {
+    ok: bool,
+    items: Vec<InspectedPath>,
+    ignored_count: usize,
+    error_code: Option<String>,
+    message: Option<String>,
+}
 
-            InspectedPath {
-                path,
-                is_dir,
-                is_file,
-            }
-        })
-        .collect()
+#[derive(Serialize)]
+struct DirectoryEntriesResult {
+    ok: bool,
+    items: Vec<DirectoryEntry>,
+    ignored_count: usize,
+    error_code: Option<String>,
+    message: Option<String>,
+}
+
+fn io_error_code(error: &io::Error) -> String {
+    match error.kind() {
+        io::ErrorKind::NotFound => "NOT_FOUND",
+        io::ErrorKind::PermissionDenied => "PERMISSION_DENIED",
+        io::ErrorKind::AlreadyExists => "ALREADY_EXISTS",
+        io::ErrorKind::InvalidInput => "INVALID_INPUT",
+        io::ErrorKind::TimedOut => "TIMED_OUT",
+        io::ErrorKind::Interrupted => "INTERRUPTED",
+        _ => "IO_ERROR",
+    }
+    .to_string()
 }
 
 #[tauri::command]
-fn list_directory_entries(path: String) -> Result<Vec<DirectoryEntry>, String> {
-    let directory = PathBuf::from(&path);
-    let entries = fs::read_dir(&directory)
-        .map_err(|error| format!("failed to read directory {}: {error}", directory.display()))?;
-
-    let mut result: Vec<DirectoryEntry> = entries
-        .filter_map(Result::ok)
-        .filter_map(|entry| {
-            let file_name = entry.file_name();
-            let name = file_name.to_string_lossy();
-            if name.starts_with('.') {
-                return None;
-            }
-
-            let path = entry.path();
-            let metadata = entry.metadata().ok()?;
-            Some(DirectoryEntry {
-                path: path.to_string_lossy().into_owned(),
+fn inspect_paths(paths: Vec<String>) -> InspectPathsResult {
+    let mut ignored_count = 0;
+    let mut items = Vec::new();
+    for path in paths {
+        match fs::metadata(&path) {
+            Ok(metadata) => items.push(InspectedPath {
+                path,
                 is_dir: metadata.is_dir(),
                 is_file: metadata.is_file(),
-            })
-        })
-        .collect();
+                error_code: None,
+                message: None,
+            }),
+            Err(error) => {
+                ignored_count += 1;
+                items.push(InspectedPath {
+                    path,
+                    is_dir: false,
+                    is_file: false,
+                    error_code: Some(io_error_code(&error)),
+                    message: Some(error.to_string()),
+                });
+            }
+        }
+    }
+
+    InspectPathsResult {
+        ok: true,
+        items,
+        ignored_count,
+        error_code: None,
+        message: None,
+    }
+}
+
+#[tauri::command]
+fn list_directory_entries(path: String) -> DirectoryEntriesResult {
+    let directory = PathBuf::from(&path);
+    let entries = match fs::read_dir(&directory) {
+        Ok(entries) => entries,
+        Err(error) => {
+            return DirectoryEntriesResult {
+                ok: false,
+                items: Vec::new(),
+                ignored_count: 0,
+                error_code: Some(io_error_code(&error)),
+                message: Some(format!("failed to read directory {}: {error}", directory.display())),
+            }
+        }
+    };
+
+    let mut ignored_count = 0;
+    let mut result: Vec<DirectoryEntry> = Vec::new();
+    for entry_result in entries {
+        let entry = match entry_result {
+            Ok(entry) => entry,
+            Err(_) => {
+                ignored_count += 1;
+                continue;
+            }
+        };
+        let file_name = entry.file_name();
+        let name = file_name.to_string_lossy();
+        if name.starts_with('.') {
+            continue;
+        }
+
+        let path = entry.path();
+        let metadata = match entry.metadata() {
+            Ok(metadata) => metadata,
+            Err(_) => {
+                ignored_count += 1;
+                continue;
+            }
+        };
+        result.push(DirectoryEntry {
+            path: path.to_string_lossy().into_owned(),
+            is_dir: metadata.is_dir(),
+            is_file: metadata.is_file(),
+        });
+    }
 
     result.sort_by(|left, right| {
         right
@@ -112,7 +185,13 @@ fn list_directory_entries(path: String) -> Result<Vec<DirectoryEntry>, String> {
             .then_with(|| left.path.to_lowercase().cmp(&right.path.to_lowercase()))
     });
 
-    Ok(result)
+    DirectoryEntriesResult {
+        ok: true,
+        items: result,
+        ignored_count,
+        error_code: None,
+        message: None,
+    }
 }
 
 #[tauri::command]

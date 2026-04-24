@@ -41,6 +41,10 @@ export function IconWorkbenchFooterBar({
   if (targetCount <= 0) return null;
 
   const isBusy = isGenerating || isApplying || isRemovingBgBatch;
+  const removingBgProgressLabel =
+    removeBgBatchProgress && removeBgBatchProgress.activeFolderNames.length > 0
+      ? `正在同时为 ${removeBgBatchProgress.activeFolderNames.map((name) => `「${name}」`).join("、")} 去除背景，已完成 ${removeBgBatchProgress.completed}/${removeBgBatchProgress.total}。`
+      : "正在批量去除背景...";
 
   return (
     <div className="border-t border-on-surface/8 bg-surface-container-lowest/80 backdrop-blur-md px-5 h-[52px] flex items-center shrink-0">
@@ -70,7 +74,7 @@ export function IconWorkbenchFooterBar({
               isBusy ? "text-primary/70 animate-pulse" : "text-ui-muted/30"
            )}>
              {isGenerating ? (generateProgressHint || "正在分析语义并生成图标方案...") :
-              isRemovingBgBatch ? "Batch removing backgrounds..." :
+              isRemovingBgBatch ? removingBgProgressLabel :
               isApplying ? "Applying icons to system..." :
               generateBlockedReason || "预览完成后点击应用。本地接口将修改 Windows 文件夹配置。"}
            </p>

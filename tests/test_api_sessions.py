@@ -583,9 +583,11 @@ class SessionApiTests(unittest.TestCase):
         assert session is not None
         session.stage = "scanning"
         session.last_error = None
+        session.updated_at = "2000-01-01T00:00:00+00:00"
         self.store.save(session)
 
-        response = self.client.get("/api/history")
+        with mock.patch.object(self.service.lifecycle, "_scanning_session_recently_active", return_value=False):
+            response = self.client.get("/api/history")
 
         self.assertEqual(response.status_code, 200)
         matched = next(item for item in response.json() if item["execution_id"] == created["session_id"])
@@ -702,6 +704,26 @@ class SessionApiTests(unittest.TestCase):
 
             response = self.client.post(
                 f"/api/sessions/{created['session_id']}/confirm-targets",
+                json={"selected_target_dirs": ["Docs"]},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["assistant_message"]["content"], "已生成方案")
+
+    def test_incremental_selection_endpoint_returns_updated_snapshot(self):
+        created = self.client.post(
+            "/api/sessions",
+            json={"target_dir": str(self.target_dir), "resume_if_exists": False},
+        ).json()
+
+        with mock.patch.object(self.service, "confirm_target_directories") as confirm_target_directories:
+            confirm_target_directories.return_value = mock.Mock(
+                assistant_message={"role": "assistant", "content": "已生成方案"},
+                session_snapshot={"stage": "planning"},
+            )
+
+            response = self.client.post(
+                f"/api/sessions/{created['session_id']}/incremental-selection",
                 json={"selected_target_dirs": ["Docs"]},
             )
 

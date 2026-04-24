@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SessionLauncher } from "./session-launcher";
 
 const pushMock = vi.fn();
-const createSessionAndStartScanMock = vi.fn();
+const createLaunchSessionMock = vi.fn();
 const startFreshSessionMock = vi.fn();
 const getSettingsMock = vi.fn();
 const getHistoryMock = vi.fn();
@@ -17,7 +17,7 @@ const inspectPathsWithTauriMock = vi.fn();
 const pickDirectoryWithTauriMock = vi.fn();
 const pickDirectoriesWithTauriMock = vi.fn();
 const pickFilesWithTauriMock = vi.fn();
-const listDirectoryEntriesWithTauriMock = vi.fn();
+const listDirectoryEntriesResultWithTauriMock = vi.fn();
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
@@ -53,7 +53,8 @@ vi.mock("@/lib/runtime", () => ({
   pickDirectoryWithTauri: (...args: unknown[]) => pickDirectoryWithTauriMock(...args),
   pickDirectoriesWithTauri: (...args: unknown[]) => pickDirectoriesWithTauriMock(...args),
   pickFilesWithTauri: (...args: unknown[]) => pickFilesWithTauriMock(...args),
-  listDirectoryEntriesWithTauri: (...args: unknown[]) => listDirectoryEntriesWithTauriMock(...args),
+  listDirectoryEntriesWithTauri: async (...args: unknown[]) => (await listDirectoryEntriesResultWithTauriMock(...args)).items,
+  listDirectoryEntriesResultWithTauri: (...args: unknown[]) => listDirectoryEntriesResultWithTauriMock(...args),
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -68,7 +69,7 @@ vi.mock("@/lib/api", () => ({
 }));
 
 vi.mock("@/lib/session-launcher-actions", () => ({
-  createSessionAndStartScan: (...args: unknown[]) => createSessionAndStartScanMock(...args),
+  createLaunchSession: (...args: unknown[]) => createLaunchSessionMock(...args),
   startFreshSession: (...args: unknown[]) => startFreshSessionMock(...args),
   firstSourcePath: (sources: Array<{ path: string }>) => sources[0]?.path || "",
 }));
@@ -99,7 +100,7 @@ function addSource(path: string, sourceType: "directory" | "file" = "directory")
 describe("SessionLauncher", () => {
   beforeEach(() => {
     pushMock.mockReset();
-    createSessionAndStartScanMock.mockReset();
+    createLaunchSessionMock.mockReset();
     startFreshSessionMock.mockReset();
     getSettingsMock.mockReset();
     getHistoryMock.mockReset();
@@ -112,7 +113,7 @@ describe("SessionLauncher", () => {
     pickDirectoryWithTauriMock.mockReset();
     pickDirectoriesWithTauriMock.mockReset();
     pickFilesWithTauriMock.mockReset();
-    listDirectoryEntriesWithTauriMock.mockReset();
+    listDirectoryEntriesResultWithTauriMock.mockReset();
     isTauriDesktopMock.mockReturnValue(false);
 
     getSettingsMock.mockResolvedValue({
@@ -144,7 +145,7 @@ describe("SessionLauncher", () => {
       created_at: "2026-04-20T10:00:00Z",
       updated_at: "2026-04-20T10:00:00Z",
     });
-    createSessionAndStartScanMock.mockResolvedValue({
+    createLaunchSessionMock.mockResolvedValue({
       mode: "created",
       session_id: "session-1",
       restorable_session: null,
@@ -174,7 +175,7 @@ describe("SessionLauncher", () => {
     fireEvent.click(screen.getByRole("button", { name: "读取目录并生成建议" }));
 
     await waitFor(() => {
-      expect(createSessionAndStartScanMock).toHaveBeenCalledWith(
+      expect(createLaunchSessionMock).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
           sources: [
@@ -204,10 +205,10 @@ describe("SessionLauncher", () => {
     fireEvent.click(screen.getByRole("button", { name: "读取目录并生成建议" }));
 
     await waitFor(() => {
-        expect(createSessionAndStartScanMock).toHaveBeenCalledWith(
+        expect(createLaunchSessionMock).toHaveBeenCalledWith(
           expect.anything(),
           expect.objectContaining({
-            output_dir: "D:",
+            output_dir: "D:/",
           }),
         );
       });
@@ -232,12 +233,12 @@ describe("SessionLauncher", () => {
     fireEvent.click(screen.getByRole("button", { name: "按默认配置开始整理" }));
 
     await waitFor(() => {
-      expect(createSessionAndStartScanMock).toHaveBeenCalledWith(
+      expect(createLaunchSessionMock).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
           sources: [{ source_type: "directory", path: "D:/incoming", directory_mode: "atomic" }],
           organize_method: "categorize_into_new_structure",
-          output_dir: "D:",
+          output_dir: "D:/",
         }),
       );
     });
@@ -266,7 +267,7 @@ describe("SessionLauncher", () => {
     fireEvent.click(screen.getByRole("button", { name: "读取目录并确认目标" }));
 
     await waitFor(() => {
-      expect(createSessionAndStartScanMock).toHaveBeenCalledWith(
+      expect(createLaunchSessionMock).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
           sources: [{ source_type: "directory", path: "D:/downloads", directory_mode: "atomic" }],
@@ -294,7 +295,7 @@ describe("SessionLauncher", () => {
     fireEvent.click(screen.getByRole("button", { name: "读取目录并生成建议" }));
 
     await waitFor(() => {
-      expect(createSessionAndStartScanMock).toHaveBeenCalledWith(
+      expect(createLaunchSessionMock).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
           sources: [{ source_type: "directory", path: "D:/incoming/project-bundle", directory_mode: "atomic" }],
@@ -316,7 +317,7 @@ describe("SessionLauncher", () => {
     fireEvent.click(screen.getByRole("button", { name: "读取目录并确认目标" }));
 
     expect(await screen.findByText("归入现有目录时，至少需要选择一个目录配置或手动添加目标目录。")).toBeInTheDocument();
-    expect(createSessionAndStartScanMock).not.toHaveBeenCalled();
+    expect(createLaunchSessionMock).not.toHaveBeenCalled();
   });
 
   it("shows the missing-target warning immediately after entering step three for assign-existing mode", async () => {
@@ -329,7 +330,7 @@ describe("SessionLauncher", () => {
     fireEvent.click(screen.getByRole("button", { name: "下一步：填写必要信息" }));
 
     expect(await screen.findByText("归入现有目录时，至少需要选择一个目录配置或手动添加目标目录。")).toBeInTheDocument();
-    expect(createSessionAndStartScanMock).not.toHaveBeenCalled();
+    expect(createLaunchSessionMock).not.toHaveBeenCalled();
   });
 
   it("can save the current target directory set as a reusable profile from the secondary section", async () => {
@@ -406,21 +407,21 @@ describe("SessionLauncher", () => {
   it("imports top-level items from a folder into a grouped preview and submits only real source items", async () => {
     isTauriDesktopMock.mockReturnValue(true);
     pickDirectoryWithTauriMock.mockResolvedValue("D:/Downloads");
-    listDirectoryEntriesWithTauriMock.mockResolvedValue([
+    listDirectoryEntriesResultWithTauriMock.mockResolvedValue({ ok: true, items: [
       { path: "D:/Downloads/ProjectA", is_dir: true, is_file: false },
       { path: "D:/Downloads/ProjectB", is_dir: true, is_file: false },
       { path: "D:/Downloads/notes.txt", is_dir: false, is_file: true },
       { path: "D:/Downloads/cover.png", is_dir: false, is_file: true },
       { path: "D:/Downloads/invoice.pdf", is_dir: false, is_file: true },
       { path: "D:/Downloads/archive.zip", is_dir: false, is_file: true },
-    ]);
+    ], ignored_count: 0, error_code: null, message: null });
 
     render(<SessionLauncher />);
 
     await screen.findByText("本次整理对象");
     fireEvent.click(screen.getByRole("button", { name: "导入文件夹下所有项" }));
 
-    expect(await screen.findByText("已从 D:/Downloads 导入 6 项")).toBeInTheDocument();
+    expect(await screen.findByText("已导入“D:/Downloads”下的 6 个顶层项目。")).toBeInTheDocument();
     expect(screen.queryByText("D:/Downloads/archive.zip")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "展开其余 1 项" }));
     expect(screen.getByText("D:/Downloads/archive.zip")).toBeInTheDocument();
@@ -430,7 +431,7 @@ describe("SessionLauncher", () => {
     fireEvent.click(screen.getByRole("button", { name: "读取目录并生成建议" }));
 
     await waitFor(() => {
-      expect(createSessionAndStartScanMock).toHaveBeenCalledWith(
+      expect(createLaunchSessionMock).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
           sources: [
@@ -446,12 +447,47 @@ describe("SessionLauncher", () => {
     });
   });
 
+  it("imports all top-level items when choosing a quick access directory", async () => {
+    isTauriDesktopMock.mockReturnValue(true);
+    getCommonDirsMock.mockResolvedValue([
+      { label: "下载", path: "D:/Downloads" },
+    ]);
+    listDirectoryEntriesResultWithTauriMock.mockResolvedValue({ ok: true, items: [
+      { path: "D:/Downloads/ProjectA", is_dir: true, is_file: false },
+      { path: "D:/Downloads/notes.txt", is_dir: false, is_file: true },
+    ], ignored_count: 0, error_code: null, message: null });
+
+    render(<SessionLauncher />);
+
+    await screen.findByText("本次整理对象");
+    fireEvent.click(await screen.findByRole("button", { name: /下载/ }));
+
+    expect(await screen.findByText("已导入“D:/Downloads”下的 2 个顶层项目。")).toBeInTheDocument();
+    expect(listDirectoryEntriesResultWithTauriMock).toHaveBeenCalledWith("D:/Downloads");
+
+    fireEvent.click(screen.getByRole("button", { name: "下一步：选择整理方式" }));
+    fireEvent.click(screen.getByRole("button", { name: "下一步：填写必要信息" }));
+    fireEvent.click(screen.getByRole("button", { name: "读取目录并生成建议" }));
+
+    await waitFor(() => {
+      expect(createLaunchSessionMock).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          sources: [
+            { source_type: "directory", path: "D:/Downloads/ProjectA", directory_mode: "atomic" },
+            { source_type: "file", path: "D:/Downloads/notes.txt" },
+          ],
+        }),
+      );
+    });
+  });
+
   it("replaces an atomic folder item with imported top-level items when switching modes", async () => {
     isTauriDesktopMock.mockReturnValue(true);
-    listDirectoryEntriesWithTauriMock.mockResolvedValue([
+    listDirectoryEntriesResultWithTauriMock.mockResolvedValue({ ok: true, items: [
       { path: "D:/incoming/project-bundle/README.md", is_dir: false, is_file: true },
       { path: "D:/incoming/project-bundle/src", is_dir: true, is_file: false },
-    ]);
+    ], ignored_count: 0, error_code: null, message: null });
 
     render(<SessionLauncher />);
 
@@ -459,7 +495,7 @@ describe("SessionLauncher", () => {
     addSource("D:/incoming/project-bundle");
     fireEvent.click(screen.getByRole("button", { name: "改为导入里面的项" }));
 
-    expect(await screen.findByText("已从 D:/incoming/project-bundle 导入 2 项")).toBeInTheDocument();
+    expect(await screen.findByText("已导入“D:/incoming/project-bundle”下的 2 个顶层项目。")).toBeInTheDocument();
     expect(screen.getByText("D:/incoming/project-bundle/README.md")).toBeInTheDocument();
     expect(screen.getByText("D:/incoming/project-bundle/src")).toBeInTheDocument();
 
@@ -468,7 +504,7 @@ describe("SessionLauncher", () => {
     fireEvent.click(screen.getByRole("button", { name: "读取目录并生成建议" }));
 
     await waitFor(() => {
-      expect(createSessionAndStartScanMock).toHaveBeenCalledWith(
+      expect(createLaunchSessionMock).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
           sources: [
@@ -480,3 +516,5 @@ describe("SessionLauncher", () => {
     });
   });
 });
+
+

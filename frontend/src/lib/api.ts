@@ -151,7 +151,7 @@ export function createApiClient(baseUrl: string, apiToken?: string): ApiClient {
     async confirmTargetDirectories(session_id, payload) {
       return requestJson<ConfirmTargetsResponse>(
         baseUrl,
-        `/api/sessions/${session_id}/confirm-targets`,
+        `/api/sessions/${session_id}/incremental-selection`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

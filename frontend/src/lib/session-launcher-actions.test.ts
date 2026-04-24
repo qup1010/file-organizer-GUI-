@@ -1,6 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+﻿import { describe, expect, it, vi } from "vitest";
 
-import { createSessionAndStartScan, firstSourcePath, startFreshSession } from "./session-launcher-actions";
+import { createLaunchSession, firstSourcePath, startFreshSession } from "./session-launcher-actions";
 
 const fullLaunchPayload = {
   sources: [
@@ -46,7 +46,7 @@ describe("session-launcher-actions", () => {
       }),
     };
 
-    await createSessionAndStartScan(api, fullLaunchPayload);
+    await createLaunchSession(api, fullLaunchPayload);
 
     expect(api.createSession).toHaveBeenCalledWith(fullLaunchPayload);
   });
@@ -102,7 +102,7 @@ describe("session-launcher-actions", () => {
       },
     };
 
-    await createSessionAndStartScan(api, payload);
+    await createLaunchSession(api, payload);
 
     expect(api.createSession).toHaveBeenCalledWith(payload);
   });
@@ -127,8 +127,9 @@ describe("session-launcher-actions", () => {
       },
     };
 
-    await createSessionAndStartScan(api, payload);
+    await createLaunchSession(api, payload);
 
     expect(api.createSession).toHaveBeenCalledWith(payload);
   });
 });
+

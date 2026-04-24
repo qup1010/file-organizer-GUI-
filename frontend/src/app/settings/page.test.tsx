@@ -300,7 +300,7 @@ describe("SettingsPage preset flow", () => {
     const visionTab = visionLabel?.closest("button") ?? null;
     expect(visionTab).not.toBeNull();
     await user.click(visionTab!);
-    await user.click(screen.getAllByRole("button", { name: /测试连接/i })[1]);
+    await user.click(screen.getAllByRole("button", { name: /测试连接/i })[0]);
 
     expect(await screen.findByText("图片能力已验证")).toBeInTheDocument();
     expect(screen.getByText('期望结果：VISION TEST 42')).toBeInTheDocument();
@@ -323,7 +323,7 @@ describe("SettingsPage preset flow", () => {
     const visionTab = visionLabel?.closest("button") ?? null;
     expect(visionTab).not.toBeNull();
     await user.click(visionTab!);
-    await user.click(screen.getAllByRole("button", { name: /测试连接/i })[1]);
+    await user.click(screen.getAllByRole("button", { name: /测试连接/i })[0]);
 
     expect(await screen.findByText("正在验证图片理解能力...")).toBeInTheDocument();
     expect(screen.getByText("图片能力验证")).toBeInTheDocument();

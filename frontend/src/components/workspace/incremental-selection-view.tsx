@@ -10,6 +10,10 @@ function normalizePath(value: string): string {
   return value.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "").trim();
 }
 
+function includesPath(candidate: string, root: string): boolean {
+  return candidate === root || candidate.startsWith(`${root}/`);
+}
+
 export function IncrementalSelectionView({
   rootDirectoryOptions,
   sourceTreeEntries,
@@ -22,10 +26,14 @@ export function IncrementalSelectionView({
   onConfirm: (selectedTargetDirs: string[]) => void;
 }) {
   const [selected, setSelected] = useState<string[]>([]);
+  const normalizedRootDirectoryOptions = useMemo(
+    () => Array.from(new Set(rootDirectoryOptions.map(normalizePath).filter(Boolean))),
+    [rootDirectoryOptions],
+  );
 
   useEffect(() => {
     setSelected([]);
-  }, [rootDirectoryOptions]);
+  }, [normalizedRootDirectoryOptions]);
 
   const selectedSet = useMemo(() => new Set(selected), [selected]);
   const rootEntries = useMemo(
@@ -72,12 +80,12 @@ export function IncrementalSelectionView({
             <div className="flex items-center gap-2">
                 <span className="text-[11px] font-black uppercase tracking-widest text-on-surface/40">可选目录</span>
                 <span className="h-1 w-1 rounded-full bg-on-surface/10" />
-                <span className="text-[11px] font-bold text-ui-muted/50">{rootDirectoryOptions.length} 个候选</span>
+                <span className="text-[11px] font-bold text-ui-muted/50">{normalizedRootDirectoryOptions.length} 个候选</span>
             </div>
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
-                onClick={() => setSelected(rootDirectoryOptions)}
+                onClick={() => setSelected(normalizedRootDirectoryOptions)}
                 className="rounded-md border border-on-surface/10 bg-surface px-3 py-1.5 text-[11px] font-black text-on-surface hover:bg-on-surface/5 transition-all active:scale-95"
               >
                 全选
@@ -93,9 +101,9 @@ export function IncrementalSelectionView({
           </div>
 
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
-            {rootDirectoryOptions.length > 0 ? rootDirectoryOptions.map((path) => {
+            {normalizedRootDirectoryOptions.length > 0 ? normalizedRootDirectoryOptions.map((path) => {
               const checked = selectedSet.has(path);
-              const itemCount = rootEntries.filter((entry) => normalizePath(entry.source_relpath).startsWith(path)).length;
+              const itemCount = rootEntries.filter((entry) => includesPath(normalizePath(entry.source_relpath), path)).length;
               return (
                 <label
                   key={path}

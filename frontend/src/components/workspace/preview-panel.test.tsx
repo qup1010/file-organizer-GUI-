@@ -607,4 +607,61 @@ describe("PreviewPanel", () => {
     expect(screen.getByText("合同")).toBeInTheDocument();
     expect(screen.getAllByText("contract.pdf").length).toBeGreaterThan(0);
   });
+
+  it("blocks Windows drive-relative manual target paths", () => {
+    const onUpdateItem = vi.fn();
+
+    render(
+      <PreviewPanel
+        plan={{
+          ...createPlan(),
+          items: [
+            {
+              item_id: "F001",
+              display_name: "contract.pdf",
+              source_relpath: "contract.pdf",
+              target_slot_id: "D001",
+              status: "planned",
+              mapping_status: "assigned",
+              suggested_purpose: "财务合同",
+              content_summary: "付款协议",
+              reason: "归入合同目录",
+              confidence: 0.9,
+            },
+          ],
+          target_slots: [
+            {
+              slot_id: "D001",
+              display_name: "合同",
+              relpath: "Finance/合同",
+              depth: 1,
+              is_new: false,
+            },
+          ],
+          stats: {
+            directory_count: 1,
+            move_count: 1,
+            unresolved_count: 0,
+          },
+          readiness: {
+            can_precheck: true,
+          },
+        }}
+        stage="ready_for_precheck"
+        organizeMode="incremental"
+        isBusy={false}
+        onRunPrecheck={() => {}}
+        onUpdateItem={onUpdateItem}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /contract\.pdf.*Finance\/合同/ }));
+    fireEvent.click(screen.getByRole("button", { name: "+ 手动指定其他路径" }));
+    fireEvent.change(screen.getByPlaceholderText("如: 新专题/归档"), {
+      target: { value: "D:" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "应用此路径" }));
+
+    expect(onUpdateItem).not.toHaveBeenCalled();
+  });
 });
