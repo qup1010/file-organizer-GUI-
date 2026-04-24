@@ -24,78 +24,73 @@ export function IconWorkbenchToolbar({
   onOpenTemplateDrawer,
   selectedTemplateName = "请先选择风格模板",
 }: IconWorkbenchToolbarProps) {
-  const targetSummary = targetCount > 0 ? `已选择 ${targetCount} 个目标文件夹` : "请先选择目标文件夹";
+  const targetSummary = targetCount > 0 ? `${targetCount} 个选定目标` : "未选择目标";
   const targetDetail = targetCount > 0
-    ? latestTargetPath || "你可以继续添加新的目标文件夹。"
-    : "支持一次选择多个目标文件夹，并在工作区里继续添加。";
+    ? latestTargetPath || "继续添加文件夹..."
+    : "支持一次性选择并分类多个目标。";
 
   return (
-    <div className="glass-surface flex min-h-[64px] shrink-0 items-center justify-between border-b border-on-surface/6 px-6 py-2.5">
+    <div className="flex min-h-[44px] shrink-0 items-center justify-between border-b border-on-surface/[0.06] bg-surface px-4 transition-all">
       <div className="flex items-center gap-3 overflow-hidden">
-        {targetCount > 0 && (
-          <Button
-            variant="secondary"
-            size="sm"
+        <div className="flex items-center gap-1.5">
+          <button
             onClick={onAddTargets}
-            className="shrink-0 bg-primary/8 text-primary hover:bg-primary/12"
+            className="flex h-7.5 items-center gap-2 rounded-lg border border-primary/10 bg-primary/8 px-3.5 text-[11px] font-black text-primary transition-all hover:bg-primary/15 active:scale-95"
           >
-            <FolderPlus className="h-4 w-4" />
-            添加目标文件夹
-          </Button>
-        )}
+            <FolderPlus className="h-3.5 w-3.5" />
+            <span>载入文件夹</span>
+          </button>
 
-        {targetCount > 0 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onClearTargets}
-            className="shrink-0 px-3 text-error hover:bg-error/8 hover:text-error"
-            title="清空所有目标"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        )}
+          {targetCount > 0 && (
+            <button
+              onClick={onClearTargets}
+              className="flex h-7.5 w-7.5 items-center justify-center rounded-lg border border-on-surface/8 bg-on-surface/[0.03] text-ui-muted/40 transition-all hover:bg-error/10 hover:text-error active:scale-90"
+              title="清空所有目标"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
 
-        <div className="flex min-w-0 items-center gap-2 overflow-hidden text-[13px] font-medium text-ui-muted">
-          {targetCount > 0 && <ChevronRight className="h-3 w-3 shrink-0 opacity-40" />}
+        <div className="flex items-center gap-3 overflow-hidden">
+          <div className="h-3 w-px bg-on-surface/10" />
           <div className="min-w-0">
-            <p className="truncate text-[14px] font-bold tracking-tight text-on-surface" title={targetSummary}>
-              {targetSummary}
-            </p>
-            <p className="truncate text-[11px] opacity-70" title={targetDetail}>
-              {targetDetail}
-            </p>
+             <div className="flex items-center gap-2.5">
+                <span className="text-[10px] font-black uppercase tracking-[0.25em] text-ui-muted/30">ICON WORKBENCH</span>
+                <span className="h-1 w-1 rounded-full bg-on-surface/10" />
+                <p className="truncate text-[12px] font-bold text-on-surface/60 leading-none" title={targetSummary}>
+                  {targetSummary}
+                </p>
+             </div>
           </div>
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2.5">
         <button
           onClick={onOpenStylePanel}
-          className="group flex items-center gap-2 rounded-[8px] border border-on-surface/7 bg-surface-container-lowest px-3.5 py-2 transition-all hover:border-primary/18 hover:bg-surface-container-lowest hover:shadow-[0_8px_18px_rgba(0,0,0,0.05)] active:scale-95"
+          className="group flex items-center gap-3 rounded-lg border border-on-surface/5 bg-on-surface/[0.03] px-2.5 py-1 transition-all hover:border-primary/20 hover:bg-on-surface/[0.05] active:scale-[0.98]"
         >
-          <div className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-white">
-            <Sparkles className="h-3.5 w-3.5" />
+          <div className="flex h-6.5 w-6.5 items-center justify-center rounded-md bg-primary/10 text-primary border border-primary/20 ring-1 ring-primary/20">
+            <Sparkles className="h-3 w-3" />
           </div>
-          <div className="flex flex-col items-start pr-1 text-left">
-            <span className="text-[10px] font-bold text-ui-muted opacity-80">当前模板</span>
-            <span className="max-w-[140px] truncate text-[13px] font-bold tracking-tight text-on-surface">
+          <div className="flex flex-col items-start text-left">
+            <span className="text-[8px] font-black uppercase tracking-[0.2em] text-ui-muted/40 leading-tight">Template</span>
+            <span className="max-w-[120px] truncate text-[11.5px] font-black tracking-tight text-on-surface/80 leading-none">
               {selectedTemplateName}
             </span>
           </div>
         </button>
 
-        <div className="mx-1 h-7 w-px bg-on-surface/6" />
+        <div className="h-4 w-px bg-on-surface/8" />
 
-        <Button
-          variant="ghost"
-          size="icon"
+        <button
           onClick={onOpenTemplateDrawer}
-          className="h-10 w-10 hover:bg-on-surface/4"
+          className="flex h-7.5 w-7.5 items-center justify-center rounded-lg border border-on-surface/8 bg-on-surface/[0.02] text-ui-muted/30 transition-all hover:bg-on-surface/5 hover:text-ui-muted active:scale-90"
           title="管理风格模板"
         >
-          <Settings2 className="h-5 w-5 text-ui-muted" />
-        </Button>
+          <Settings2 className="h-4 w-4" />
+        </button>
       </div>
     </div>
   );

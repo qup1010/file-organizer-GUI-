@@ -1,23 +1,9 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { History } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { getFriendlyStage } from "@/lib/utils";
 import { StrategySummaryChips } from "./strategy-summary-chips";
 import { SessionSnapshot, SessionStrategySummary } from "@/types/session";
-
-const STAGE_LABELS: Record<string, string> = {
-  idle: "准备中",
-  draft: "正在准备方案",
-  scanning: "正在扫描",
-  planning: "正在整理方案",
-  ready_for_precheck: "可开始预检",
-  ready_to_execute: "等待执行",
-  executing: "正在执行整理",
-  completed: "整理已完成",
-  rolling_back: "正在回退",
-  abandoned: "已放弃",
-  stale: "方案已过期",
-  interrupted: "已中断",
-};
 
 export function ResumePromptDialog({
   open,
@@ -58,20 +44,20 @@ export function ResumePromptDialog({
               </div>
               <div className="space-y-1">
                 <h2 className="text-xl font-black font-headline text-on-surface tracking-tight">
-                  {isCompletedResume ? "发现之前的整理记录" : "发现上一次还没整理完"}
+                  {isCompletedResume ? "发现之前的整理记录" : "发现可继续的整理任务"}
                 </h2>
                 <p className="text-ui-body font-medium text-ui-muted">
                   {isCompletedResume
-                    ? "你可以先查看之前的结果，也可以按这次的预设重新开始"
-                    : "你可以继续上一次任务，或者按这次的预设重新开始"}
+                    ? "你可以先查看之前的结果，也可以按这次的设置重新开始"
+                    : "你可以接着处理，也可以按当前设置重新开始"}
                 </p>
               </div>
             </div>
 
             <p className="mb-5 text-sm leading-relaxed text-on-surface-variant">
-              检测到这个目录（<strong>{targetDir.split(/[\\/]/).pop()}</strong>）
-              {isCompletedResume ? "之前已经整理过一次" : "之前还有一条未完成的记录"}（当前状态：
-              <em>{STAGE_LABELS[resumePrompt.snapshot.stage] || resumePrompt.snapshot.stage}</em>）。
+              检测到这次来源和设置（<strong>{targetDir.split(/[\\/]/).pop()}</strong>）
+              {isCompletedResume ? "之前已经整理过一次" : "还有一条未完成的任务"}（当前状态：
+              <em>{getFriendlyStage(resumePrompt.snapshot.stage)}</em>）。
             </p>
 
             <div className="mb-6 rounded-[10px] border border-on-surface/8 bg-surface px-5 py-5">
@@ -85,14 +71,14 @@ export function ResumePromptDialog({
                 onClick={onConfirmResume}
                 className="w-full py-4 text-sm"
               >
-                {isCompletedResume ? "查看之前的结果" : "继续上一次整理"}
+                {isCompletedResume ? "查看整理结果" : "继续整理"}
               </Button>
               <div className="rounded-[10px] border border-on-surface/8 bg-surface px-5 py-4 text-ui-section font-medium leading-relaxed text-ui-muted">
                 {isCompletedResume
-                  ? "重新开始会按当前选择的预设重新扫描这个目录。"
-                  : "重新开始会结束上一次未完成的状态，并按当前选择的预设重新扫描。"}
+                  ? "重新开始会按当前来源和设置重新读取目录。"
+                  : "重新开始会结束上一次未完成的状态，并按当前来源和设置重新读取目录。"}
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className={isCompletedResume ? "grid grid-cols-2 gap-3" : "grid grid-cols-3 gap-3"}>
                 <Button
                   variant="secondary"
                   onClick={onStartFresh}
@@ -100,13 +86,15 @@ export function ResumePromptDialog({
                 >
                   重新开始
                 </Button>
-                <Button
-                  variant="secondary"
-                  onClick={onReadOnlyView}
-                  className="py-3.5"
-                >
-                  只读打开
-                </Button>
+                {!isCompletedResume ? (
+                  <Button
+                    variant="secondary"
+                    onClick={onReadOnlyView}
+                    className="py-3.5"
+                  >
+                    只读打开
+                  </Button>
+                ) : null}
                 <Button
                   variant="ghost"
                   onClick={onCancel}

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   FolderOpen,
   ArrowRight,
@@ -14,20 +14,28 @@ import {
   ShieldCheck,
   PanelLeft,
   FileClock,
+  CheckCircle2,
+  AlertCircle,
+  XCircle,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn, formatDisplayDate, getFriendlyStage } from "@/lib/utils";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import type { JournalSummary, HistoryItem, SessionSnapshot } from "@/types/session";
 import { Button } from "@/components/ui/button";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { getHistoryEntryName, isHistorySessionEntry, useHistoryList } from "@/lib/use-history-list";
-
-function getEntrySummary(entry: HistoryItem): string {
-  return isHistorySessionEntry(entry) ? getFriendlyStage(entry.status) : entry.status === "rolled_back" ? "回退已完成" : "执行结果";
-}
+import {
+  getHistoryEntryName,
+  getHistoryEntrySummary,
+  isHistoryCompletedEntry,
+  isHistoryPartialFailureEntry,
+  isHistoryRollbackPartialFailureEntry,
+  isHistoryRolledBackEntry,
+  isHistorySessionEntry,
+  useHistoryList,
+} from "@/lib/use-history-list";
 
 function formatPath(path: string) {
   const segments = path.split(/[\\/]/);
@@ -51,9 +59,27 @@ function formatMovePath(path: string | null, baseDir: string) {
   return formatPath(normalizedPath);
 }
 
+function formatMoveBadge(item: {
+  item_id?: string | null;
+  target_slot_id?: string | null;
+}) {
+  const parts = [item.item_id, item.target_slot_id].filter(Boolean);
+  return parts.join(" · ");
+}
+
+function summarizeMoveNames(items: { display_name: string }[], limit = 3) {
+  const names = items.map((item) => item.display_name).filter(Boolean).slice(0, limit);
+  if (!names.length) {
+    return "";
+  }
+  return names.join("、") + (items.length > limit ? ` 等 ${items.length} 项` : "");
+}
+
 export default function HistoryPage() {
   const APP_CONTEXT_EVENT = "file-organizer-context-change";
   const HISTORY_CONTEXT_KEY = "history_header_context";
+  const searchParams = useSearchParams();
+  const requestedEntryId = searchParams.get("entry_id");
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [journal, setJournal] = useState<JournalSummary | null>(null);
   const [sessionDetail, setSessionDetail] = useState<SessionSnapshot | null>(null);
@@ -61,6 +87,7 @@ export default function HistoryPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [rollbackSuccess, setRollbackSuccess] = useState(false);
   const [rollbackConfirmOpen, setRollbackConfirmOpen] = useState(false);
+  const requestedEntryHandledRef = useRef<string | null>(null);
   const router = useRouter();
   const {
     api,
@@ -115,6 +142,12 @@ export default function HistoryPage() {
   const isSelectedSession = Boolean(selectedEntry && isHistorySessionEntry(selectedEntry));
 
   useEffect(() => {
+    if (requestedEntryHandledRef.current !== requestedEntryId) {
+      requestedEntryHandledRef.current = null;
+    }
+  }, [requestedEntryId]);
+
+  useEffect(() => {
     if (!selectedEntry || !selectedSessionId) {
       return;
     }
@@ -128,8 +161,25 @@ export default function HistoryPage() {
   }, [isSelectedSession, selectedEntry, selectedSessionId]);
 
   useEffect(() => {
+    if (!requestedEntryId || requestedEntryHandledRef.current === requestedEntryId || history.length === 0) {
+      return;
+    }
+    const requestedEntry = history.find((entry) => entry.execution_id === requestedEntryId);
+    if (!requestedEntry) {
+      requestedEntryHandledRef.current = requestedEntryId;
+      return;
+    }
+    setSelectedSessionId(requestedEntry.execution_id);
+    requestedEntryHandledRef.current = requestedEntryId;
+  }, [history, requestedEntryId]);
+
+  useEffect(() => {
     if (!filteredHistory.length) {
       setSelectedSessionId(null);
+      return;
+    }
+
+    if (requestedEntryId && requestedEntryHandledRef.current === requestedEntryId && selectedSessionId !== requestedEntryId) {
       return;
     }
 
@@ -137,7 +187,7 @@ export default function HistoryPage() {
     if (!exists) {
       setSelectedSessionId(filteredHistory[0].execution_id);
     }
-  }, [filteredHistory, selectedSessionId]);
+  }, [filteredHistory, requestedEntryId, selectedSessionId]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -154,7 +204,7 @@ export default function HistoryPage() {
     window.localStorage.setItem(
         HISTORY_CONTEXT_KEY,
         JSON.stringify({
-          detail: `${getHistoryEntryName(selectedEntry)} · ${getEntrySummary(selectedEntry)}`,
+          detail: `${getHistoryEntryName(selectedEntry)} · ${getHistoryEntrySummary(selectedEntry)}`,
         }),
       );
     window.dispatchEvent(new Event(APP_CONTEXT_EVENT));
@@ -195,111 +245,251 @@ export default function HistoryPage() {
   const moveRows = journal?.restore_items?.length
     ? journal.restore_items
     : journal?.items?.filter((it) => it.action_type === "MOVE") ?? [];
+  const moveRowsSummary = summarizeMoveNames(moveRows);
 
   const activeCount = history.filter((item) => isHistorySessionEntry(item)).length;
-  const completedCount = history.filter((item) => !isHistorySessionEntry(item) && item.status !== "rolled_back").length;
-  const rollbackCount = history.filter((item) => item.status === "rolled_back").length;
+  const completedCount = history.filter((item) => isHistoryCompletedEntry(item)).length;
+  const partialFailureCount = history.filter((item) => isHistoryPartialFailureEntry(item)).length;
+  const rollbackCount = history.filter((item) => isHistoryRolledBackEntry(item)).length;
   const historyStats = [
-    { label: "进行中", value: activeCount },
-    { label: "完成", value: completedCount },
-    { label: "回退", value: rollbackCount },
-  ];
+    { id: "all", label: "全部", value: history.length, icon: HistoryIcon, color: "text-on-surface" },
+    { id: "active", label: "进行中", value: activeCount, icon: Activity, color: "text-primary" },
+    { id: "completed", label: "已完成", value: completedCount, icon: CheckCircle2, color: "text-success" },
+    { id: "partial_failure", label: "部分失败", value: partialFailureCount, icon: AlertCircle, color: "text-warning" },
+    { id: "rolled_back", label: "已回退", value: rollbackCount, icon: Undo2, color: "text-ui-muted" },
+  ] as const;
+
+  const sessionDetailInterior = (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-4 rounded-xl border border-primary/20 bg-primary/5 p-4">
+        <div className="flex items-center gap-4">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-white border border-primary/25">
+            <PlayCircle className="h-6 w-6" />
+          </div>
+          <div className="min-w-0">
+            <h3 className="text-[14px] font-black tracking-tight text-on-surface">任务进行中</h3>
+            <div className="mt-0.5 flex items-center gap-2">
+              <p className="text-[11px] font-bold text-ui-muted opacity-60">已扫描得到 {sessionDetail?.plan_snapshot?.stats?.move_count || 0} 个整理项</p>
+              <div className="h-1 w-1 rounded-full bg-ui-muted/30" />
+              <p className="text-[11px] font-bold text-ui-muted opacity-60">
+                最后更新: {formatDisplayDate(sessionDetail?.updated_at || "")}
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={() => handleOpenSession(true)} className="h-8.5 rounded-lg px-4 text-[11px] font-black">
+            查看详情
+          </Button>
+          <Button variant="primary" onClick={() => handleOpenSession(false)} className="h-8.5 rounded-lg px-5 text-[11px] font-black">
+            继续处理任务
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-1">
+        <div className="rounded-xl border border-on-surface/8 bg-on-surface/[0.02] p-5">
+           <div className="mb-2 flex items-center gap-2">
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-ui-muted opacity-40">会话摘要</span>
+              <div className="h-px flex-1 bg-on-surface/5" />
+           </div>
+           <p className="text-[13.5px] font-medium leading-relaxed text-on-surface/80">
+             {sessionDetail?.summary || "这是一条未完成的整理记录，你可以继续之前的操作。"}
+           </p>
+        </div>
+      </div>
+
+      {sessionDetail?.last_error && (
+        <ErrorAlert 
+          title="上次任务错误" 
+          message={sessionDetail.last_error} 
+        />
+      )}
+    </div>
+  );
+
+  const journalInterior = (
+    <div className="space-y-6">
+      {rollbackSuccess && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-center gap-3 rounded-lg bg-success/5 border border-success/10 p-3.5"
+        >
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-success/10 text-success-dim">
+            <Undo2 className="h-3.5 w-3.5" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-[13px] font-black text-on-surface">回退完成</h3>
+            <p className="text-[11.5px] font-medium text-ui-muted opacity-70">
+              受影响的 {journal?.item_count || 0} 项内容已完成路径恢复。
+            </p>
+          </div>
+        </motion.div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2.5 rounded-md border border-on-surface/5 bg-on-surface/[0.03] px-3 py-1.5 transition-colors hover:bg-on-surface/5">
+          <span className="text-[9px] font-black uppercase tracking-widest text-ui-muted/40">已处理分析</span>
+          <span className="text-[13px] font-black tabular-nums text-on-surface/80">{journal?.item_count || 0}</span>
+        </div>
+        <div className="flex items-center gap-2.5 rounded-md border border-success/15 bg-success/[0.04] px-3 py-1.5 transition-colors hover:bg-success/[0.08]">
+          <span className="text-[9px] font-black uppercase tracking-widest text-success-dim/40">任务成功</span>
+          <span className="text-[13px] font-black tabular-nums text-success-dim">{journal?.success_count || 0}</span>
+        </div>
+        <div className="flex items-center gap-2.5 rounded-md border border-error/15 bg-error/[0.04] px-3 py-1.5 transition-colors hover:bg-error/[0.08]">
+          <span className="text-[9px] font-black uppercase tracking-widest text-error/40">失败项</span>
+          <span className="text-[13px] font-black tabular-nums text-error">{journal?.failure_count || 0}</span>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between border-b border-on-surface/8 pb-3 px-1">
+          <div className="flex items-center gap-2">
+            <FileClock className="h-4 w-4 text-primary/60" />
+            <h3 className="text-[13px] font-black uppercase tracking-[0.1em] text-on-surface/80">变更执行明细</h3>
+          </div>
+
+          {!rollbackSuccess && (journal?.status === "completed" || journal?.status === "partial_failure") && (
+            <Button
+              variant="danger"
+              onClick={() => setRollbackConfirmOpen(true)}
+              disabled={actionLoading}
+              loading={actionLoading}
+              className="h-7.5 rounded-md px-4 text-[10.5px] font-black"
+            >
+              <Undo2 className="h-3 w-3" />
+              回退执行
+            </Button>
+          )}
+        </div>
+
+        <div className="rounded-lg border border-on-surface/8 bg-on-surface/[0.01] overflow-hidden">
+          <div className="flex flex-col divide-y divide-on-surface/6">
+            {moveRows.length ? (
+              moveRows.map((item, index) => (
+                <div key={index} className="group flex flex-col gap-2 p-4 transition-colors hover:bg-primary/[0.02]">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <div className="h-1.5 w-1.5 rounded-full bg-primary/40 shrink-0" />
+                        <p className="truncate text-[13px] font-black text-on-surface/90" title={item.display_name}>
+                          {item.display_name}
+                        </p>
+                      </div>
+                      {formatMoveBadge(item) && (
+                        <p className="pl-3.5 font-mono text-[10px] font-medium text-ui-muted/50 tracking-tight">
+                          ID: {formatMoveBadge(item)}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="ml-3.5 flex items-center gap-3 rounded-md bg-on-surface/5 p-2 px-3">
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="flex items-center gap-2 opacity-50">
+                        <span className="text-[9px] font-black uppercase text-ui-muted">原位置</span>
+                        <p className="truncate font-mono text-[11px] text-ui-muted" title={item.source || ""}>
+                          {formatMovePath(item.source, journal?.target_dir || "")}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] font-black uppercase text-primary/60">目标</span>
+                        <p className="truncate font-mono text-[11px] font-bold text-primary/80" title={item.target || ""}>
+                          {formatMovePath(item.target, journal?.target_dir || "")}
+                        </p>
+                      </div>
+                    </div>
+                    <ArrowRight className="h-3.5 w-3.5 shrink-0 text-on-surface/10 transition-transform group-hover:translate-x-0.5 group-hover:text-primary/30" />
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="flex flex-col items-center justify-center py-16 text-center opacity-30">
+                <HistoryIcon className="h-8 w-8 mb-4" />
+                <p className="text-[12px] font-bold">没有可显示的变更明细</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="flex-1 min-h-0 overflow-hidden bg-surface">
-      <div className="ui-page flex h-full min-h-0 flex-col gap-4 lg:flex-row">
-        <section className="flex min-h-0 w-full flex-col overflow-hidden rounded-[8px] border border-on-surface/8 bg-surface-container-lowest shadow-[0_18px_44px_rgba(0,0,0,0.04)] lg:w-[400px] lg:min-w-[400px]">
-          <div className="border-b border-on-surface/6 bg-surface px-4 py-4">
-            <div className="space-y-3">
-              <div className="space-y-1.5">
-                <div className="inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-primary/55">
-                  <PanelLeft className="h-3.5 w-3.5" />
-                  记录列表
+      <div className="flex h-full min-h-0 flex-row overflow-hidden">
+        <section className="flex min-h-0 w-[300px] shrink-0 flex-col border-r border-on-surface/8 bg-surface-container-lowest 2xl:w-[340px]">
+          <div className="px-5 py-5">
+            <div className="space-y-4">
+              <div className="space-y-1.5 px-1">
+                <div className="text-ui-label">
+                  工作区
                 </div>
-                <h1 className="text-[1.2rem] font-black font-headline tracking-tight text-on-surface">
-                  整理记录
+                <h1 className="text-ui-h2 tracking-tight text-on-surface">
+                  整理历史记录
                 </h1>
-                <p className="max-w-[18rem] text-[12px] leading-5 text-ui-muted">
-                  搜索、筛选并继续处理之前的会话与执行结果。
-                </p>
               </div>
-
-              <div className="grid gap-2 sm:grid-cols-3">
+              
+              <div className="flex flex-wrap gap-2 px-1">
                 {historyStats.map((item) => (
-                  <div key={item.label} className="rounded-[4px] border border-on-surface/8 bg-surface-container-lowest px-3 py-2.5">
-                    <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-ui-muted">{item.label}</div>
-                    <div className="mt-1 text-[1.1rem] font-black tabular-nums text-on-surface">{item.value}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="border-b border-on-surface/6 bg-surface-container-low px-4 py-3">
-            <div className="space-y-2.5 rounded-[6px] border border-on-surface/8 bg-surface px-3 py-3">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ui-muted" />
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="搜索目录、状态或记录 ID"
-                  className="w-full rounded-[4px] border border-on-surface/8 bg-surface-container-lowest py-2.5 pl-[2.625rem] pr-4 text-[14px] text-on-surface outline-none transition-all placeholder:text-ui-muted focus:border-primary/40 focus:ring-4 focus:ring-primary/[0.02]"
-                />
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { id: "all", label: "全部" },
-                  { id: "active", label: "进行中" },
-                  { id: "completed", label: "已完成" },
-                  { id: "rolled_back", label: "已回退" },
-                ].map((item) => (
                   <button
                     key={item.id}
-                    type="button"
-                    onClick={() => setFilter(item.id as typeof filter)}
+                    onClick={() => setFilter(item.id)}
                     className={cn(
-                      "rounded-[4px] border px-3 py-1.5 text-[12px] font-black uppercase tracking-tight transition-all",
+                      "flex items-center gap-2 rounded-md border px-2.5 py-1.5 transition-all",
                       filter === item.id
-                        ? "border-primary bg-primary text-white"
-                        : "border-on-surface/8 bg-surface-container-lowest text-ui-muted hover:border-primary/15 hover:text-on-surface",
+                        ? "border-primary/30 bg-primary/10"
+                        : "border-on-surface/5 bg-on-surface/[0.02] hover:bg-on-surface/[0.05] hover:border-on-surface/10"
                     )}
                   >
-                    {item.label}
+                    <div className={cn("text-[12px] font-black tabular-nums leading-none", item.color)}>
+                      {item.value}
+                    </div>
+                    <div className="text-[9px] font-black uppercase tracking-widest text-ui-muted/40">
+                      {item.label}
+                    </div>
                   </button>
                 ))}
               </div>
             </div>
           </div>
 
-          {error ? (
-            <div className="px-4 py-3">
-              <ErrorAlert title="历史操作失败" message={error} />
+          <div className="px-5 py-2">
+            <div className="space-y-3">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ui-muted opacity-50" />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="搜索记录 ID 或路径..."
+                  className="w-full rounded-[6px] border border-on-surface/10 bg-on-surface/[0.02] py-2 pl-[2.25rem] pr-4 text-[12.5px] font-medium text-on-surface outline-none transition-all placeholder:text-ui-muted/50 focus:bg-surface focus:ring-2 focus:ring-primary/5"
+                />
+              </div>
             </div>
-          ) : null}
+          </div>
 
-          <div className="relative flex-1 overflow-y-auto bg-surface-container-low px-4 py-4 scrollbar-thin">
-
-
+          <div className="relative flex-1 overflow-y-auto px-2 py-4 scrollbar-thin">
             {loading ? (
-              <div className="flex h-full min-h-[16rem] flex-col items-center justify-center gap-4">
-                <div className="flex h-14 w-14 items-center justify-center rounded-[4px] border border-on-surface/6 bg-surface-container-lowest text-primary">
-                  <Activity className="h-6 w-6 animate-spin" />
-                </div>
-                <p className="text-ui-body font-medium text-ui-muted">正在载入历史记录...</p>
+              <div className="flex h-full flex-col items-center justify-center gap-3 opacity-30">
+                <Activity className="h-6 w-6 animate-spin text-primary" />
+                <p className="text-[12px] font-bold">正在读取记录...</p>
               </div>
             ) : filteredHistory.length > 0 ? (
-              <div className="space-y-3">
+              <div className="space-y-0.5">
                 {filteredHistory.map((entry, idx) => {
                   const active = selectedSessionId === entry.execution_id;
                   const sessionLike = isHistorySessionEntry(entry);
+                  const isRolledBack = isHistoryRolledBackEntry(entry);
+                  const isPartialFailure = isHistoryPartialFailureEntry(entry) || isHistoryRollbackPartialFailureEntry(entry);
+                  const statusSummary = getHistoryEntrySummary(entry);
 
                   return (
                     <motion.div
                       key={entry.execution_id}
-                      initial={{ opacity: 0, y: 12 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: idx * 0.03, duration: 0.35, ease: [0.23, 1, 0.32, 1] }}
+                      initial={{ opacity: 0, x: -8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: idx * 0.02, duration: 0.3 }}
                       whileTap={{ scale: 0.985 }}
                       role="button"
                       tabIndex={0}
@@ -311,124 +501,79 @@ export default function HistoryPage() {
                         }
                       }}
                       className={cn(
-                        "group relative overflow-hidden rounded-[8px] border transition-[border-color,box-shadow] duration-300 cursor-pointer",
+                        "group relative flex cursor-pointer flex-col gap-1 rounded-md px-3 py-2 transition-all text-left",
                         active
-                          ? "border-primary/25 shadow-[0_12px_24px_-8px_rgba(0,0,0,0.06)]"
-                          : "border-on-surface/5 bg-surface-container-lowest hover:border-primary/15 hover:shadow-lg hover:shadow-black/[0.02]",
+                          ? "bg-primary/[0.08] border border-primary/20"
+                          : "bg-transparent hover:bg-on-surface/[0.035]",
                       )}
                     >
-                      {/* Smooth Active Indicator & Background Overlay */}
-                      <AnimatePresence>
-                        {active && (
-                          <>
-                             {/* Background Highlight */}
-                             <motion.div
-                                layoutId="history-active-bg"
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                exit={{ opacity: 0 }}
-                                transition={{ type: "spring", bounce: 0.2, duration: 0.5 }}
-                                className="absolute inset-0 z-0 bg-primary/[0.05]"
-                             />
-                             {/* Side Pill */}
-                             <motion.div
-                                layoutId="history-active-pill"
-                                initial={{ opacity: 0, x: -4, scaleY: 0.5 }}
-                                animate={{ opacity: 1, x: 0, scaleY: 1 }}
-                                exit={{ opacity: 0, x: -4, scaleY: 0.5 }}
-                                transition={{ type: "spring", bounce: 0.2, duration: 0.5 }}
-                                className="absolute left-0 top-3 bottom-3 z-10 w-[3.5px] rounded-r-full bg-primary"
-                             />
-                          </>
-                        )}
-                      </AnimatePresence>
+                      {active && (
+                        <motion.div
+                          layoutId="history-active-pill"
+                          className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-primary"
+                        />
+                      )}
 
-                      <div className="relative space-y-3 p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0 space-y-1.5">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className={cn(
-                                "inline-flex items-center gap-1.5 rounded-[4px] border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider",
-                                sessionLike
-                                  ? active
-                                    ? "border-primary/20 bg-surface-container-lowest text-primary"
-                                    : "border-primary/15 bg-primary/10 text-primary"
-                                  : entry.status === "rolled_back"
-                                    ? "border-on-surface/8 bg-surface-container-high text-on-surface/70"
-                                    : "border-success/15 bg-success/10 text-success-dim",
-                              )}>
-                                <span className={cn(
-                                  "h-1.5 w-1.5 rounded-full",
-                                  sessionLike ? "bg-primary" : entry.status === "rolled_back" ? "bg-on-surface/45" : "bg-success",
-                                )} />
-                                {sessionLike ? "进行中会话" : entry.status === "rolled_back" ? "已回退" : "执行结果"}
-                              </span>
-                              <span className="text-[11px] font-medium text-ui-muted opacity-70">{formatDisplayDate(entry.created_at)}</span>
-                            </div>
-                            <h3 className="line-clamp-1 text-[13.5px] font-bold tracking-tight text-on-surface">
-                              {getHistoryEntryName(entry)}
-                            </h3>
-                            <p className="line-clamp-1 text-[11px] font-medium leading-5 text-ui-muted opacity-60" title={entry.target_dir}>
-                              {formatPath(entry.target_dir)}
-                            </p>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              requestDelete(entry.execution_id);
-                            }}
-                            className={cn(
-                              "rounded-[4px] border p-2 text-ui-muted transition-all hover:border-error/20 hover:text-error hover:bg-error/5 active:scale-95",
-                              active ? "border-on-surface/8 bg-surface-container-lowest/85" : "border-on-surface/8 bg-surface-container-lowest",
-                            )}
-                            title="删除记录"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 text-[12px]">
-                          <div className="min-w-0">
-                            <span className="text-ui-muted font-medium">状态</span>
-                            <span className="ml-2 font-bold text-on-surface/80">{getEntrySummary(entry)}</span>
-                          </div>
-                          <div className={cn(
-                            "rounded-[4px] px-2.5 py-1.5 font-bold tabular-nums text-[11px]",
-                            active ? "bg-surface-container-lowest/80 text-primary" : "bg-on-surface/4 text-ui-muted",
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <span className={cn(
+                            "h-1.5 w-1.5 shrink-0 rounded-full",
+                            sessionLike ? "bg-primary" : isRolledBack ? "bg-on-surface/20" : isPartialFailure ? "bg-warning" : "bg-success",
+                          )} />
+                          <h3 className={cn(
+                            "truncate text-[12px] font-black tracking-tight",
+                            active ? "text-primary" : "text-on-surface/85"
                           )}>
-                            {entry.item_count || 0} 个项目
-                          </div>
+                            {getHistoryEntryName(entry)}
+                          </h3>
+                        </div>
+                        <span className="shrink-0 font-mono text-[9px] font-bold text-ui-muted/40">{formatDisplayDate(entry.created_at).split(' ')[1]}</span>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate text-[9.5px] font-medium text-ui-muted/50" title={entry.target_dir}>
+                          {formatPath(entry.target_dir)}
+                        </p>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className={cn(
+                            "rounded-[3px] px-1 py-0.5 text-[8px] font-black uppercase tracking-wider border",
+                            active
+                              ? "bg-primary/10 border-primary/20 text-primary/80"
+                              : isPartialFailure
+                                ? "bg-warning/5 border-warning/10 text-warning"
+                                : isRolledBack
+                                  ? "bg-on-surface/[0.03] border-on-surface/10 text-ui-muted/50"
+                                  : "bg-success/5 border-success/10 text-success-dim/80"
+                          )}>
+                            {statusSummary}
+                          </span>
                         </div>
                       </div>
+                      
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          requestDelete(entry.execution_id);
+                        }}
+                        className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-all p-1.5 text-error/30 hover:text-error"
+                      >
+                        <Trash2 className="h-2.5 w-2.5" />
+                      </button>
                     </motion.div>
                   );
                 })}
               </div>
             ) : (
-              <div className="flex h-full min-h-[16rem] flex-col items-center justify-center px-10 text-center">
-                <div className="relative">
-                  <div className="absolute inset-0 animate-ping rounded-full bg-primary/5 opacity-40" />
-                  <div className="relative flex h-16 w-16 items-center justify-center rounded-[6px] bg-surface-container-lowest text-primary/45 border border-on-surface/8 shadow-sm">
-                    <HistoryIcon className="h-8 w-8" />
-                  </div>
-                </div>
-                <h3 className="mt-6 text-[1.15rem] font-bold font-headline tracking-tight text-on-surface">
-                  {history.length === 0 ? "还未开启任何整理任务" : "未发现匹配记录"}
-                </h3>
-                <p className="mt-2 text-[12.5px] leading-6 text-ui-muted opacity-60">
-                  {history.length === 0
-                    ? "开始第一次整理后，这里会显示任务记录、执行结果和回退记录。"
-                    : "请尝试调整搜索词或筛选条件。"}
-                </p>
+              <div className="flex h-full flex-col items-center justify-center px-6 text-center opacity-40">
+                <HistoryIcon className="h-8 w-8 opacity-20" />
+                <h3 className="mt-4 text-[13px] font-bold">没有发现记录</h3>
               </div>
             )}
-
           </div>
         </section>
 
-        <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[8px] border border-on-surface/8 bg-surface-container-lowest shadow-[0_18px_44px_rgba(0,0,0,0.04)]">
+        <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-surface">
           <AnimatePresence mode="wait">
             {selectedSessionId && selectedEntry && (isSelectedSession ? sessionDetail : journal) ? (
               <motion.div
@@ -438,250 +583,84 @@ export default function HistoryPage() {
                 exit={{ opacity: 0, y: -8 }}
                 className="flex min-h-0 flex-1 flex-col"
               >
-                <div className="border-b border-on-surface/6 bg-surface px-6 py-6 lg:px-8">
-                  <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-                    <div className="min-w-0 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-primary/8 text-primary">
-                           <FileClock className="h-4 w-4" />
-                        </div>
-                        <span className="text-[11px] font-black uppercase tracking-[0.2em] text-primary/60">
-                          {isSelectedSession ? "任务记录" : "执行记录"}
-                        </span>
-                      </div>
-                      <h2 className="line-clamp-1 font-black tracking-tight text-on-surface text-[20px] 2xl:text-[22px]">
-                        {getHistoryEntryName(selectedEntry)}
-                      </h2>
-                      <div className="flex items-center gap-2 rounded-[10px] border border-on-surface/5 bg-on-surface/[0.02] px-3 py-1.5 w-fit">
-                        <FolderOpen className="h-3.5 w-3.5 text-on-surface/40" />
-                        <p className="truncate text-[12px] font-medium text-ui-muted">
-                          {selectedEntry.target_dir}
-                        </p>
-                      </div>
+                <div className="sticky top-0 z-10 shrink-0 border-b border-on-surface/8 bg-surface/95 px-6 py-3.5 backdrop-blur-md lg:px-8">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                       <h2 className="truncate text-[15px] font-black tracking-tight text-on-surface">
+                         {getHistoryEntryName(selectedEntry)}
+                       </h2>
+                       <div className="h-4 w-px bg-on-surface/10 shrink-0" />
+                       <div className="flex min-w-0 items-center gap-2">
+                         <div className="shrink-0 text-[10px] font-black uppercase tracking-widest text-ui-muted opacity-40">
+                           {isSelectedSession ? "任务记录" : "执行结果"}
+                         </div>
+                         <div className="hidden min-w-0 items-center gap-1.5 truncate text-[11px] font-medium text-ui-muted/60 xl:flex">
+                           <FolderOpen className="h-3 w-3 shrink-0 opacity-40" />
+                           <span className="truncate">{selectedEntry.target_dir}</span>
+                         </div>
+                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-3">
-                      <div className={cn(
-                        "inline-flex items-center gap-2 rounded-[4px] border px-4 py-2 text-[12px] font-bold",
-                        isSelectedSession
-                          ? "border-primary/15 bg-primary/8 text-primary"
-                          : journal?.status === "rolled_back"
-                            ? "border-on-surface/10 bg-surface-container-high text-on-surface/60"
-                            : "border-success/15 bg-success/10 text-success-dim",
-                      )}>
-                        <span className={cn(
-                          "h-2 w-2 rounded-full shadow-sm",
-                          isSelectedSession ? "bg-primary" : journal?.status === "rolled_back" ? "bg-on-surface/40" : "bg-success",
-                        )} />
-                        {isSelectedSession ? getFriendlyStage(sessionDetail?.stage) : journal?.status === "rolled_back" ? "回退已完成" : "执行结果"}
-                      </div>
-
-                      {!isSelectedSession && journal?.status === "completed" && (
-                        <div className="inline-flex items-center gap-2 rounded-[6px] border border-warning/20 bg-warning/5 px-4 py-2 text-[12px] font-bold text-warning">
-                          <ShieldCheck className="h-3.5 w-3.5" />
-                          可以回退
+                    <div className="flex shrink-0 items-center gap-3">
+                      {(() => {
+                        const entryIsRolledBack = selectedEntry ? isHistoryRolledBackEntry(selectedEntry) : false;
+                        const entryIsPartialFailure = selectedEntry
+                          ? isHistoryPartialFailureEntry(selectedEntry) || isHistoryRollbackPartialFailureEntry(selectedEntry)
+                          : false;
+                        return (
+                          <div className={cn(
+                            "hidden items-center gap-2 rounded-[3px] border px-2 py-1 text-[9px] font-black uppercase tracking-wider sm:flex",
+                            isSelectedSession
+                              ? "border-primary/25 bg-primary/5 text-primary"
+                              : entryIsRolledBack
+                                ? "border-on-surface/15 bg-on-surface/5 text-on-surface/40"
+                                : entryIsPartialFailure
+                                  ? "border-warning/30 bg-warning-container/20 text-warning"
+                                  : "border-success/30 bg-success/5 text-success-dim",
+                          )}>
+                            <span className={cn(
+                              "h-1 w-1 rounded-full",
+                              isSelectedSession ? "bg-primary" : entryIsRolledBack ? "bg-on-surface/30" : entryIsPartialFailure ? "bg-warning" : "bg-success",
+                            )} />
+                            {selectedEntry ? getHistoryEntrySummary(selectedEntry) : "—"}
+                          </div>
+                        );
+                      })()}
+ 
+                      {!isSelectedSession && (journal?.status === "completed" || journal?.status === "partial_failure") && (
+                        <div className="flex items-center gap-1.5 rounded-[3px] border border-warning/30 bg-warning/5 px-2 py-1 text-[9px] font-black text-warning">
+                          <ShieldCheck className="h-3 w-3" />
+                          <span className="hidden lg:inline uppercase tracking-widest">支持回退</span>
                         </div>
                       )}
                     </div>
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto bg-surface-container-low px-4 py-4 scrollbar-thin lg:px-5 lg:py-5">
+                <div className="flex-1 overflow-y-auto bg-surface relative px-4 py-4 scrollbar-thin lg:px-6 lg:py-6">
+                  {error && (
+                    <div className="mb-6">
+                      <ErrorAlert title="操作执行失败" message={error} onClose={() => setError(null)} />
+                    </div>
+                  )}
                   {journalLoading ? (
-                    <div className="flex min-h-[20rem] flex-col items-center justify-center gap-4">
-                      <div className="flex h-14 w-14 items-center justify-center rounded-[8px] border border-on-surface/6 bg-surface-container-lowest text-primary">
-                        <Activity className="h-6 w-6 animate-spin" />
-                      </div>
-                      <p className="text-ui-body text-ui-muted">正在载入详细内容...</p>
+                    <div className="flex h-full min-h-[16rem] flex-col items-center justify-center gap-3 opacity-30">
+                      <Activity className="h-6 w-6 animate-spin text-primary" />
+                      <p className="text-[12px] font-bold">正在读取详情...</p>
                     </div>
                   ) : isSelectedSession ? (
-                    <div className="space-y-3">
-                      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(260px,0.85fr)]">
-                        <div className="rounded-[8px] border border-on-surface/6 bg-surface-container-lowest p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]">
-                          <div className="flex items-start justify-between gap-4">
-                            <div>
-                              <p className="text-ui-meta text-ui-muted">当前状态</p>
-                              <h3 className="mt-2 text-[18px] font-black tracking-tight text-on-surface">
-                                {getFriendlyStage(sessionDetail?.stage)}
-                              </h3>
-                            </div>
-                            <div className="rounded-[8px] bg-surface-container-low p-2.5 text-primary">
-                              <FolderOpen className="h-6 w-6" />
-                            </div>
-                          </div>
-                          <p className="mt-4 max-w-2xl text-ui-body text-ui-muted">
-                            {sessionDetail?.summary || "这是一条未完成的整理记录，你可以重新进入工作台继续调整。"}
-                          </p>
-                        </div>
-
-                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-                          <div className="rounded-[8px] border border-on-surface/6 bg-surface-container-lowest p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]">
-                            <p className="text-ui-meta text-ui-muted">最近更新时间</p>
-                            <p className="mt-1.5 text-[15px] font-bold tracking-tight text-on-surface">
-                              {formatDisplayDate(sessionDetail?.updated_at || selectedEntry.created_at)}
-                            </p>
-                          </div>
-                          <div className="rounded-[8px] border border-on-surface/6 bg-surface-container-lowest p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]">
-                            <p className="text-ui-meta text-ui-muted">计划条目</p>
-                            <p className="mt-1.5 text-[15px] font-bold tracking-tight text-on-surface">
-                              {sessionDetail?.plan_snapshot?.stats?.move_count || 0}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="rounded-[12px] border border-on-surface/6 bg-surface-container-lowest p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]">
-                        <div className="space-y-4">
-                          <div>
-                            <p className="text-ui-meta text-ui-muted">状态说明</p>
-                            <p className="mt-2.5 text-ui-body text-on-surface">
-                              {sessionDetail?.summary || "这是一条未完成的整理记录，可以重新进入工作台继续处理。"}
-                            </p>
-                          </div>
-
-                          {sessionDetail?.last_error ? (
-                            <div className="rounded-[9px] border border-warning/15 bg-warning-container/15 px-4 py-3 text-[13px] font-semibold leading-relaxed text-warning">
-                              最近一次错误：{sessionDetail.last_error}
-                            </div>
-                          ) : null}
-
-                          <div className="flex flex-wrap gap-3">
-                            <Button variant="primary" onClick={() => handleOpenSession(false)} className="px-7 py-3">
-                              <PlayCircle className="h-4 w-4" />
-                              继续处理
-                            </Button>
-                            <Button variant="secondary" onClick={() => handleOpenSession(true)} className="px-7 py-3">
-                              <Eye className="h-4 w-4" />
-                              只读打开
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                    sessionDetailInterior
                   ) : (
-                    <div className="space-y-3">
-                      {rollbackSuccess ? (
-                        <motion.div
-                          initial={{ opacity: 0, scale: 0.98 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          className="rounded-[12px] border border-success/12 bg-surface-container-lowest p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]"
-                        >
-                          <div className="flex items-start gap-4">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-[9px] bg-success/12 text-success-dim">
-                              <Undo2 className="h-5 w-5" />
-                            </div>
-                            <div>
-                              <h3 className="text-[1.05rem] font-black tracking-tight text-on-surface">回退已完成</h3>
-                              <p className="mt-2 text-ui-body text-ui-muted">
-                                这次移动过的内容已经按原路径放回，受影响的 {journal?.item_count || 0} 项内容已完成恢复。
-                              </p>
-                            </div>
-                          </div>
-                        </motion.div>
-                      ) : null}
-
-                      <div className="grid gap-3 sm:grid-cols-3">
-                        <div className="rounded-[8px] border border-on-surface/6 bg-surface-container-lowest p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]">
-                          <p className="text-[11px] font-bold uppercase tracking-wider text-ui-muted opacity-60">处理条目</p>
-                          <p className="mt-1.5 text-[18px] font-black tracking-tight text-on-surface tabular-nums">
-                            {journal?.item_count || 0}
-                          </p>
-                        </div>
-                        <div className="rounded-[8px] border border-on-surface/6 bg-surface-container-lowest p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]">
-                          <p className="text-[11px] font-bold uppercase tracking-wider text-ui-muted opacity-60">成功项目</p>
-                          <p className="mt-1.5 text-[18px] font-black tracking-tight text-on-surface tabular-nums">
-                            {journal?.success_count || 0}
-                          </p>
-                        </div>
-                        <div className="rounded-[8px] border border-on-surface/6 bg-surface-container-lowest p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]">
-                          <p className="text-[11px] font-bold uppercase tracking-wider text-ui-muted opacity-60">失败项目</p>
-                          <p className="mt-1.5 text-[18px] font-black tracking-tight text-on-surface tabular-nums">
-                            {journal?.failure_count || 0}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="rounded-[12px] border border-on-surface/6 bg-surface-container-lowest p-4 shadow-[0_10px_24px_rgba(0,0,0,0.03)]">
-                        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-                          <div>
-                            <p className="text-[11px] font-black uppercase tracking-widest text-primary/60">路径变化记录</p>
-                            <h3 className="mt-1 text-[16px] font-black tracking-tight text-on-surface">
-                              本次变更明细
-                            </h3>
-                            <p className="mt-1 text-[12px] font-medium text-ui-muted">
-                              左侧是整理后路径，右侧是原始位置。回退后则显示恢复关系。
-                            </p>
-                          </div>
-
-                          {!rollbackSuccess && journal?.status === "completed" ? (
-                            <Button
-                              variant="danger"
-                              onClick={() => setRollbackConfirmOpen(true)}
-                              disabled={actionLoading}
-                              loading={actionLoading}
-                              className="px-7 py-3"
-                            >
-                              <Undo2 className="h-4 w-4" />
-                              回退这次执行
-                            </Button>
-                          ) : null}
-                        </div>
-
-                        <div className="mt-5 overflow-hidden rounded-[10px] border border-on-surface/6">
-                          <table className="w-full border-collapse text-left">
-                            <thead className="bg-surface-container-low/55">
-                              <tr className="text-ui-meta font-semibold text-ui-muted">
-                                <th className="px-4 py-3.5">文件</th>
-                                <th className="px-4 py-3.5">路径变化</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-on-surface/6 bg-surface-container-lowest">
-                              {moveRows.length ? (
-                                moveRows.map((item, index) => (
-                                  <tr key={index} className="transition-colors hover:bg-surface-container-low/28">
-                                    <td className="px-4 py-3.5 align-top">
-                                      <p className="max-w-[18rem] truncate text-[14px] font-semibold text-on-surface" title={item.display_name}>
-                                        {item.display_name}
-                                      </p>
-                                    </td>
-                                    <td className="px-4 py-3.5">
-                                      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 text-[13px]">
-                                        <span className="truncate text-right font-mono text-ui-muted" title={item.target || ""}>
-                                          {formatMovePath(item.target, journal?.target_dir || "")}
-                                        </span>
-                                        <ArrowRight className="h-3.5 w-3.5 text-primary/55" />
-                                        <span className="truncate font-mono font-semibold text-primary" title={item.source || ""}>
-                                          {formatMovePath(item.source, journal?.target_dir || "")}
-                                        </span>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                ))
-                              ) : (
-                                <tr>
-                                  <td colSpan={2} className="px-4 py-12 text-center text-ui-body text-ui-muted">
-                                    暂时没有可显示的路径变化记录。
-                                  </td>
-                                </tr>
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    </div>
+                    journalInterior
                   )}
                 </div>
               </motion.div>
             ) : (
-              <div className="flex h-full min-h-[24rem] flex-col items-center justify-center px-8 text-center">
-                <div className="flex h-16 w-16 items-center justify-center rounded-[10px] bg-surface-container-lowest text-primary/45 border border-on-surface/6">
-                  <HistoryIcon className="h-8 w-8" />
-                </div>
-                <h3 className="mt-6 text-[1.35rem] font-bold font-headline tracking-tight text-on-surface">
-                  选择一条记录查看详情
-                </h3>
-                <p className="mt-3 max-w-lg text-ui-body text-ui-muted">
-                  你可以在左侧搜索目录、筛选状态，或者直接打开某条会话与执行结果继续处理。
+              <div className="flex h-full min-h-[24rem] flex-col items-center justify-center px-8 text-center opacity-30">
+                <HistoryIcon className="h-10 w-10 opacity-20" />
+                <h3 className="mt-6 text-[15px] font-black text-on-surface">选择记录查看详情</h3>
+                <p className="mt-2 max-w-xs text-[12px] font-medium leading-relaxed">
+                  在左侧列表中点击任意任务，即可查看其执行报告、变更明细或继续处理。
                 </p>
               </div>
             )}
@@ -692,9 +671,9 @@ export default function HistoryPage() {
       <ConfirmDialog
         open={rollbackConfirmOpen}
         title="确认回退这次执行？"
-        description="这会把本次整理已移动的文件尽量放回原位置。若目标文件已被占用或发生冲突，部分回退可能失败。"
+        description={`这会把本次整理已移动的 ${moveRows.length} 项内容尽量放回原位置${moveRowsSummary ? `。涉及条目：${moveRowsSummary}` : ""}。若目标文件已被占用或发生冲突，部分回退可能失败。`}
         confirmLabel="确认回退"
-        cancelLabel="先不回退"
+        cancelLabel="取消"
         tone="danger"
         loading={actionLoading}
         onConfirm={handleRollback}

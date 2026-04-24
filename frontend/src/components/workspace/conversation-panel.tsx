@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import {
+  AlertTriangle,
   Bot,
   ChevronDown,
   Cpu,
@@ -13,18 +14,17 @@ import {
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
+import { getSessionStageView } from "@/lib/session-view-model";
+import { deriveScannerProgressViewModel } from "@/lib/scanner-progress-view";
 import type {
   AssistantRuntimeStatus,
   AssistantMessage,
   ComposerMode,
   ScannerProgress,
   SessionStage,
-  UnresolvedChoiceResolution,
-  UnresolvedChoicesBlock,
 } from "@/types/session";
 
 import { MarkdownProse } from "./markdown-prose";
-import { UnresolvedChoicesBubble, type ResolutionDraft, type ResolutionDraftMap } from "./unresolved-choices-bubble";
 import { ComposerBar } from "./composer-bar";
 
 function cn(...inputs: ClassValue[]) {
@@ -58,8 +58,8 @@ interface ConversationPanelProps {
   setMessageInput: (val: string) => void;
   onSendMessage: () => void;
   onStartScan: () => void;
-  onResolveUnresolved: (payload: { request_id: string; resolutions: UnresolvedChoiceResolution[] }) => Promise<void> | void;
   unresolvedCount: number;
+  canRunPrecheck: boolean;
   notice?: ConversationNotice | null;
   scanner?: ScannerProgress;
   progressPercent?: number;
@@ -88,39 +88,16 @@ export function ConversationPanel({
   setMessageInput,
   onSendMessage,
   onStartScan,
-  onResolveUnresolved,
   unresolvedCount,
+  canRunPrecheck,
   notice,
   scanner,
   progressPercent = 0,
   plannerStatus,
 }: ConversationPanelProps) {
+  const stageView = getSessionStageView(stage);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isPinnedToBottom, setIsPinnedToBottom] = useState(true);
-  const [resolutionDrafts, setResolutionDrafts] = useState<Record<string, ResolutionDraftMap>>({});
-  const [resolutionWarnings, setResolutionWarnings] = useState<Record<string, string | null>>({});
-  const [submittingRequestId, setSubmittingRequestId] = useState<string | null>(null);
-
-  useEffect(() => {
-    setResolutionDrafts((prev) => {
-      const next = { ...prev };
-      for (const message of messages) {
-        for (const block of message.blocks || []) {
-          if (block.type !== "unresolved_choices") continue;
-          const existing = next[block.request_id] || {};
-          const merged: ResolutionDraftMap = { ...existing };
-          for (const item of block.items) {
-            if (!merged[item.item_id]) {
-              merged[item.item_id] = { selected_folder: "", note: "", custom_selected: false };
-            }
-          }
-          next[block.request_id] = merged;
-        }
-      }
-      return next;
-    });
-  }, [messages]);
-
 
   useEffect(() => {
     if (!isPinnedToBottom) return;
@@ -132,7 +109,7 @@ export function ConversationPanel({
   const handleScroll = () => {
     const container = scrollContainerRef.current;
     if (!container) return;
-    const threshold = 32;
+    const threshold = 120;
     const pinned = container.scrollHeight - container.scrollTop - container.clientHeight <= threshold;
     setIsPinnedToBottom(pinned);
   };
@@ -144,195 +121,151 @@ export function ConversationPanel({
     setIsPinnedToBottom(true);
   };
 
-  const updateDraft = (requestId: string, itemId: string, updater: (draft: ResolutionDraft) => ResolutionDraft) => {
-    setResolutionDrafts((prev) => ({
-      ...prev,
-      [requestId]: {
-        ...(prev[requestId] || {}),
-        [itemId]: updater(prev[requestId]?.[itemId] || { selected_folder: "", note: "", custom_selected: false }),
-      },
-    }));
-  };
-
-  const handleSubmitUnresolved = async (block: UnresolvedChoicesBlock) => {
-    const drafts = resolutionDrafts[block.request_id] || {};
-    const missing = block.items
-      .filter((item) => {
-        const draft = drafts[item.item_id] || { selected_folder: "", note: "", custom_selected: false };
-        const customNote = draft.custom_selected ? draft.note.trim() : "";
-        return !draft.selected_folder && !customNote;
-      })
-      .map((item) => item.display_name);
-
-    if (missing.length > 0) {
-      setResolutionWarnings((prev) => ({
-        ...prev,
-        [block.request_id]: `以下条目仍未处理：${missing.join("、")}`,
-      }));
-      return;
-    }
-
-    setResolutionWarnings((prev) => ({ ...prev, [block.request_id]: null }));
-    setSubmittingRequestId(block.request_id);
-    try {
-      await onResolveUnresolved({
-        request_id: block.request_id,
-        resolutions: block.items.map((item) => {
-          const draft = drafts[item.item_id] || { selected_folder: "", note: "", custom_selected: false };
-          return {
-            item_id: item.item_id,
-            selected_folder: draft.selected_folder,
-            note: draft.custom_selected ? draft.note.trim() : "",
-          };
-        }),
-      });
-    } finally {
-      setSubmittingRequestId((current) => (current === block.request_id ? null : current));
-    }
-  };
-
   const renderNotice = notice ? (
     <div
       className={cn(
-        "rounded-[4px] border p-4",
-        notice.tone === "danger" && "border-error/20 bg-error-container/10",
-        notice.tone === "warning" && "border-warning/20 bg-warning-container/20",
+        "rounded-xl border p-4",
+        notice.tone === "danger" && "border-error/20 bg-error/[0.03]",
+        notice.tone === "warning" && "border-warning/20 bg-warning/[0.03]",
         notice.tone === "info" && "border-primary/12 bg-surface-container-lowest",
       )}
     >
-      <div className="space-y-3">
-        <div>
-          <h3 className="text-[14px] font-semibold text-on-surface">{notice.title}</h3>
-          <p className="mt-1 text-[13px] leading-6 text-ui-muted">{notice.description}</p>
+      <div className="flex gap-4">
+        <div className={cn(
+           "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border",
+           notice.tone === "danger" && "bg-error text-white border-error/20",
+           notice.tone === "warning" && "bg-warning text-white border-warning/20",
+           notice.tone === "info" && "bg-primary text-white border-primary/20",
+        )}>
+           <AlertTriangle className="h-5 w-5" />
         </div>
-        {(notice.primaryAction || notice.secondaryAction) && (
-          <div className="flex flex-wrap gap-3">
-            {notice.primaryAction && (
-              <button
-                type="button"
-                onClick={notice.primaryAction.onClick}
-                className="rounded-[10px] border border-primary/20 bg-primary px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-primary-dim"
-              >
-                {notice.primaryAction.label}
-              </button>
-            )}
-            {notice.secondaryAction && (
-              <button
-                type="button"
-                onClick={notice.secondaryAction.onClick}
-                className="rounded-[4px] border border-on-surface/8 bg-surface-container-lowest px-4 py-2.5 text-[13px] font-bold text-on-surface-variant transition-colors hover:bg-surface-container-low hover:text-on-surface"
-              >
-                {notice.secondaryAction.label}
-              </button>
-            )}
+        <div className="flex-1 space-y-3 min-w-0">
+          <div>
+            <h3 className="text-[14px] font-black text-on-surface tracking-tight">{notice.title}</h3>
+            <p className="mt-1 text-[13px] font-medium leading-relaxed text-ui-muted opacity-80">{notice.description}</p>
           </div>
-        )}
+          {(notice.primaryAction || notice.secondaryAction) && (
+            <div className="flex flex-wrap gap-2">
+              {notice.primaryAction && (
+                <button
+                  type="button"
+                  onClick={notice.primaryAction.onClick}
+                  className="rounded-[6px] bg-primary px-4 py-2 text-[12px] font-black text-white transition-all hover:bg-primary-dim active:scale-95"
+                >
+                  {notice.primaryAction.label}
+                </button>
+              )}
+              {notice.secondaryAction && (
+                <button
+                  type="button"
+                  onClick={notice.secondaryAction.onClick}
+                  className="rounded-[6px] border border-on-surface/10 bg-surface-container-lowest px-4 py-2 text-[12px] font-black text-on-surface transition-all hover:bg-on-surface/5 active:scale-95"
+                >
+                  {notice.secondaryAction.label}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   ) : null;
 
-  const scanningItems = [...(scanner?.recent_analysis_items || [])].slice(-5).reverse();
-  const currentScanningItem = scanner?.current_item || scanningItems[0]?.display_name || "正在准备扫描";
-  const scanningPercent = Math.max(0, Math.min(100, Math.round(progressPercent)));
+  const scanningView = React.useMemo(
+    () => deriveScannerProgressViewModel(scanner || {}, progressPercent),
+    [progressPercent, scanner],
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
-      <div ref={scrollContainerRef} onScroll={handleScroll} className="relative min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5 scroll-smooth lg:px-6 lg:py-6">
-        {(stage === "idle" || stage === "draft") && messages.length === 0 && !notice && (
+      <div ref={scrollContainerRef} onScroll={handleScroll} className="relative min-h-0 flex-1 space-y-8 overflow-y-auto px-6 pt-5 pb-4 scroll-smooth scrollbar-thin">
+        {renderNotice && <div className="mb-2">{renderNotice}</div>}
+
+        {stageView.isDraftLike && !notice && (
           <motion.div 
             initial={{ opacity: 0, scale: 0.98 }} 
             animate={{ opacity: 1, scale: 1 }} 
-            className="flex flex-col items-center justify-center space-y-5 py-18 text-center"
+            className="flex flex-col items-center justify-center space-y-6 py-16 text-center"
           >
-            <div className="flex h-14 w-14 items-center justify-center rounded-[6px] border border-primary/12 bg-primary/6 text-primary/55">
-              <Cpu className="w-7 h-7" />
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/15 bg-primary/[0.03] text-primary/60">
+              <Cpu className="w-8 h-8" />
             </div>
-            <div className="max-w-[360px] space-y-3">
-              <h3 className="text-[1.1rem] font-black font-headline leading-tight text-on-surface tracking-tight">
-                {isBusy ? "正在启动扫描" : "开始扫描以生成初始方案"}
+            <div className="max-w-[400px] space-y-3">
+              <h3 className="text-[1.25rem] font-black tracking-tight text-on-surface">
+                {isBusy ? "正在准备任务" : "开始读取目录"}
               </h3>
-              <p className="text-ui-body font-medium leading-relaxed text-ui-muted">
+              <p className="text-[13.5px] font-medium leading-relaxed text-ui-muted opacity-70">
                 {isBusy
-                  ? "系统正在进入扫描阶段，读取目录结构后会生成第一版整理方案。"
-                  : "先扫描当前目录并分析文件结构，再生成第一版整理方案。"}
+                  ? "正在读取你选择的文件和文件夹，完成后会生成整理建议。"
+                  : "先只读扫描目录，确认本次要整理的项目，再决定怎么移动。"}
               </p>
-              {isBusy ? (
-                <div className="pt-2">
-                  <div className="inline-flex items-center gap-2.5 rounded-[4px] border border-primary/16 bg-primary/8 px-6 py-3 text-[13px] font-black text-primary">
-                    <Loader2 className="w-4 h-4 animate-spin" /> 正在自动开始
+              <div className="pt-4 flex justify-center">
+                {isBusy ? (
+                   <div className="inline-flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/[0.05] px-6 py-3 text-[13px] font-black text-primary">
+                    <Loader2 className="w-4 h-4 animate-spin" /> 正在自动执行
                   </div>
-                </div>
-              ) : (
-                <div className="pt-2">
+                ) : (
                   <button
                     onClick={onStartScan}
                     disabled={isBusy}
-                    className="inline-flex items-center gap-2.5 rounded-[4px] border border-primary/20 bg-primary px-6 py-3 text-[13px] font-black text-white transition-colors hover:bg-primary/90 active:scale-[0.96] disabled:opacity-50"
+                    className="group relative inline-flex items-center gap-3 overflow-hidden rounded-lg bg-primary px-8 py-3.5 text-[13px] font-black text-white transition-all hover:bg-primary-dim active:scale-95 disabled:opacity-50"
                   >
-                    <Sparkles className="w-4 h-4" /> 开始扫描
+                    <Sparkles className="w-4 h-4" />
+                    <span>立即开始扫描</span>
+                    <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/10 to-transparent transition-transform duration-1000 group-hover:translate-x-full" />
                   </button>
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
-        
-        {stage === "scanning" && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="rounded-[6px] border border-on-surface/8 bg-surface-container-low px-4 py-3 shadow-sm shadow-black/[0.02]"
-          >
-            <div className="flex items-start gap-3.5">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[4px] border border-primary/20 bg-primary/5 text-primary">
-                <Bot className="h-4 w-4" />
-              </div>
-              <div className="min-w-0 flex-1 space-y-2">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="space-y-0.5">
-                    <p className="text-[13px] font-bold text-on-surface">正在扫描</p>
-                    <div className="flex items-center gap-2 text-[10px] text-ui-muted font-bold uppercase tracking-wider">
-                      <span className="relative flex h-1.5 w-1.5">
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/40 opacity-75"></span>
-                        <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary/60"></span>
-                      </span>
-                      当前处理：{currentScanningItem}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 rounded-full bg-primary/10 px-2.5 py-0.5 text-[12px] font-black tabular-nums text-primary">
-                    {scanningPercent}%
-                  </div>
-                </div>
-                {scanningItems.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {scanningItems.slice(0, 3).map((item) => (
-                      <span
-                        key={item.item_id}
-                        className="max-w-[180px] truncate rounded-full border border-on-surface/8 bg-surface px-2.5 py-1 text-[11px] font-semibold text-on-surface-variant"
-                        title={item.display_name}
-                      >
-                        {item.display_name}
-                      </span>
-                    ))}
-                  </div>
                 )}
               </div>
             </div>
           </motion.div>
         )}
+        
+        {stageView.isScanning && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="rounded-xl border border-primary/15 bg-primary/[0.02] px-5 py-4"
+          >
+            <div className="flex items-center gap-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
+                <Loader2 className="h-5 w-5 animate-spin" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                   <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-primary">
+                     {scanningView.stageLabel}
+                   </span>
+                   <span className="text-[11px] font-bold text-on-surface/60">{scanningView.title}</span>
+                </div>
+                <div className="h-1.5 w-full rounded-full bg-on-surface/5 overflow-hidden">
+                  <motion.div 
+                    initial={{ width: 0 }}
+                    animate={{ width: `${Math.max(scanningView.progressPercent, 4)}%` }}
+                    className="h-full bg-primary"
+                  />
+                </div>
+                <div className="mt-2 flex items-center justify-between">
+                   <span className="text-[10px] font-black uppercase tracking-widest text-ui-muted opacity-40">实时同步中</span>
+                   <span className="font-mono text-[11px] font-black text-primary">{Math.round(scanningView.progressPercent)}%</span>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
 
-        <div className="space-y-1.5">
+        <div className="space-y-2">
           {messages.map((message, idx) => {
             const isAssistant = message.role === "assistant";
             const prevMessage = messages[idx - 1];
             const isGrouped = prevMessage && prevMessage.role === message.role;
-            const isSystemLog = isAssistant && !message.content?.trim() && (message.blocks || []).length === 0;
+            const isSystemLog = isAssistant && !message.content?.trim();
+            const isFirstVisibleMessage = !messages.slice(0, idx).some(m => m.role !== "assistant" || m.content?.trim());
 
             if (isSystemLog) {
               return (
-                <div key={message.id} className="ml-10 py-1.5 text-[11.5px] font-bold text-on-surface-variant/40 flex items-center gap-2">
-                  <div className="h-[1px] w-4 bg-on-surface-variant/10" />
-                  系统记录已同步
+                <div key={message.id} className="ml-11 py-2 flex items-center gap-3">
+                  <div className="h-px w-6 bg-on-surface/10" />
+                  <span className="text-[10px] font-black tracking-widest text-ui-muted opacity-40">任务记录已更新</span>
                 </div>
               );
             }
@@ -340,102 +273,108 @@ export function ConversationPanel({
             return (
               <motion.div
                 key={message.id}
-                initial={{ opacity: 0, x: -5 }}
+                initial={{ opacity: 0, x: isAssistant ? -8 : 8 }}
                 animate={{ opacity: 1, x: 0 }}
                 className={cn(
-                  "relative flex gap-4", 
-                  isAssistant ? "flex-row" : "flex-row-reverse justify-start",
-                  isGrouped ? "mt-2" : "mt-8",
-                  isGrouped ? "pb-0" : "pb-1"
+                  "relative flex gap-4 w-full", 
+                  isAssistant ? "flex-row" : "flex-row-reverse",
+                  isGrouped ? "mt-1" : isFirstVisibleMessage ? "mt-0" : "mt-4",
                 )}
               >
                 {isAssistant && (
                   <div className={cn(
-                    "absolute left-[13px] w-[1px] bg-on-surface-variant/8 transition-all pointer-events-none",
-                    !isGrouped ? "top-9" : "top-0",
-                    messages[idx + 1]?.role === "assistant" ? "bottom-[-2rem]" : "bottom-0"
+                    "absolute left-[15px] w-[1px] bg-on-surface/10 transition-all pointer-events-none",
+                    !isGrouped ? "top-10" : "top-0",
+                    messages[idx + 1]?.role === "assistant" ? "bottom-[-2.5rem]" : "bottom-0"
                   )} />
                 )}
                 <div className={cn(
-                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] transition-opacity z-10 mt-0.5",
-                  isAssistant ? "bg-surface-container border border-on-surface/8 text-primary shadow-[0_2px_8px_rgba(0,0,0,0.04)]" : "bg-primary text-white shadow-md shadow-primary/20",
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-opacity z-10 mt-1",
+                  isAssistant 
+                    ? "bg-on-surface/[0.04] border border-on-surface/12 text-primary" 
+                    : "bg-primary text-white",
                   isGrouped ? "opacity-0" : "opacity-100"
                 )}>
-                  {isAssistant ? <Bot className="w-3.5 h-3.5" /> : <User className="w-3.5 h-3.5" />}
+                  {isAssistant ? <Bot className="w-4 h-4" /> : <User className="w-4 h-4" />}
                 </div>
-                <div className="flex-1 flex flex-col gap-2 min-w-0">
+                <div className={cn("flex flex-col gap-2 min-w-0 max-w-[88%]", isAssistant ? "" : "items-end")}>
                   {message.content && (
                     <div
                       className={cn(
-                        "transition-all",
+                        "transition-all leading-relaxed",
                         isAssistant
-                          ? "text-on-surface pt-0.5"
-                          : "text-[14.5px] font-medium text-on-surface/80 whitespace-pre-wrap ml-auto max-w-[85%] pt-1 text-right leading-relaxed"
+                          ? "text-on-surface pt-1 px-1"
+                          : "rounded-xl bg-on-surface/[0.03] border border-on-surface/8 px-4 py-3 text-[13.5px] font-medium text-on-surface"
                       )}
                     >
-                      {isAssistant ? <MarkdownProse content={message.content} /> : message.content}
+                      {isAssistant ? <MarkdownProse content={message.content} /> : <span>{message.content}</span>}
                     </div>
                   )}
-                  {isAssistant && (message.blocks || []).map((block) => {
-                    if (block.type !== "unresolved_choices") return null;
-                    return (
-                      <div key={block.request_id} className="max-w-[90%] 2xl:max-w-[88%] transform group">
-                        <UnresolvedChoicesBubble
-                          block={block}
-                          drafts={resolutionDrafts[block.request_id] || {}}
-                          warning={resolutionWarnings[block.request_id] || null}
-                          isSubmitting={submittingRequestId === block.request_id}
-                          onPickFolder={(itemId, folder) => {
-                            updateDraft(block.request_id, itemId, (draft) => ({ ...draft, selected_folder: folder, custom_selected: false }));
-                          }}
-                          onPickCustom={(itemId) => {
-                            updateDraft(block.request_id, itemId, (draft) => ({ ...draft, selected_folder: "", custom_selected: true }));
-                          }}
-                          onChangeNote={(itemId, note) => {
-                            updateDraft(block.request_id, itemId, (draft) => ({ ...draft, note, custom_selected: true, selected_folder: "" }));
-                          }}
-                          onSetAllReview={() => {
-                            setResolutionDrafts((prev) => ({
-                              ...prev,
-                              [block.request_id]: Object.fromEntries(
-                                block.items.map((item) => {
-                                  const current = prev[block.request_id]?.[item.item_id] || { selected_folder: "", note: "", custom_selected: false };
-                                  return [item.item_id, { ...current, selected_folder: "Review", custom_selected: false }];
-                                }),
-                              ),
-                            }));
-                            setResolutionWarnings((prev) => ({ ...prev, [block.request_id]: null }));
-                          }}
-                          onSubmit={() => void handleSubmitUnresolved(block)}
-                        />
-                      </div>
-                    );
-                  })}
                 </div>
               </motion.div>
             );
           })}
+ 
+          {!assistantDraft && plannerStatus?.isRunning && (
+            <motion.div
+              key="assistant-planning-bubble"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex gap-4 mt-6"
+            >
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-on-surface/12 bg-on-surface/[0.04] text-primary mt-1">
+                <Bot className="w-4 h-4" />
+              </div>
+              <div className="flex-1 pt-1.5 min-w-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex gap-1.5 shrink-0">
+                    {[0, 0.2, 0.4].map((delay) => (
+                      <motion.span 
+                        key={delay} 
+                        animate={{ scale: [1, 1.4, 1], opacity: [0.4, 1, 0.4] }} 
+                        transition={{ repeat: Infinity, duration: 1.5, delay }} 
+                        className="w-1 h-1 bg-primary rounded-full" 
+                      />
+                    ))}
+                  </div>
+                  <span className="text-[12px] font-black tracking-tight text-primary">
+                    正在理解要求
+                  </span>
+                  {plannerStatus.elapsedLabel && (
+                    <span className="font-mono text-[10px] font-black text-ui-muted/30 ml-2">
+                       {plannerStatus.elapsedLabel}
+                    </span>
+                  )}
+                </div>
+                {plannerStatus.detail && (
+                  <p className="mt-1 text-[11px] font-medium text-ui-muted/50 truncate">
+                    {plannerStatus.detail}
+                  </p>
+                )}
+              </div>
+            </motion.div>
+          )}
 
           {assistantDraft && (
             <motion.div
               key="assistant-streaming-bubble"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex gap-4 mt-8"
+              className="flex gap-4 mt-6"
             >
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] border border-on-surface/8 bg-surface-container text-primary shadow-[0_2px_8px_rgba(0,0,0,0.04)] mt-0.5">
-                <Bot className="w-3.5 h-3.5" />
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-on-surface/12 bg-on-surface/[0.04] text-primary mt-1">
+                <Bot className="w-4 h-4" />
               </div>
-              <div className="flex-1 pt-0.5 text-on-surface">
-                <div className="mb-2 flex items-center gap-2 text-primary/70">
-                  <div className="flex gap-0.5">
+              <div className="flex-1 pt-1.5 text-on-surface">
+                <div className="mb-3 flex items-center gap-2.5">
+                  <div className="flex gap-1.5">
                     {[0, 0.2, 0.4].map((delay) => (
-                      <motion.span key={delay} animate={{ scale: [1, 1.2, 1], opacity: [0.4, 1, 0.4] }} transition={{ repeat: Infinity, duration: 2, delay }} className="w-1.5 h-1.5 bg-current rounded-full" />
+                      <motion.span key={delay} animate={{ scale: [1, 1.4, 1], opacity: [0.4, 1, 0.4] }} transition={{ repeat: Infinity, duration: 1.5, delay }} className="w-1 h-1 bg-primary rounded-full border border-primary/30" />
                     ))}
                   </div>
-                  <span className="ml-0 text-[11.5px] font-semibold uppercase tracking-wider">系统思考中</span>
+                  <span className="text-[10px] font-black tracking-widest text-primary opacity-80">正在生成整理建议</span>
                 </div>
-                <div className="relative">
+                <div className="relative border-l-2 border-primary/10 pl-5 py-1">
                   <MarkdownProse content={assistantDraft} />
                   <motion.span initial={{ opacity: 0 }} animate={{ opacity: [0, 1, 0] }} transition={{ repeat: Infinity, duration: 0.8 }} className="inline-block w-1.5 h-4 bg-primary/40 ml-1 translate-y-0.5" />
                 </div>
@@ -449,7 +388,7 @@ export function ConversationPanel({
             <button
               type="button"
               onClick={handleJumpToBottom}
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-primary/20 bg-surface shadow-xl shadow-primary/10 transition-all hover:scale-110 hover:border-primary/40 active:scale-95 text-primary backdrop-blur-sm"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-primary/20 bg-surface transition-all hover:scale-110 hover:border-primary/40 active:scale-95 text-primary backdrop-blur-sm"
               title="回到底部"
             >
               <ChevronDown className="h-5 w-5" />
@@ -464,7 +403,7 @@ export function ConversationPanel({
         composerStatus={composerStatus}
         plannerStatus={plannerStatus}
         unresolvedCount={unresolvedCount}
-        stage={stage}
+        canRunPrecheck={canRunPrecheck}
         isBusy={isBusy}
         isComposerLocked={isComposerLocked}
         messageInput={messageInput}

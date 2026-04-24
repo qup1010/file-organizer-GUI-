@@ -32,7 +32,7 @@ describe("ComposerBar", () => {
           isRunning: true,
         }}
         unresolvedCount={0}
-        stage="planning"
+        canRunPrecheck={false}
         isBusy={false}
         isComposerLocked
         messageInput=""

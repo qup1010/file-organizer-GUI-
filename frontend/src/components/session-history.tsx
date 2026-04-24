@@ -15,9 +15,20 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { HistoryItem } from "@/types/session";
-import { cn, getFriendlyStatus, formatDisplayDate, getFriendlyStage } from "@/lib/utils";
-import { getHistoryEntryName, isHistorySessionEntry, useHistoryList } from "@/lib/use-history-list";
+import { getSessionStageView } from "@/lib/session-view-model";
+import { HistoryItem, SessionStage } from "@/types/session";
+import { cn, formatDisplayDate } from "@/lib/utils";
+import {
+  getHistoryEntryHref,
+  getHistoryEntryName,
+  getHistoryEntrySummary,
+  isHistoryCompletedEntry,
+  isHistoryPartialFailureEntry,
+  isHistoryRollbackPartialFailureEntry,
+  isHistoryRolledBackEntry,
+  isHistorySessionEntry,
+  useHistoryList,
+} from "@/lib/use-history-list";
 
 import { EmptyState } from "@/components/ui/empty-state";
 
@@ -38,15 +49,11 @@ export function SessionHistory({ maxItems }: { maxItems?: number }) {
   } = useHistoryList();
 
   const handleContinue = (item: HistoryItem) => {
-    if (!isHistorySessionEntry(item)) {
-      router.push(`/workspace?execution_id=${item.execution_id}`);
-    } else {
-      router.push(`/workspace?session_id=${item.execution_id}`);
-    }
+    router.push(getHistoryEntryHref(item));
   };
 
   return (
-    <div className="flex min-h-0 flex-col space-y-3 overflow-hidden rounded-[8px] border border-on-surface/8 bg-surface-container-lowest p-4 shadow-[0_6px_18px_rgba(0,0,0,0.04)] min-[1680px]:h-full">
+    <div className="flex min-h-0 flex-col space-y-3 overflow-hidden rounded-[8px] border border-on-surface/8 bg-surface-container-lowest p-4 min-[1680px]:h-full">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <div className="flex flex-col gap-1.5">
           <h3 className="flex items-center gap-2.5 text-[15px] font-black text-on-surface">
@@ -92,7 +99,9 @@ export function SessionHistory({ maxItems }: { maxItems?: number }) {
                 { id: "all", label: "全部" },
                 { id: "active", label: "进行中" },
                 { id: "completed", label: "已完成" },
+                { id: "partial_failure", label: "部分失败" },
                 { id: "rolled_back", label: "已回退" },
+                { id: "rollback_partial_failure", label: "回退部分失败" },
               ].map((item) => (
                 <button
                   key={item.id}
@@ -124,13 +133,15 @@ export function SessionHistory({ maxItems }: { maxItems?: number }) {
         ) : (
           <div className="space-y-2.5">
           {(maxItems ? filteredHistory.slice(0, maxItems) : filteredHistory).map((item, idx) => {
-            const isRolledBack = item.status === 'rolled_back';
-            const isCompleted = item.status === 'success' || item.status === 'completed';
             const isSession = isHistorySessionEntry(item);
+            const sessionStageView = isSession ? getSessionStageView(item.status as SessionStage) : null;
+            const isCompleted = isSession ? Boolean(sessionStageView?.isCompleted) : isHistoryCompletedEntry(item);
+            const isRolledBack = isHistoryRolledBackEntry(item);
+            const isPartialFailure = isHistoryPartialFailureEntry(item) || isHistoryRollbackPartialFailureEntry(item);
             const dirName = getHistoryEntryName(item);
             
-            const actionLabel = isSession ? "查看任务" : "查看结果";
-            const statusLabel = isSession ? getFriendlyStage(item.status) : getFriendlyStatus(item.status);
+            const actionLabel = isSession ? "查看任务" : isRolledBack ? "查看回退" : "查看结果";
+            const statusLabel = getHistoryEntrySummary(item);
             const hasFailures = (item.failure_count || 0) > 0;
 
             return (
@@ -148,70 +159,70 @@ export function SessionHistory({ maxItems }: { maxItems?: number }) {
                     handleContinue(item);
                   }
                 }}
-                className="group cursor-pointer overflow-hidden rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-3 py-2.5 transition-colors hover:border-primary/18 hover:bg-surface-container-lowest"
+                className="group cursor-pointer overflow-hidden rounded-xl border border-on-surface/6 bg-surface-container-lowest px-3 py-2 transition-all hover:border-primary/25 hover:bg-surface-container-low"
               >
-                <div className="flex items-start gap-2.5">
+                <div className="flex items-center gap-3">
                   <div className={cn(
-                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] transition-colors",
+                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors border",
                     isRolledBack 
-                      ? "bg-surface-container text-on-surface-variant/70" 
+                      ? "bg-on-surface/5 border-on-surface/10 text-on-surface-variant/40" 
+                      : isPartialFailure
+                        ? "bg-warning/5 border-warning/10 text-warning"
                       : isCompleted
-                        ? "bg-success/10 text-success-dim"
-                        : "bg-primary/10 text-primary"
+                        ? "bg-success/5 border-success/10 text-success-dim"
+                        : "bg-primary/5 border-primary/10 text-primary"
                   )}>
-                    {isRolledBack ? <Undo2 className="h-4 w-4" /> : isCompleted ? <CheckCircle2 className="h-4 w-4" /> : <Activity className="h-4 w-4" />}
+                    {isRolledBack ? <Undo2 className="h-3.5 w-3.5" /> : <Activity className="h-3.5 w-3.5" />}
                   </div>
 
-                  <div className="min-w-0 flex-1 space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h4 className="truncate text-[14px] font-semibold text-on-surface transition-colors group-hover:text-primary">
-                            {dirName}
-                          </h4>
-                          <span className={cn(
-                            "rounded-[8px] px-2 py-0.5 text-[12px] font-semibold",
-                            isRolledBack ? "bg-on-surface/5 text-ui-muted" : "bg-primary/8 text-primary"
-                          )}>
-                            {statusLabel}
-                          </span>
-                        </div>
-                        <p className="mt-1 truncate pr-1 text-[12px] text-ui-muted" title={item.target_dir}>
-                          {item.target_dir}
-                        </p>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 flex-1 items-center gap-2">
+                        <h4 className="truncate text-[12.5px] font-black text-on-surface group-hover:text-primary transition-colors">
+                          {dirName}
+                        </h4>
+                        <span className={cn(
+                          "shrink-0 rounded-[4px] px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider border",
+                          isRolledBack
+                            ? "bg-on-surface/5 border-on-surface/10 text-ui-muted"
+                            : isPartialFailure
+                              ? "bg-warning/10 border-warning/20 text-warning"
+                              : isCompleted
+                                ? "bg-success/10 border-success/20 text-success-dim"
+                                : "bg-primary/10 border-primary/20 text-primary"
+                        )}>
+                          {statusLabel}
+                        </span>
                       </div>
-
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          requestDelete(item.execution_id);
-                        }}
-                        className="rounded-[8px] border border-on-surface/8 bg-surface-container-lowest p-1.5 text-ui-muted transition-colors hover:border-error/20 hover:text-error"
-                        title="删除这条记录"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                         <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            requestDelete(item.execution_id);
+                          }}
+                          className="rounded-md p-1 text-ui-muted hover:bg-error/5 hover:text-error transition-colors"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
                     </div>
 
-                    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2 text-[12px] text-ui-muted">
-                      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
-                        <span className="inline-flex items-center gap-1.5">
-                          <Clock className="h-3.5 w-3.5" />
+                    <div className="mt-1 flex items-center justify-between gap-3 text-[10.5px] font-medium text-ui-muted opacity-60">
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
                           {formatDisplayDate(item.created_at)}
                         </span>
-                        <span className="inline-flex items-center gap-1.5">
-                          <FolderOpen className="h-3.5 w-3.5 text-primary/55" />
-                          {item.item_count || 0} 项
+                        <span className="flex items-center gap-1 border-l border-on-surface/10 pl-2">
+                          <FolderOpen className="h-3 w-3" />
+                          {item.item_count || 0}
                         </span>
-                        {hasFailures ? (
-                          <span className="font-semibold text-error">{item.failure_count} 项失败</span>
-                        ) : null}
+                        {hasFailures && (
+                          <span className="font-black text-error">· {item.failure_count} 项失败</span>
+                        )}
                       </div>
-                      <span className="inline-flex shrink-0 items-center gap-1 rounded-[8px] bg-surface-container px-2 py-1 font-semibold text-primary/80">
-                        <span className="hidden 2xl:inline">{actionLabel}</span>
-                        <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
-                      </span>
+                      <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
                     </div>
                   </div>
                 </div>

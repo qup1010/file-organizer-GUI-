@@ -168,3 +168,11 @@ export interface ApplyIconResult {
   status: "applied" | "restored" | "failed" | string;
   message: string;
 }
+
+export interface BackgroundRemovalBatchProgress {
+  total: number;
+  completed: number;
+  success: number;
+  failed: number;
+  activeFolderNames: string[];
+}

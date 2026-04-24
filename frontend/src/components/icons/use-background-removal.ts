@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState, type Dispatch, type SetStateAction } fr
 
 import { createApiClient } from "@/lib/api";
 import { getApiBaseUrl, getApiToken, invokeTauriCommand, waitForRuntimeConfig } from "@/lib/runtime";
-import type { IconPreviewVersion, IconWorkbenchSession } from "@/types/icon-workbench";
+import type { BackgroundRemovalBatchProgress, IconPreviewVersion, IconWorkbenchSession } from "@/types/icon-workbench";
 
 interface UseBackgroundRemovalOptions {
   desktopReady: boolean;
@@ -12,14 +12,6 @@ interface UseBackgroundRemovalOptions {
   setSession: Dispatch<SetStateAction<IconWorkbenchSession | null>>;
   setError: Dispatch<SetStateAction<string | null>>;
   showNotice: (message: string | null, detail?: string | null) => void;
-}
-
-export interface BackgroundRemovalBatchProgress {
-  total: number;
-  completed: number;
-  success: number;
-  failed: number;
-  activeFolderNames: string[];
 }
 
 interface RemoveBgOutcome {

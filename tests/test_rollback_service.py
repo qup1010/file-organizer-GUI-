@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest import mock
 
 from file_organizer.execution import service as execution_service
+from file_organizer.execution.models import ExecutionJournalItem
 from file_organizer.organize import service as organizer_service
 from file_organizer.rollback import service as rollback_service
 
@@ -95,6 +96,35 @@ class RollbackServiceTests(unittest.TestCase):
         self.assertEqual(plan.actions[0].source, (self.base_dir / "Review" / "ok.txt").resolve())
         self.assertEqual(plan.actions[0].target, (self.base_dir / "ok.txt").resolve())
 
+    def test_build_rollback_plan_preserves_item_metadata_from_journal(self):
+        journal = rollback_service.ExecutionJournal(
+            execution_id="exec-1",
+            target_dir=str(self.base_dir.resolve()),
+            created_at="2026-04-20T00:00:00Z",
+            status="completed",
+            items=[
+                ExecutionJournalItem(
+                    action_type="MOVE",
+                    status="success",
+                    message="移动成功",
+                    raw='MOVE "demo.txt" "Docs/demo.txt"',
+                    source_before=str((self.base_dir / "demo.txt").resolve()),
+                    target_after=str((self.base_dir / "Docs" / "demo.txt").resolve()),
+                    item_id="F001",
+                    source_ref_id="F001",
+                    target_slot_id="D001",
+                    display_name="demo.txt",
+                )
+            ],
+        )
+
+        plan = rollback_service.build_rollback_plan(journal)
+
+        self.assertEqual(plan.actions[0].item_id, "F001")
+        self.assertEqual(plan.actions[0].source_ref_id, "F001")
+        self.assertEqual(plan.actions[0].target_slot_id, "D001")
+        self.assertEqual(plan.actions[0].display_name, "demo.txt")
+
     def test_validate_rollback_preconditions_blocks_when_target_exists(self):
         (self.base_dir / "demo.txt").write_text("demo", encoding="utf-8")
         journal = self._write_execution_journal('<COMMANDS>\nMKDIR "Docs"\nMOVE "demo.txt" "Docs/demo.txt"\n</COMMANDS>')
@@ -127,6 +157,26 @@ class RollbackServiceTests(unittest.TestCase):
         self.assertTrue((self.base_dir / "demo.txt").exists())
         self.assertFalse((self.base_dir / "Docs").exists())
 
+    def test_render_rollback_preview_shows_display_name_when_present(self):
+        plan = rollback_service.RollbackPlan(
+            execution_id="exec-3",
+            target_dir=self.base_dir.resolve(),
+            actions=[
+                rollback_service.RollbackAction(
+                    type="MOVE",
+                    source=(self.base_dir / "Docs" / "demo.txt").resolve(),
+                    target=(self.base_dir / "demo.txt").resolve(),
+                    item_id="F001",
+                    display_name="demo.txt",
+                )
+            ],
+        )
+        precheck = rollback_service.RollbackPrecheckResult(can_execute=True)
+
+        preview = rollback_service.render_rollback_preview(plan, precheck)
+
+        self.assertIn("[demo.txt]", preview)
+
     def test_finalize_rollback_state_clears_latest_pointer_after_success(self):
         (self.base_dir / "demo.txt").write_text("demo", encoding="utf-8")
         journal = self._write_execution_journal('<COMMANDS>\nMKDIR "Docs"\nMOVE "demo.txt" "Docs/demo.txt"\n</COMMANDS>')
@@ -140,6 +190,47 @@ class RollbackServiceTests(unittest.TestCase):
 
         latest_index = json.loads(self.latest_path.read_text(encoding="utf-8"))
         self.assertNotIn(str(self.base_dir.resolve()), latest_index)
+
+    def test_finalize_rollback_state_writes_item_metadata_into_attempts(self):
+        execution_journal = rollback_service.ExecutionJournal(
+            execution_id="exec-2",
+            target_dir=str(self.base_dir.resolve()),
+            created_at="2026-04-20T00:00:00Z",
+            status="completed",
+            items=[],
+            rollback_attempts=[],
+        )
+        report = rollback_service.RollbackReport(
+            success_count=1,
+            failure_count=0,
+            results=[
+                rollback_service.RollbackItemResult(
+                    action=rollback_service.RollbackAction(
+                        type="MOVE",
+                        source=(self.base_dir / "Docs" / "demo.txt").resolve(),
+                        target=(self.base_dir / "demo.txt").resolve(),
+                        item_id="F001",
+                        source_ref_id="F001",
+                        target_slot_id="D001",
+                        display_name="demo.txt",
+                    ),
+                    status="success",
+                    message="回退移动成功",
+                )
+            ],
+        )
+
+        with mock.patch.object(rollback_service.config, "EXECUTION_LOG_DIR", self.executions_dir), \
+             mock.patch.object(rollback_service.config, "LATEST_BY_DIRECTORY_PATH", self.latest_path):
+            rollback_service.save_execution_journal(execution_journal)
+            rollback_service.finalize_rollback_state(execution_journal, report)
+
+        stored = json.loads((self.executions_dir / "exec-2.json").read_text(encoding="utf-8"))
+        attempt = stored["rollback_attempts"][0]["results"][0]
+        self.assertEqual(attempt["item_id"], "F001")
+        self.assertEqual(attempt["source_ref_id"], "F001")
+        self.assertEqual(attempt["target_slot_id"], "D001")
+        self.assertEqual(attempt["display_name"], "demo.txt")
 
 
 if __name__ == "__main__":

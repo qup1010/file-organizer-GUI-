@@ -10,6 +10,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use tauri::{App, Manager, RunEvent};
+use serde::Serialize;
 
 use crate::icon_apply::{
     apply_folder_icon,
@@ -35,6 +36,83 @@ fn pick_directories() -> Option<Vec<String>> {
             .map(|path| path.to_string_lossy().into_owned())
             .collect()
     })
+}
+
+#[tauri::command]
+fn pick_files() -> Option<Vec<String>> {
+    rfd::FileDialog::new().pick_files().map(|paths| {
+        paths
+            .into_iter()
+            .map(|path| path.to_string_lossy().into_owned())
+            .collect()
+    })
+}
+
+#[derive(Serialize)]
+struct InspectedPath {
+    path: String,
+    is_dir: bool,
+    is_file: bool,
+}
+
+#[derive(Serialize)]
+struct DirectoryEntry {
+    path: String,
+    is_dir: bool,
+    is_file: bool,
+}
+
+#[tauri::command]
+fn inspect_paths(paths: Vec<String>) -> Vec<InspectedPath> {
+    paths
+        .into_iter()
+        .map(|path| {
+            let metadata = fs::metadata(&path).ok();
+            let is_dir = metadata.as_ref().is_some_and(|item| item.is_dir());
+            let is_file = metadata.as_ref().is_some_and(|item| item.is_file());
+
+            InspectedPath {
+                path,
+                is_dir,
+                is_file,
+            }
+        })
+        .collect()
+}
+
+#[tauri::command]
+fn list_directory_entries(path: String) -> Result<Vec<DirectoryEntry>, String> {
+    let directory = PathBuf::from(&path);
+    let entries = fs::read_dir(&directory)
+        .map_err(|error| format!("failed to read directory {}: {error}", directory.display()))?;
+
+    let mut result: Vec<DirectoryEntry> = entries
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let file_name = entry.file_name();
+            let name = file_name.to_string_lossy();
+            if name.starts_with('.') {
+                return None;
+            }
+
+            let path = entry.path();
+            let metadata = entry.metadata().ok()?;
+            Some(DirectoryEntry {
+                path: path.to_string_lossy().into_owned(),
+                is_dir: metadata.is_dir(),
+                is_file: metadata.is_file(),
+            })
+        })
+        .collect();
+
+    result.sort_by(|left, right| {
+        right
+            .is_dir
+            .cmp(&left.is_dir)
+            .then_with(|| left.path.to_lowercase().cmp(&right.path.to_lowercase()))
+    });
+
+    Ok(result)
 }
 
 #[tauri::command]
@@ -303,6 +381,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             pick_directory,
             pick_directories,
+            pick_files,
+            inspect_paths,
+            list_directory_entries,
             open_directory,
             save_file_as,
             get_runtime_config,

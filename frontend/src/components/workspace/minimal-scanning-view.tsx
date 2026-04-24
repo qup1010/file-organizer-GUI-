@@ -2,25 +2,23 @@
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
-  Loader2, 
-  StopCircle, 
-  Search, 
-  FileText, 
   Activity,
   AlertCircle,
+  CheckCircle2,
+  Clock3,
+  FolderOpen,
+  StopCircle, 
+  Loader2,
+  FileText, 
   Archive,
-  Layers,
-  Sparkles,
-  RefreshCw,
   FileIcon,
-  FileType,
   Image as ImageIcon,
   Film,
   Music,
   FileJson,
   FileCode,
-  Box,
   Binary,
+  Terminal,
 } from "lucide-react";
 import Link from "next/link";
 import { clsx, type ClassValue } from "clsx";
@@ -28,37 +26,16 @@ import { twMerge } from "tailwind-merge";
 
 import { ScannerProgress } from "@/types/session";
 import { Button } from "@/components/ui/button";
+import { deriveScannerProgressViewModel } from "@/lib/scanner-progress-view";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-type PipelineStepState = "active" | "done" | "pending";
-
-interface PipelineStep {
-  id: string;
-  title: string;
-  detail: string;
-  state: PipelineStepState;
-  icon: React.ComponentType<{ className?: string }>;
-}
-
-const GENERIC_SCAN_ITEMS = new Set([
-  "当前目录",
-  "正在准备扫描任务",
-  "正在等待模型响应",
-  "正在读取目录...",
-]);
-
-function isSpecificScanItem(value: string | null | undefined): boolean {
-  const text = String(value || "").trim();
-  if (!text || GENERIC_SCAN_ITEMS.has(text)) {
-    return false;
+function getFileIcon(filename: string, entryType?: string) {
+  if (entryType === "dir") {
+    return { icon: FolderOpen, color: "text-amber-600", bg: "bg-amber-500/10" };
   }
-  return !text.startsWith("已启动 ") && !text.startsWith("第 ");
-}
-
-function getFileIcon(filename: string) {
   const ext = filename.split(".").pop()?.toLowerCase() || "";
   if (["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp"].includes(ext)) {
     return { icon: ImageIcon, color: "text-purple-500", bg: "bg-purple-500/10" };
@@ -75,10 +52,8 @@ function getFileIcon(filename: string) {
   if (["pdf"].includes(ext)) {
     return { icon: FileText, color: "text-red-500", bg: "bg-red-500/10" };
   }
-  if (["doc", "docx", "txt", "md", "rtf"].includes(ext)) {
-    return { icon: FileLinesIcon, color: "text-blue-600", bg: "bg-blue-600/10" };
-  }
-  if (["js", "ts", "tsx", "jsx", "py", "go", "rs", "cpp", "c", "h", "java", "html", "css"].includes(ext)) {
+  const codeExts = ["js", "ts", "tsx", "jsx", "py", "go", "rs", "cpp", "c", "h", "java", "html", "css"];
+  if (codeExts.includes(ext)) {
     return { icon: FileCode, color: "text-emerald-500", bg: "bg-emerald-500/10" };
   }
   if (["json", "yaml", "yml", "xml"].includes(ext)) {
@@ -88,89 +63,6 @@ function getFileIcon(filename: string) {
     return { icon: Binary, color: "text-slate-500", bg: "bg-slate-500/10" };
   }
   return { icon: FileIcon, color: "text-on-surface-variant/40", bg: "bg-on-surface/5" };
-}
-
-const FileLinesIcon = ({ className }: { className?: string }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
-);
-
-function derivePipelineSteps(scanner: ScannerProgress): PipelineStep[] {
-  const message = String(scanner.message || "").trim();
-  const currentItem = String(scanner.current_item || "").trim();
-  const totalCount = Math.max(0, Number(scanner.total_count || 0));
-  const processedCount = Math.max(0, Number(scanner.processed_count || 0));
-  const recentCount = (scanner.recent_analysis_items || []).length;
-  const batchCount = Math.max(0, Number(scanner.batch_count || 0));
-  const completedBatches = Math.max(0, Number(scanner.completed_batches || 0));
-  const isRetrying = Boolean(scanner.is_retrying);
-  const isThinking = Boolean(scanner.ai_thinking);
-  const status = String(scanner.status || "running");
-  
-  const hasSpecificItem = isSpecificScanItem(currentItem);
-  const isCompleted = status === "completed";
-
-  // Step 1: Prepare
-  const isPrepareDone = totalCount > 0 || isCompleted;
-  
-  // Step 2: Read structure
-  const isReadStructureDone = totalCount > 0 || isCompleted;
-  
-  // Step 3: Analyze
-  const isAnalyzeActive = !isCompleted && isReadStructureDone;
-  const isAnalyzeDone = isCompleted;
-
-  const analysisTitle = batchCount > 0 ? "并行内容分析" : "读取与分析";
-  let analysisDetail = "等待开始";
-  if (isCompleted) {
-    analysisDetail = `已完成分析 ${processedCount} 项`;
-  } else if (batchCount > 0) {
-    analysisDetail = `处理中 (批次进度: ${completedBatches}/${batchCount})`;
-  } else if (hasSpecificItem) {
-    analysisDetail = `当前正在处理：${currentItem}`;
-  } else if (processedCount > 0) {
-    analysisDetail = `已处理 ${processedCount}/${totalCount} 项`;
-  } else if (isThinking) {
-    analysisDetail = `正在分析目录内容...`;
-  }
-
-  // Step 4: Summarize
-  const isSummarizeDone = isCompleted && !isRetrying;
-  const isSummarizeActive = isRetrying || (!isCompleted && message.includes("结果需要修正"));
-
-  return [
-    {
-      id: "prepare",
-      title: "建立扫描任务",
-      detail: totalCount > 0 ? `发现 ${totalCount} 个待分析项` : "正在确认目录范围",
-      state: isPrepareDone ? "done" : "active",
-      icon: Search,
-    },
-    {
-      id: "read-structure",
-      title: "读取目录索引",
-      detail: isReadStructureDone ? "已提取文件列表" : "正在梳理文件关联",
-      state: isReadStructureDone ? "done" : isPrepareDone ? "active" : "pending",
-      icon: Layers,
-    },
-    {
-      id: "analyze",
-      title: analysisTitle,
-      detail: analysisDetail,
-      state: isAnalyzeDone ? "done" : isAnalyzeActive ? "active" : "pending",
-      icon: FileText,
-    },
-    {
-      id: "summarize",
-      title: isRetrying ? "重新校验格式" : "整理分析结论",
-      detail: isRetrying
-        ? (message || "正在尝试纠正模型输出")
-        : isSummarizeDone
-          ? "已生成最终报告"
-          : "等待汇总整体结果",
-      state: isSummarizeDone ? "done" : isSummarizeActive ? "active" : "pending",
-      icon: isRetrying ? RefreshCw : Sparkles,
-    },
-  ];
 }
 
 interface MinimalScanningViewProps {
@@ -188,313 +80,247 @@ export function MinimalScanningView({
   aborting = false,
   isModelConfigured = true 
 }: MinimalScanningViewProps) {
-  const currentItem = scanner.current_item || "正在读取目录...";
-  const recentItems = scanner.recent_analysis_items || [];
-  const isRetrying = scanner.is_retrying;
-  const isThinking = scanner.ai_thinking;
-  const totalCount = Math.max(0, Number(scanner.total_count || 0));
-  const processedCount = Math.max(0, Number(scanner.processed_count || 0));
-  
-  const pipelineSteps = React.useMemo(() => derivePipelineSteps(scanner), [scanner]);
-  const hasLiveItems = recentItems.length > 0 || isThinking;
-
-  // Elapsed time logic
-  const [startTime] = React.useState(Date.now());
-  const [elapsed, setElapsed] = React.useState(0);
+  const viewModel = React.useMemo(
+    () => deriveScannerProgressViewModel(scanner, progressPercent),
+    [scanner, progressPercent],
+  );
+  const [scanStartedAt] = React.useState(() => Date.now());
+  const [elapsedSeconds, setElapsedSeconds] = React.useState(0);
 
   React.useEffect(() => {
-    if (scanner.status === "completed") return;
-    const timer = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - startTime) / 1000));
+    if (scanner.status === "completed") {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - scanStartedAt) / 1000)));
     }, 1000);
-    return () => clearInterval(timer);
-  }, [startTime, scanner.status]);
+    return () => window.clearInterval(timer);
+  }, [scanStartedAt, scanner.status]);
 
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}:${s.toString().padStart(2, "0")}`;
+  const formatElapsedLabel = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-transparent">
-      <div className="flex-1 overflow-y-auto p-4 lg:p-6 scrollbar-thin">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.99 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="mx-auto max-w-[1360px] space-y-4"
-        >
-          {!isModelConfigured && (
-            <div className="flex items-center justify-between gap-4 rounded-[12px] border border-warning/20 bg-warning-container/20 p-4 backdrop-blur-md">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-warning/15 text-warning">
-                  <AlertCircle className="h-5 w-5" />
-                </div>
-                <div className="space-y-0.5">
-                  <p className="text-[14px] font-black text-on-surface">AI 文本模型未配置</p>
-                  <p className="text-[12px] font-medium text-ui-muted">未配置模型将无法分析文件具体用途，建议前往“设置”页面完成配置。</p>
-                </div>
+    <div className="flex h-full flex-col overflow-hidden bg-surface">
+      {/* 顶部仪表盘 - 紧凑、高度对齐 */}
+      <div className="z-10 border-b border-on-surface/10 bg-surface-container-lowest/50 px-6 py-4 backdrop-blur-md">
+        <div className="mx-auto flex max-w-[1280px] flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary border border-primary/20">
+                <Activity className="h-5 w-5" />
               </div>
-              <Link href="/settings">
-                <Button variant="secondary" size="sm" className="whitespace-nowrap px-4 font-bold rounded-[8px]">
-                  去配置模型
-                </Button>
-              </Link>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="rounded bg-primary/20 px-1.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-primary">
+                    {viewModel.eyebrow}
+                  </span>
+                  <div className="h-3 w-[1px] bg-on-surface/10" />
+                  <span className="text-[10px] font-bold text-ui-muted uppercase tracking-widest">{viewModel.stageLabel}</span>
+                </div>
+                <h2 className="mt-0.5 text-[18px] font-black tracking-tight text-on-surface">
+                  {viewModel.title}
+                </h2>
+              </div>
             </div>
-          )}
 
-          {/* 统一外壳容器 */}
-          <div className="flex flex-col rounded-[12px] border border-on-surface/8 bg-surface-container-lowest shadow-sm overflow-hidden min-w-0 relative">
-            {/* 后台进度条填充动画 */}
-            <div className="absolute top-0 left-0 right-0 h-1 bg-on-surface/[0.03] z-0">
+            <div className="flex items-center gap-6">
+              <div className="hidden flex-col items-end sm:flex">
+                <span className="text-[10px] font-black tracking-widest text-ui-muted/40">已用时间</span>
+                <span className="font-mono text-[16px] font-bold text-on-surface">{formatElapsedLabel(elapsedSeconds)}</span>
+              </div>
+              <div className="h-8 w-[1px] bg-on-surface/10" />
+              {onAbort && (
+                <button
+                  type="button"
+                  onClick={onAbort}
+                  disabled={aborting}
+                  className="group flex h-10 items-center gap-2 rounded-lg border border-on-surface/10 bg-surface-container-lowest px-4 text-[11px] font-black uppercase tracking-widest transition-all hover:bg-error/5 hover:text-error hover:border-error/20 active:scale-95 disabled:opacity-40"
+                >
+                  {aborting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <StopCircle className="h-3.5 w-3.5" />}
+                  <span>{aborting ? "正在停止" : "停止扫描"}</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-on-surface/5">
               <motion.div
-                className={cn("h-full", isRetrying ? "bg-warning" : "bg-primary")}
+                className="h-full bg-primary"
                 initial={{ width: 0 }}
-                animate={{ width: `${Math.max(2, progressPercent)}%` }}
-                transition={{ type: "spring", stiffness: 45, damping: 22 }}
+                animate={{ width: `${Math.max(viewModel.progressPercent, 4)}%` }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
               />
             </div>
+            <span className="min-w-[48px] font-mono text-[13px] font-black text-primary text-right">
+              {Math.round(viewModel.progressPercent)}%
+            </span>
+          </div>
+        </div>
+      </div>
 
-            {/* Header: Title + Stats */}
-            <div className={cn(
-              "border-b border-on-surface/6 px-5 py-3.5 relative z-10 transition-all duration-500",
-              isRetrying ? "bg-warning/[0.02]" : "bg-on-surface/[0.01]"
-            )}>
-              <div className="flex items-start justify-between gap-4 mb-4">
-                <div className="space-y-0.5">
-                  <h2 className="flex items-center gap-2 text-[14.5px] font-bold tracking-tight text-on-surface">
-                    {isRetrying ? (
-                      <RefreshCw className="h-4 w-4 text-warning animate-spin-slow" />
-                    ) : (
-                      <div className="relative flex items-center justify-center">
-                        <Activity className="h-4 w-4 text-primary" />
-                        <motion.div 
-                          className="absolute inset-0 bg-primary/20 rounded-full"
-                          animate={{ scale: [1, 1.6, 1], opacity: [0.3, 0, 0.3] }}
-                          transition={{ duration: 2, repeat: Infinity }}
-                        />
+      <div className="flex-1 overflow-hidden">
+        <div className="grid h-full max-w-[1280px] mx-auto grid-cols-1 overflow-hidden lg:grid-cols-[1fr_360px]">
+          {/* 左侧：深度实时分析状态 */}
+          <div className="flex flex-col border-r border-on-surface/5 bg-on-surface/[0.01]">
+            <div className="flex-1 overflow-y-auto p-8 scrollbar-thin">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={viewModel.currentItem || "init"}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 10 }}
+                  className="space-y-8"
+                >
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                       <span className="flex h-5 w-5 items-center justify-center rounded-md bg-primary/10 text-primary">
+                         <Terminal className="h-3 w-3" />
+                       </span>
+                       <span className="text-[10px] font-black tracking-widest text-primary/60">正在查看的项目</span>
+                    </div>
+                    
+                    <div className="min-h-[140px] rounded-2xl border border-on-surface/10 bg-surface-container-lowest p-6">
+                      <div className="flex items-start gap-4">
+                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-on-surface/[0.03] border border-on-surface/5">
+                           <FileText className="h-6 w-6 text-primary/60" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="truncate text-[22px] font-black tracking-tight text-on-surface">
+                            {viewModel.currentItem || "正在准备读取目录..."}
+                          </h3>
+                          <div className="mt-2 flex flex-wrap items-center gap-3">
+                             <div className="flex items-center gap-1.5 rounded-full border border-on-surface/8 px-2.5 py-0.5 text-[11px] font-bold text-ui-muted opacity-80">
+                                <Activity className="h-3 w-3" />
+                                {viewModel.progressText || "等待扫描就绪"}
+                             </div>
+                             <span className="text-[11px] font-medium text-ui-muted/40 italic">{viewModel.description}</span>
+                          </div>
+                        </div>
                       </div>
-                    )} 
-                    {isRetrying ? "正在交叉校验纠错..." : "正在深入扫描目录"}
-                  </h2>
-                  <p className="text-[12px] font-medium text-ui-muted opacity-70">
-                    {isRetrying ? "检测到特殊文件特征，已触发深度复核。" : "分析文件特征、逻辑归属并建立建议方案。"}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1.5 rounded-md border border-on-surface/8 bg-surface px-2 py-1 shadow-sm">
-                    <span className="text-[10px] font-bold text-ui-muted uppercase tracking-wider opacity-50">用时</span>
-                    <span className="text-[12.5px] font-mono font-bold text-on-surface">{formatTime(elapsed)}</span>
-                  </div>
-                  {onAbort && (
-                    <button
-                      onClick={onAbort}
-                      disabled={aborting}
-                      className="inline-flex h-7 items-center gap-1 rounded-md border border-error/20 bg-error/5 px-2 text-[10px] font-bold text-error transition-all hover:bg-error/15 disabled:opacity-50"
-                    >
-                      <StopCircle className="h-3 w-3" />
-                      {aborting ? "中止中" : "中止"}
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-y-3 gap-x-8 border-t border-on-surface/[0.04] pt-4">
-                <div className="flex items-center gap-8">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-ui-muted opacity-40 leading-none mb-1">进度</span>
-                    <span className="text-[16px] font-bold tabular-nums text-on-surface flex items-baseline gap-0.5">
-                      {Math.round(progressPercent)}<span className="text-[11px] opacity-30">%</span>
-                    </span>
-                  </div>
-                  <div className="h-6 w-px bg-on-surface/[0.06]" />
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-ui-muted opacity-40 leading-none mb-1">已处理</span>
-                    <span className="text-[16px] font-bold tabular-nums text-on-surface">
-                      {scanner.processed_count} <span className="text-[11px] text-ui-muted font-medium opacity-25">/ {scanner.total_count}</span>
-                    </span>
-                  </div>
-                  {scanner.batch_count ? (
-                    <>
-                      <div className="h-6 w-px bg-on-surface/[0.06]" />
-                      <div className="flex flex-col">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-ui-muted opacity-40 leading-none mb-1">队列</span>
-                        <span className="text-[16px] font-bold tabular-nums text-on-surface">
-                          {scanner.completed_batches || 0} <span className="text-[11px] text-ui-muted font-medium opacity-25">/ {scanner.batch_count}</span>
-                        </span>
+                      
+                      <div className="mt-6 grid grid-cols-2 gap-4 border-t border-on-surface/5 pt-6">
+                         <div>
+                            <span className="text-[10px] font-black tracking-widest text-ui-muted/40">读取范围</span>
+                            <p className="mt-1 text-[13px] font-bold text-on-surface/80">包含子目录</p>
+                         </div>
+                         <div>
+                            <span className="text-[10px] font-black tracking-widest text-ui-muted/40">当前状态</span>
+                            <div className="mt-1 flex items-center gap-1.5 text-[13px] font-bold text-success-dim">
+                               <div className="h-1.5 w-1.5 rounded-full bg-success-dim animate-pulse" />
+                               正在分析
+                            </div>
+                         </div>
                       </div>
-                    </>
-                  ) : null}
-                </div>
-
-                <div className="ml-auto flex items-center gap-2.5 rounded-lg bg-primary/[0.03] border border-primary/10 p-1 pr-3 max-w-[45%]">
-                  <div className="relative flex h-7.5 w-7.5 shrink-0 items-center justify-center rounded-md bg-primary/10">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <div className="text-[9px] font-bold uppercase tracking-wider text-primary/50 leading-none mb-1">正在分析</div>
-                    <p className="text-[12px] font-bold text-on-surface leading-none truncate" title={currentItem}>
-                      {currentItem}
+
+                  <div className="space-y-4">
+                     <div className="flex items-center gap-2">
+                       <span className="flex h-5 w-5 items-center justify-center rounded-md bg-on-surface/5 text-on-surface/40">
+                         <CheckCircle2 className="h-3 w-3" />
+                       </span>
+                       <span className="text-[10px] font-black tracking-widest text-ui-muted/40">安全说明</span>
+                    </div>
+                    <p className="text-[12px] leading-relaxed text-ui-muted/60 max-w-[600px]">
+                      扫描阶段只读取文件信息和必要摘要，不会移动或改写原文件。真正移动前还会先做安全检查。
                     </p>
                   </div>
-                </div>
-              </div>
+                </motion.div>
+              </AnimatePresence>
             </div>
+          </div>
 
-            {/* Tree Section Mapped to Concurrent Log Stream */}
-            <div className="flex flex-col lg:flex-row min-w-0 divide-x divide-on-surface/[0.04] bg-on-surface/[0.005]">
-              <div className="flex-1 flex flex-col min-w-0">
-                <div className="flex items-center justify-between px-5 py-2.5 bg-on-surface/[0.015] border-b border-on-surface/[0.04]">
-                  <h3 className="flex items-center gap-2 text-[12px] font-bold text-on-surface/50">
-                    <Layers className="h-3.5 w-3.5" /> 整理流水线
-                  </h3>
-                  
-                  <div className="flex items-center gap-2 rounded-full border border-primary/10 bg-primary/5 px-2 py-0.5">
-                    <span className="relative flex h-1 w-1">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/40 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-1 w-1 bg-primary/80"></span>
-                    </span>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-primary/70">状态追踪</span>
-                  </div>
-                </div>
-
-                <div className="flex-1 overflow-y-auto p-4 scrollbar-thin max-h-[500px]">
-                  <div className="grid gap-2">
-                    {pipelineSteps.map((step, idx) => {
-                      const Icon = step.icon;
-                      const isActiveStep = step.state === "active";
-                      const isDoneStep = step.state === "done";
-                      const isPending = step.state === "pending";
-
-                      return (
-                        <motion.div
-                          key={step.id}
-                          layout
-                          initial={{ opacity: 0, x: -8 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: idx * 0.04 }}
-                          className={cn(
-                            "group relative flex items-center gap-3.5 rounded-[8px] border border-transparent p-2.5 transition-all duration-200",
-                            isActiveStep && "border-primary/15 bg-surface shadow-sm ring-1 ring-primary/5",
-                            isDoneStep && "bg-success/[0.02] border-success/5",
-                            isPending && "opacity-40 grayscale-[0.2]",
-                          )}
-                        >
-                          <div className={cn(
-                            "flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-md border shadow-sm transition-all duration-300",
-                            isActiveStep && "border-primary/15 bg-primary/10 text-primary scale-[1.02]",
-                            isDoneStep && "border-success/15 bg-success/5 text-success",
-                            isPending && "border-on-surface/6 bg-surface text-on-surface-variant/30",
-                          )}>
-                            <Icon className={cn("h-4.5 w-4.5", isActiveStep && "animate-pulse")} />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between gap-3">
-                              <p className={cn("text-[13px] font-bold tracking-tight", isActiveStep ? "text-primary" : "text-on-surface")}>{step.title}</p>
-                              <div className={cn(
-                                "rounded-[4px] px-1.5 py-0.5 text-[8.5px] font-bold uppercase tracking-wider border",
-                                isActiveStep && "bg-primary border-primary text-white",
-                                isDoneStep && "bg-success/5 border-success/15 text-success",
-                                isPending && "bg-on-surface/[0.03] border-on-surface/[0.06] text-on-surface-variant/30",
-                              )}>
-                                {isDoneStep ? "DONE" : isActiveStep ? "RUNNING" : "WAITING"}
-                              </div>
-                            </div>
-                            <p className="mt-0.5 text-[11px] font-medium text-ui-muted line-clamp-1 opacity-60">
-                              {step.detail}
-                            </p>
-                          </div>
-                          {isActiveStep && (
-                            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-primary rounded-r-full" />
-                          )}
-                        </motion.div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex-1 flex flex-col min-w-0 bg-on-surface/[0.002]">
-                <div className="flex items-center justify-between px-5 py-2.5 bg-on-surface/[0.015] border-b border-on-surface/[0.04]">
-                  <h3 className="flex items-center gap-2 text-[12px] font-bold text-on-surface/50">
-                    <Activity className="h-3.5 w-3.5" /> 实时分析流
-                  </h3>
-                </div>
-
-                <div className="flex-1 overflow-y-auto p-4 scrollbar-thin max-h-[500px]">
-                  <AnimatePresence initial={false} mode="popLayout">
-                    {hasLiveItems ? (
-                      <div className="space-y-1.5">
-                        {isThinking && (
+          {/* 右侧：实时日志与发现汇总 - 终端感设计 */}
+          <div className="flex flex-col bg-surface">
+            <div className="border-b border-on-surface/5 px-6 py-4">
+               <div className="flex items-center justify-between">
+                  <h3 className="text-[11px] font-black tracking-widest text-ui-muted">扫描记录</h3>
+                  <span className="rounded-full bg-on-surface/5 px-2 py-0.5 text-[10px] font-bold text-ui-muted">
+                    已发现 {viewModel.totalCount} 项
+                  </span>
+               </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 scrollbar-thin">
+               <div className="flex flex-col gap-1.5">
+                  <AnimatePresence initial={false}>
+                    {viewModel.recentCompletedItems.length > 0 ? (
+                      viewModel.recentCompletedItems.map((item) => {
+                        const style = getFileIcon(item.display_name, item.entry_type);
+                        const Icon = style.icon;
+                        return (
                           <motion.div
-                            initial={{ opacity: 0, scale: 0.99 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.99 }}
-                            className="p-1 space-y-1.5"
+                            key={item.item_id}
+                            initial={{ opacity: 0, x: 10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            className="flex items-center gap-3 rounded-lg border border-transparent p-2 transition-colors hover:border-on-surface/5 hover:bg-on-surface/[0.02]"
                           >
-                            <div className="inline-flex items-center gap-1.5 rounded-md bg-primary/5 px-2 py-0.5 text-[10px] font-bold text-primary mb-1">
-                              <Sparkles className="h-3 w-3 animate-pulse" />
-                              正在预测特征
+                            <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-on-surface/5 bg-on-surface/3 shadow-none", style.bg)}>
+                              <Icon className={cn("h-4 w-4", style.color)} />
                             </div>
-                            {Array.from({ length: 2 }).map((_, i) => (
-                              <div key={`skeleton-${i}`} className="flex items-center gap-3 px-2.5 py-2 rounded-md border border-on-surface/[0.03] bg-surface/50 opacity-50">
-                                <div className="h-7 w-7 rounded bg-on-surface/[0.05] animate-pulse" />
-                                <div className="flex-1 space-y-1.5">
-                                  <div className="h-2.5 w-2/3 rounded-full bg-on-surface/[0.06] animate-pulse" />
-                                  <div className="h-2 w-1/2 rounded-full bg-on-surface/[0.03] animate-pulse" />
-                                </div>
-                              </div>
-                            ))}
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-[12px] font-bold text-on-surface/80">{item.display_name}</p>
+                              <p className="truncate text-[10px] font-medium text-ui-muted/40 tracking-tight">已读取</p>
+                            </div>
                           </motion.div>
-                        )}
-
-                        {recentItems.map((item, idx) => {
-                          const fileMeta = getFileIcon(item.source_relpath || item.display_name);
-                          const CustomIcon = fileMeta.icon;
-                          
-                          return (
-                            <motion.div
-                              key={item.item_id + idx}
-                              layout
-                              initial={{ opacity: 0, y: 8 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              className="group my-0.5 flex items-center gap-3 rounded-[8px] border border-on-surface/[0.04] bg-surface p-2.5 transition-all hover:border-primary/15 hover:shadow-sm"
-                            >
-                              <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-on-surface/[0.02] shadow-sm", fileMeta.bg)}>
-                                <CustomIcon className={cn("h-4 w-4", fileMeta.color)} />
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center justify-between gap-2 mb-0.5">
-                                  <span className="truncate text-[12.5px] font-bold text-on-surface group-hover:text-primary transition-colors">
-                                    {item.display_name}
-                                  </span>
-                                  <span className="shrink-0 rounded-[4px] bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold text-primary uppercase tracking-wider">
-                                    {item.suggested_purpose || "ANALYZING"}
-                                  </span>
-                                </div>
-                                <p className="truncate text-[10.5px] font-medium text-ui-muted opacity-50">
-                                  {item.summary || "正在提取语义特征..."}
-                                </p>
-                              </div>
-                            </motion.div>
-                          );
-                        })}
-                      </div>
+                        );
+                      })
                     ) : (
-                      <div className="flex h-[260px] flex-col items-center justify-center text-center p-6 space-y-3">
-                        <div className="rounded-xl bg-on-surface/[0.01] p-5 border border-dashed border-on-surface/8">
-                          <Activity className="h-8 w-8 text-ui-muted opacity-20 mb-2 mx-auto" />
-                          <p className="text-[12px] font-bold text-ui-muted opacity-40">等待首批分析结果</p>
-                          <p className="text-[10px] font-medium text-ui-muted opacity-25 mt-1 max-w-[160px]">文件分析汇聚完成后即刻呈现。</p>
-                        </div>
+                      <div className="flex flex-col items-center justify-center py-20 text-center opacity-20">
+                         <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full border-2 border-dashed border-on-surface/30">
+                            <Loader2 className="h-6 w-6 animate-spin" />
+                         </div>
+                         <p className="text-[12px] font-bold tracking-widest">等待发现项目...</p>
                       </div>
                     )}
                   </AnimatePresence>
-                </div>
-              </div>
+               </div>
             </div>
+            
+            {!isModelConfigured && (
+              <Link href="/settings" className="m-4 rounded-lg border border-warning/20 bg-warning/5 p-4 transition-all hover:bg-warning/8">
+                <div className="flex gap-3">
+                  <AlertCircle className="h-4 w-4 shrink-0 text-warning" />
+                  <div className="space-y-1">
+                    <p className="text-[12px] font-black text-warning">模型还没配置好</p>
+                    <p className="text-[11px] leading-tight text-warning/60 font-medium">当前只能读取目录结构。如需智能分类，请先到设置里配置文本模型。</p>
+                  </div>
+                </div>
+              </Link>
+            )}
           </div>
-        </motion.div>
+        </div>
+      </div>
+      
+      {/* 底部流水线状态 */}
+      <div className="border-t border-on-surface/5 bg-surface-container-lowest/30 px-6 py-2.5">
+        <div className="mx-auto flex max-w-[1280px] items-center justify-between">
+           <div className="flex items-center gap-6">
+              {[
+                { step: 1, label: "读取目录结构", done: true },
+                { step: 2, label: "分析项目内容", active: true },
+                { step: 3, label: "生成整理方案" }
+              ].map((s) => (
+                <div key={s.step} className="flex items-center gap-2">
+                   <div className={cn(
+                     "flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-black",
+                     s.done ? "bg-success text-white" : s.active ? "bg-primary text-white" : "bg-on-surface/10 text-ui-muted"
+                   )}>
+                      {s.done ? "✓" : s.step}
+                   </div>
+                   <span className={cn(
+                     "text-[10px] font-bold uppercase tracking-wider",
+                     s.done || s.active ? "text-on-surface/60" : "text-ui-muted/30"
+                   )}>{s.label}</span>
+                   {s.step < 3 && <div className="ml-4 h-px w-8 bg-on-surface/5" />}
+                </div>
+              ))}
+           </div>
+        </div>
       </div>
     </div>
   );

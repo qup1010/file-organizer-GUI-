@@ -131,7 +131,7 @@ export function IconWorkbenchPreviewModal({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         transition={{ type: "spring", damping: 25, stiffness: 300 }}
-        className="relative flex h-full max-h-[860px] w-full max-w-[1240px] flex-col overflow-hidden rounded-[24px] border border-white/10 bg-[#0c0c0c] shadow-[0_32px_120px_rgba(0,0,0,0.8)] lg:flex-row"
+        className="relative flex h-full max-h-[860px] w-full max-w-[1240px] flex-col overflow-hidden rounded-[24px] border border-white/10 bg-[#0c0c0c] lg:flex-row"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Mobile Header */}
@@ -161,7 +161,7 @@ export function IconWorkbenchPreviewModal({
                   alt={title}
                   onLoad={() => setIsLoaded(true)}
                   className={cn(
-                    "max-h-[60vh] max-w-full rounded-2xl object-contain drop-shadow-[0_24px_48px_rgba(0,0,0,0.6)] transition-all duration-700",
+                    "max-h-[60vh] max-w-full rounded-2xl object-contain transition-all duration-700",
                     isLoaded ? "opacity-100 blur-0" : "opacity-0 blur-xl"
                   )}
                 />
@@ -174,7 +174,7 @@ export function IconWorkbenchPreviewModal({
                 exit={{ opacity: 0, y: -10 }}
                 className="relative flex flex-col items-center gap-10"
               >
-                 <div className="relative flex h-[480px] w-full max-w-[680px] flex-col overflow-hidden rounded-[8px] border border-white/10 bg-[#1e1e1e] shadow-2xl">
+                 <div className="relative flex h-[480px] w-full max-w-[680px] flex-col overflow-hidden rounded-[8px] border border-white/10 bg-[#1e1e1e]">
                     <div className="flex h-12 items-center justify-between border-b border-white/5 bg-[#252525] px-4">
                        <div className="flex items-center gap-4">
                           <div className="flex items-center gap-3">
@@ -220,12 +220,12 @@ export function IconWorkbenchPreviewModal({
                              <div className="relative flex h-24 w-24 items-center justify-center">
                                 <img 
                                   src={src} 
-                                  className="h-full w-full object-contain drop-shadow-lg transition-transform group-hover:scale-105" 
+                                  className="h-full w-full object-contain transition-transform group-hover:scale-105" 
                                   alt="icon-as-folder" 
                                 />
                                 <div className="absolute -inset-3 ring-[1.5px] ring-primary/60 bg-primary/10 rounded-[6px] opacity-100" />
                              </div>
-                             <div className="z-10 rounded-[3px] bg-primary px-3 py-1 text-[11px] font-black text-white shadow-xl">
+                             <div className="z-10 rounded-[3px] bg-primary px-3 py-1 text-[11px] font-black text-white">
                                 {folderName || "扫描与报告"}
                              </div>
                           </div>
@@ -259,7 +259,7 @@ export function IconWorkbenchPreviewModal({
                onClick={() => setShowMockup(false)}
                className={cn(
                  "flex h-9 items-center gap-2 rounded-full px-4 text-[12px] font-black transition-all",
-                 !showMockup ? "bg-surface-container-lowest text-black" : "text-white/60 hover:text-white"
+                 !showMockup ? "bg-white text-black" : "text-white/60 hover:text-white"
                )}
              >
                <Maximize2 className="h-3.5 w-3.5" />
@@ -269,7 +269,7 @@ export function IconWorkbenchPreviewModal({
                onClick={() => setShowMockup(true)}
                className={cn(
                  "flex h-9 items-center gap-2 rounded-full px-4 text-[12px] font-black transition-all",
-                 showMockup ? "bg-surface-container-lowest text-black" : "text-white/60 hover:text-white"
+                 showMockup ? "bg-white text-black" : "text-white/60 hover:text-white"
                )}
              >
                <Monitor className="h-3.5 w-3.5" />
@@ -339,10 +339,10 @@ export function IconWorkbenchPreviewModal({
                   onClick={isApplied ? () => onOpenFolder?.(folderPath || "") : onApply} 
                   disabled={isApplying}
                   className={cn(
-                    "h-14 w-full rounded-[12px] text-[15px] font-black text-white shadow-lg transition-all",
+                    "h-14 w-full rounded-[12px] text-[15px] font-black text-white border border-white/10 transition-all",
                     isApplied 
-                      ? "bg-success shadow-success/20 hover:bg-success" 
-                      : "bg-primary shadow-primary/20 hover:bg-primary/90"
+                      ? "bg-success hover:bg-success" 
+                      : "bg-primary hover:bg-primary/90"
                   )}
                 >
                   {isApplying ? (

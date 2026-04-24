@@ -29,6 +29,11 @@ const getFileIcon = (filename: string) => {
   return FileText;
 };
 
+const getEntryIcon = (item: Pick<PlanItem, "display_name" | "entry_type">) => {
+  if (item.entry_type === "dir") return Folder;
+  return getFileIcon(item.display_name);
+};
+
 // 树节点接口
 export interface TreeNode {
   name: string;
@@ -154,25 +159,32 @@ function FolderNode({
   }
 
   return (
-    <div className={cn("flex flex-col", level > 0 && "ml-4 border-l border-on-surface/6 pl-2")}>
+    <div className={cn("flex flex-col relative", level > 0 && "ml-4")}>
+      {/* Vertical Tree Line */}
+      {level > 0 && (
+        <div className="absolute left-[-8px] top-0 bottom-0 w-[1px] bg-on-surface/5" />
+      )}
+      
       <div
-        className="group/header flex cursor-pointer items-center justify-between rounded-[8px] px-2 py-1.5 transition-colors hover:bg-surface-container-low/50"
+        className="group/header flex cursor-pointer items-center justify-between rounded-lg px-2 py-1 transition-colors hover:bg-surface-container-low/70"
         onClick={() => onToggle(node.path)}
       >
-        <div className="flex items-center gap-2 min-w-0">
-          <ChevronRight
-            className={cn(
-              "w-3 h-3 text-on-surface-variant/30 transition-transform",
-              isExpanded ? "rotate-90" : "rotate-0",
-              !hasContent && "opacity-0"
-            )}
-          />
-          <Folder className={cn("w-3 h-3 text-on-surface/40", isExpanded && "text-primary/60")} />
-          <span className="truncate text-[13px] font-semibold tracking-tight text-on-surface">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+            {hasContent ? (
+              isExpanded ? (
+                <ChevronRight className="h-3 w-3 rotate-90 text-on-surface-variant/30" />
+              ) : (
+                <ChevronRight className="h-3 w-3 text-on-surface-variant/30" />
+              )
+            ) : null}
+          </div>
+          <Folder className={cn("h-3.5 w-3.5 shrink-0 transition-colors", isExpanded ? "text-primary/70" : "text-on-surface/30")} />
+          <span className="truncate font-mono text-[12.5px] font-black tracking-tight text-on-surface/80">
             {node.name}
           </span>
           {node.items.length > 0 && (
-            <span className="text-nowrap font-mono text-[11px] text-on-surface-variant/45">
+            <span className="font-mono text-[10px] font-bold text-ui-muted opacity-40">
               ({node.items.length})
             </span>
           )}
@@ -207,22 +219,27 @@ function FolderNode({
               ))}
 
               {node.items.map((item) => {
-                const Icon = getFileIcon(item.display_name);
+                const Icon = getEntryIcon(item);
                 const isEditing = editingId === item.item_id;
                 return (
-                  <div key={item.item_id} className="group/item flex flex-col pl-5 pr-1">
-                    <div className="flex items-center gap-2 py-1 text-[12px] text-on-surface-variant transition-colors hover:text-on-surface">
-                      <Icon className="h-3 w-3 opacity-50 group-hover/item:opacity-90" />
-                      <span className="truncate flex-1 tracking-tight">{item.display_name}</span>
+                  <div key={item.item_id} className="group/item relative flex flex-col pl-6 pr-1">
+                    {/* Leaf Connector Line */}
+                    <div className="absolute left-[-8px] top-0 h-4 w-[1px] bg-on-surface/5" />
+                    <div className="absolute left-[-8px] top-4 w-4 h-[1px] bg-on-surface/5" />
+                    
+                    <div className="flex items-center gap-2.5 py-0.5 transition-colors hover:bg-on-surface/[0.02]">
+                      <Icon className="h-3.5 w-3.5 shrink-0 opacity-30 group-hover/item:opacity-60 transition-opacity" />
+                      <span className="truncate flex-1 font-mono text-[11.5px] tracking-tight text-on-surface/70 group-hover/item:text-on-surface">{item.display_name}</span>
 
                       {!readOnly && onEdit && onMoveToReview && (
-                        <div className="opacity-0 group-hover/item:opacity-100 flex items-center gap-0.5">
+                        <div className="opacity-0 group-hover/item:opacity-100 flex items-center gap-1 transition-all mr-1">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              onEdit(item.item_id, item.target_relpath || "");
+                              onEdit(item.item_id, node.path || "");
                             }}
-                            className="p-1 hover:bg-primary/10 rounded text-on-surface-variant/50 hover:text-primary transition-colors"
+                            className="p-1 rounded bg-on-surface/5 text-on-surface/40 hover:bg-primary/10 hover:text-primary transition-all"
+                            title="修改文件名"
                           >
                             <Edit2 className="w-2.5 h-2.5" />
                           </button>
@@ -231,7 +248,8 @@ function FolderNode({
                               e.stopPropagation();
                               onMoveToReview(item.item_id);
                             }}
-                            className="p-1 hover:bg-warning/10 rounded text-on-surface-variant/50 hover:text-warning transition-colors"
+                            className="p-1 rounded bg-on-surface/5 text-on-surface/40 hover:bg-warning/10 hover:text-warning transition-all"
+                            title="移动至待核对"
                           >
                             <ArrowRight className="w-2.5 h-2.5" />
                           </button>
@@ -240,7 +258,7 @@ function FolderNode({
                     </div>
 
                     {isEditing && setEditValue && setEditingId && handleEditSubmit && (
-                      <div className="flex gap-2 py-1 ml-4 border-l border-primary/20 pl-2" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex gap-2 py-1 ml-4 border-l-2 border-primary/20 bg-primary/[0.02] pl-2 pr-2 rounded-r-md" onClick={(e) => e.stopPropagation()}>
                         <input
                           autoFocus
                           value={editValue}
@@ -249,13 +267,13 @@ function FolderNode({
                             if (e.key === "Enter") handleEditSubmit(item.item_id);
                             if (e.key === "Escape") setEditingId(null);
                           }}
-                          className="flex-1 border-b border-primary bg-surface-container-low py-1 text-[12px] outline-none font-mono"
+                          className="flex-1 bg-transparent py-0.5 text-[12px] font-black text-primary outline-none font-mono"
                         />
                         <button
                           onClick={() => handleEditSubmit(item.item_id)}
-                          className="text-[12px] font-semibold text-primary"
+                          className="text-[10px] font-black uppercase tracking-widest text-primary hover:underline"
                         >
-                          确认
+                          Confirm
                         </button>
                       </div>
                     )}

@@ -20,9 +20,9 @@ export function Button({
   ...props 
 }: ButtonProps) {
   const variants = {
-    primary: "border border-primary/18 bg-primary text-white shadow-[0_2px_6px_rgba(0,0,0,0.12)] hover:bg-primary-dim hover:shadow-[0_4px_12px_rgba(0,0,0,0.16)]",
-    secondary: "border border-on-surface/8 bg-surface-container-lowest text-on-surface shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:bg-surface-container-high hover:border-primary/12",
-    danger: "border border-error/18 bg-error-container/42 text-error shadow-[0_2px_6px_rgba(196,49,75,0.10)] hover:bg-error hover:text-white",
+    primary: "border border-primary/25 bg-primary text-white hover:bg-primary-dim",
+    secondary: "border border-on-surface/12 bg-surface-container-lowest text-on-surface hover:bg-surface-container-high hover:border-primary/20",
+    danger: "border border-error/25 bg-error-container/42 text-error hover:bg-error hover:text-white",
     ghost: "border border-transparent bg-transparent text-on-surface hover:bg-on-surface/5"
   };
 
@@ -38,7 +38,7 @@ export function Button({
       whileTap={{ scale: 0.97 }}
       disabled={disabled || loading}
       className={cn(
-        "inline-flex items-center justify-center gap-2 font-semibold tracking-[0.01em] transition-[transform,background-color,border-color,box-shadow,color] duration-180 disabled:pointer-events-none disabled:opacity-50 disabled:grayscale focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/10",
+        "inline-flex items-center justify-center gap-2 font-semibold tracking-[0.01em] transition-[transform,background-color,border-color,color] duration-180 disabled:pointer-events-none disabled:opacity-50 disabled:grayscale focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/10",
         variants[variant],
         sizes[size],
         className

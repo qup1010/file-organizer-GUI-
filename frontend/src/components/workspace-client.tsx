@@ -2,9 +2,11 @@
 
 import React, { useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { AlertTriangle, FolderTree, Layers, Loader2, LogOut, RefreshCw } from "lucide-react";
+import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, FolderPlus, FolderTree, Layers, ListChecks, Loader2, LogOut, PanelLeftClose, PanelLeftOpen, RefreshCw, ShieldAlert } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { getSessionStageView } from "@/lib/session-view-model";
 import { cn } from "@/lib/utils";
+import { canRunPrecheck as deriveCanRunPrecheck } from "@/lib/workspace-precheck";
 
 import { useSession } from "@/lib/use-session";
 import { getFriendlyStage } from "@/lib/utils";
@@ -17,10 +19,28 @@ import { MinimalScanningView } from "./workspace/minimal-scanning-view";
 import { PrecheckView } from "./workspace/precheck-view";
 import { CompletionView } from "./workspace/completion-view";
 import { ConversationPanel, type ConversationNotice } from "./workspace/conversation-panel";
+import { IncrementalSelectionView } from "./workspace/incremental-selection-view";
 import { PreviewFilter, PreviewFocusRequest, PreviewPanel } from "./workspace/preview-panel";
 
 const DEFAULT_LEFT_WIDTH = 50;
 const SCAN_PREVIEW_GRACE_MS = 1200;
+const COMPACT_WORKSPACE_BREAKPOINT = 1100;
+
+function getSessionIdFromWorkspaceRoute(route: string | null): string | null {
+  if (!route?.startsWith("/workspace")) {
+    return null;
+  }
+  const query = route.split("?")[1] || "";
+  return new URLSearchParams(query).get("session_id");
+}
+
+function summarizeItemNames(names: string[], limit = 3): string {
+  const visible = names.filter(Boolean).slice(0, limit);
+  if (!visible.length) {
+    return "";
+  }
+  return visible.join("、") + (names.length > limit ? ` 等 ${names.length} 项` : "");
+}
 
 export default function WorkspaceClient() {
   const APP_CONTEXT_EVENT = "file-organizer-context-change";
@@ -31,6 +51,7 @@ export default function WorkspaceClient() {
   const sessionIdParam = searchParams.get("session_id");
   const dirParam = searchParams.get("dir");
   const isReadOnly = searchParams.get("readonly") === "1";
+  const autoStartScan = searchParams.get("auto_scan") === "1";
 
   const {
     snapshot,
@@ -49,9 +70,9 @@ export default function WorkspaceClient() {
     isComposerLocked,
     retryStream,
     sendMessage,
-    resolveUnresolvedChoices,
     scan,
     refreshPlan,
+    confirmTargetDirectories,
     runPrecheck,
     returnToPlanning,
     execute,
@@ -85,12 +106,14 @@ export default function WorkspaceClient() {
   const [layoutReady, setLayoutReady] = useState(false);
   const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
   const [executeConfirmOpen, setExecuteConfirmOpen] = useState(false);
-  const [executeConfirmText, setExecuteConfirmText] = useState("");
   const [scanAbortConfirmOpen, setScanAbortConfirmOpen] = useState(false);
   const [showExitMenu, setShowExitMenu] = useState(false);
   const [dividerLeft, setDividerLeft] = useState<number | null>(null);
   const [previewFocusRequest, setPreviewFocusRequest] = useState<PreviewFocusRequest | null>(null);
   const [scanPreviewHoldUntil, setScanPreviewHoldUntil] = useState<number | null>(null);
+  const [isCompactLayout, setIsCompactLayout] = useState(false);
+  const [compactConversationOpen, setCompactConversationOpen] = useState(false);
+  const [isChatCollapsed, setIsChatCollapsed] = useState(false);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const dividerRef = React.useRef<HTMLDivElement>(null);
   const leftPaneRef = React.useRef<HTMLElement>(null);
@@ -99,6 +122,11 @@ export default function WorkspaceClient() {
   const [isResizingState, setIsResizingState] = useState(false);
   const isResizing = React.useRef(false);
   const scanPreviewTimerRef = React.useRef<number | null>(null);
+  const autoScanRequestedRef = React.useRef(false);
+
+  React.useEffect(() => {
+    autoScanRequestedRef.current = false;
+  }, [sessionIdParam]);
 
   React.useEffect(() => {
     try {
@@ -113,6 +141,35 @@ export default function WorkspaceClient() {
       setLayoutReady(true);
     }
   }, []);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const syncLayoutMode = () => {
+      const compact = window.innerWidth < COMPACT_WORKSPACE_BREAKPOINT;
+      setIsCompactLayout(compact);
+      if (compact) {
+        setCompactConversationOpen(false);
+      }
+    };
+
+    syncLayoutMode();
+    window.addEventListener("resize", syncLayoutMode);
+    return () => {
+      window.removeEventListener("resize", syncLayoutMode);
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (chatError?.includes("SESSION_NOT_FOUND")) {
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(ACTIVE_WORKSPACE_ROUTE_KEY);
+      }
+      router.push("/");
+    }
+  }, [chatError, router]);
 
   const saveWidth = React.useCallback((width: number) => {
     localStorage.setItem("workspace_sidebar_width", width.toString());
@@ -137,8 +194,11 @@ export default function WorkspaceClient() {
   const plan = useMemo(
     () => ({
       summary: snapshot?.plan_snapshot?.summary || "",
+      placement: snapshot?.plan_snapshot?.placement || { new_directory_root: "", review_root: "" },
       items: snapshot?.plan_snapshot?.items || [],
       groups: snapshot?.plan_snapshot?.groups || [],
+      target_slots: snapshot?.plan_snapshot?.target_slots || [],
+      mappings: snapshot?.plan_snapshot?.mappings || [],
       unresolved_items: snapshot?.plan_snapshot?.unresolved_items || [],
       review_items: snapshot?.plan_snapshot?.review_items || [],
       invalidated_items: snapshot?.plan_snapshot?.invalidated_items || [],
@@ -154,58 +214,65 @@ export default function WorkspaceClient() {
   );
 
   const precheck = snapshot?.precheck_summary ?? null;
-  const isBusy = ["scanning", "executing", "rolling_back"].includes(stage) || loading;
+  const incrementalSelection = snapshot?.incremental_selection ?? null;
+  const stageView = useMemo(() => getSessionStageView(stage), [stage]);
+  const isBusy = stageView.isBusyStage || loading;
   const isPlanSyncing = plannerStatus.isRunning;
-  const canRunPrecheck = stage === "ready_for_precheck" && plan.readiness.can_precheck && !isPlanSyncing;
+  const canRunPrecheck = deriveCanRunPrecheck(stage, plan.readiness, isPlanSyncing);
   const progressPercent = scanner.total_count > 0 ? (scanner.processed_count / scanner.total_count) * 100 : 0;
-  const showConversationPane = true;
+  const showConversationPane = !isCompactLayout || compactConversationOpen;
+  const showPreviewPane = !isCompactLayout || !compactConversationOpen;
   const effectiveComposerMode = isReadOnly ? "hidden" : composerMode;
   const targetPath = snapshot?.target_dir || dirParam || "";
   const targetDirName = useMemo(
     () => targetPath.replace(/[\\/]$/, "").split(/[\\/]/).pop() || "当前任务",
     [targetPath],
   );
-  const nextStepHint = useMemo(() => {
-    if (isReadOnly && stage !== "completed") {
-      return "当前为只读查看模式。如需继续整理，请返回首页重新启动或恢复任务。";
-    }
-    if (stage === "idle" || stage === "draft") {
-      return "下一步请先开始扫描。系统会读取目录结构并建立初始分析范围。";
-    }
-    if (stage === "scanning") {
-      return "扫描完成后会自动显示整理方案。";
-    }
-    if (stage === "planning") {
-      return canRunPrecheck
-        ? "建议运行预检，核实移动范围。"
-        : "可以继续调整要求，直到方案可预检。";
-    }
-    if (stage === "ready_for_precheck") {
-      return canRunPrecheck ? "方案已就绪，建议开始运行预检。" : "方案同步中，完成后即可预检。";
-    }
-    if (stage === "ready_to_execute") {
-      return "预检完成，请在右侧确认影响范围并执行。";
-    }
-    if (stage === "executing") {
-      return "正在执行文件变更，请稍后...";
-    }
-    if (stage === "completed") {
-      return "整理已完成。你可以处理失败项或清理空目录。";
-    }
-    if (stage === "stale" || stage === "interrupted") {
-      return "建议先重新扫描，确认目录状态后再继续整理。";
-    }
-    return "当前任务正在继续推进。";
-  }, [canRunPrecheck, isReadOnly, stage]);
   const reviewMoveCount = useMemo(
     () => precheck?.move_preview.filter((move) => move.target.split(/[\\/]/).some((part) => part.toLowerCase() === "review")).length ?? 0,
     [precheck],
   );
+  const interruptedDuring = String(snapshot?.integrity_flags?.interrupted_during || "").trim().toLowerCase();
+  const isInterruptedDuringScan = stageView.isInterrupted && interruptedDuring === "scanning";
+  const precheckItemNames = useMemo(() => {
+    const itemNameById = new Map((snapshot?.plan_snapshot?.items || []).map((item) => [item.item_id, item.display_name] as const));
+    return (precheck?.move_preview || []).map((move) => itemNameById.get(move.item_id) || move.item_id);
+  }, [precheck?.move_preview, snapshot?.plan_snapshot?.items]);
+  const precheckItemsSummary = useMemo(() => summarizeItemNames(precheckItemNames), [precheckItemNames]);
+  const nextStepHint = useMemo(() => {
+    if (isReadOnly && !stageView.isCompleted) {
+      return "当前只能查看记录；如需继续整理，请返回首页重新打开任务。";
+    }
+    if (stageView.isDraftLike) {
+      return "下一步先读取目录，确认这次要整理的项目。";
+    }
+    if (stageView.isScanning) {
+      return "正在只读分析文件，完成后会显示整理建议。";
+    }
+    if (stageView.isTargetSelection) {
+      return "先选择可归入的目标目录，剩余项目会作为本次待整理对象。";
+    }
+    if (stageView.isPlanning) {
+      return isPlanSyncing ? "正在按你的要求更新方案。" : "可以继续调整要求，确认后再做移动前检查。";
+    }
+    if (stageView.isAwaitingPrecheck) {
+      return canRunPrecheck ? "方案已就绪，建议先做一次移动前安全检查。" : "方案还在更新，完成后即可检查。";
+    }
+    if (stageView.isReadyToExecute) {
+      return `安全检查通过，待移动 ${precheck?.move_preview.length ?? 0} 项${reviewMoveCount > 0 ? `，其中 ${reviewMoveCount} 项会留在待确认区（Review）` : ""}。`;
+    }
+    if (stageView.isExecuting) {
+      return "正在移动文件，请稍后...";
+    }
+    if (stageView.isCompleted) {
+      return "整理已完成。你可以查看结果、处理失败项或清理空目录。";
+    }
+    if (stageView.isRecovery) {
+      return "建议先重新扫描，确认目录状态后再继续整理。";
+    }
+    return "当前任务正在推进。";
+  }, [canRunPrecheck, isReadOnly, precheck?.move_preview.length, reviewMoveCount, stageView]);
   const isRootTarget = useMemo(() => /^[a-zA-Z]:[\\/]?$/.test((snapshot?.target_dir || "").trim()), [snapshot?.target_dir]);
-  const requiresTypedExecuteConfirm = useMemo(
-    () => (precheck?.move_preview.length ?? 0) >= 50 || reviewMoveCount >= 10 || isRootTarget,
-    [isRootTarget, precheck?.move_preview.length, reviewMoveCount],
-  );
   const beginScanPreviewHold = React.useCallback(() => {
     if (typeof window === "undefined") {
       return;
@@ -216,9 +283,9 @@ export default function WorkspaceClient() {
     }
     setScanPreviewHoldUntil(Date.now() + SCAN_PREVIEW_GRACE_MS);
   }, []);
-  const shouldShowScanningPreview = stage === "scanning" || (
+  const shouldShowScanningPreview = stageView.isScanning || (
     scanPreviewHoldUntil !== null &&
-    ["planning", "ready_for_precheck"].includes(stage) &&
+    stageView.isPlanningConversation &&
     scanner.status !== "idle" &&
     !plannerStatus.isRunning
   );
@@ -291,7 +358,13 @@ export default function WorkspaceClient() {
 
   const handleExitWorkbench = () => {
     setShowExitMenu(false);
-    if (isReadOnly || stage === "completed") {
+    if (isReadOnly || stageView.isCompleted) {
+      if (typeof window !== "undefined" && sessionIdParam) {
+        const storedRoute = window.localStorage.getItem(ACTIVE_WORKSPACE_ROUTE_KEY);
+        if (getSessionIdFromWorkspaceRoute(storedRoute) === sessionIdParam) {
+          window.localStorage.removeItem(ACTIVE_WORKSPACE_ROUTE_KEY);
+        }
+      }
       router.push("/");
       return;
     }
@@ -321,14 +394,28 @@ export default function WorkspaceClient() {
     void scan();
   }, [beginScanPreviewHold, scan]);
 
+  React.useEffect(() => {
+    if (!autoStartScan || isReadOnly || !sessionIdParam || !snapshot || loading) {
+      return;
+    }
+    if (autoScanRequestedRef.current) {
+      return;
+    }
+    if (!stageView.isDraftLike) {
+      return;
+    }
+    autoScanRequestedRef.current = true;
+    handleStartScan();
+  }, [autoStartScan, handleStartScan, isReadOnly, loading, sessionIdParam, snapshot, stageView.isDraftLike]);
+
   const statusNotice = useMemo<ConversationNotice | null>(() => {
     if (streamStatus === "offline") {
       return {
         tone: "warning",
         title: "实时连接已断开",
-        description: stage === "completed"
-          ? "当前页面会保留已同步的记录和结果，输入已关闭。你可以先查看右侧结果，或重新连接恢复实时状态。"
-          : "当前页面仍可查看已同步内容。重新连接后，会恢复实时事件更新并重新同步当前任务。",
+        description: stageView.isCompleted
+          ? "页面会保留已经收到的记录和结果。你可以先查看右侧结果，或重新连接获取最新状态。"
+          : "页面仍可查看已经收到的内容。重新连接后，会继续接收当前任务的更新。",
         primaryAction: {
           label: "重新连接",
           onClick: () => {
@@ -338,11 +425,11 @@ export default function WorkspaceClient() {
       };
     }
 
-    if (isReadOnly && stage !== "completed") {
+    if (isReadOnly && !stageView.isCompleted) {
       return {
         tone: "warning",
-        title: "这是只读模式",
-        description: "当前只能查看之前的方案和记录，不能继续修改、预检或执行。如需继续整理，请返回首页重新打开任务。",
+        title: "当前只能查看",
+        description: "这里保留之前的方案和记录，不能修改或执行。如需继续整理，请返回首页重新打开任务。",
       };
     }
 
@@ -350,25 +437,15 @@ export default function WorkspaceClient() {
       return null;
     }
 
-    if (stage === "ready_to_execute") {
-      return {
-        tone: "info",
-        title: "预检已完成",
-        description: "系统已经检查过真实文件系统。请结合右侧影响范围，决定是否执行或返回修改。",
-        primaryAction: isReadOnly ? undefined : {
-          label: "返回继续修改",
-          onClick: () => {
-            void returnToPlanning();
-          },
-        },
-      };
+    if (stageView.isReadyToExecute) {
+      return null;
     }
 
-    if (stage === "stale") {
+    if (stageView.isStale) {
       return {
         tone: "warning",
-        title: "当前方案已过期",
-        description: "目录内容已发生变化。建议先重新扫描，再继续整理。",
+        title: "目录内容已变化",
+        description: "当前方案可能不再准确。建议重新扫描后再继续整理。",
         primaryAction: {
           label: "重新扫描",
           onClick: () => void refreshPlan(),
@@ -380,7 +457,7 @@ export default function WorkspaceClient() {
       };
     }
 
-    if (stage === "interrupted") {
+    if (stageView.isInterrupted) {
       return {
         tone: "danger",
         title: "任务已中断",
@@ -396,24 +473,35 @@ export default function WorkspaceClient() {
       };
     }
 
-    if (stage === "completed") {
+    if (stageView.isCompleted) {
       return {
         tone: "info",
         title: isReadOnly ? "这是之前的整理结果" : "整理完成",
         description: isReadOnly
           ? "左侧保留了当时的记录，输入已关闭；右侧可以继续查看这次整理结果。"
-          : "左侧会保留本轮记录供你回看，输入已关闭；请在右侧查看结果、失败项、Review 和后续操作。",
+          : "左侧保留本轮记录供回看，输入已关闭；请在右侧查看结果、失败项和待确认区（Review）。",
       };
     }
 
     return null;
-  }, [canRunPrecheck, isReadOnly, refreshPlan, returnToPlanning, retryStream, snapshot?.last_error, stage, streamStatus]);
+  }, [canRunPrecheck, isReadOnly, precheck?.move_preview.length, precheckItemsSummary, refreshPlan, returnToPlanning, retryStream, reviewMoveCount, snapshot?.last_error, stageView, streamStatus]);
 
   React.useEffect(() => {
-    if (stage === "scanning") {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey || e.altKey) && e.key === "b") {
+        e.preventDefault();
+        setIsChatCollapsed((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  React.useEffect(() => {
+    if (stageView.isScanning) {
       beginScanPreviewHold();
     }
-  }, [beginScanPreviewHold, stage]);
+  }, [beginScanPreviewHold, stageView]);
 
   React.useEffect(() => {
     if (typeof window === "undefined") {
@@ -445,10 +533,10 @@ export default function WorkspaceClient() {
   }, [scanPreviewHoldUntil, shouldShowScanningPreview]);
 
   React.useEffect(() => {
-    if (stage === "completed" && !journal && !journalLoading && !isBusy) {
+    if (stageView.isCompleted && !journal && !journalLoading && !isBusy) {
       void loadJournal();
     }
-  }, [stage, journal, journalLoading, isBusy, loadJournal]);
+  }, [stageView, journal, journalLoading, isBusy, loadJournal]);
 
   React.useEffect(() => {
     return () => {
@@ -459,7 +547,7 @@ export default function WorkspaceClient() {
   }, []);
 
   React.useEffect(() => {
-    if (!showConversationPane) {
+    if (!showConversationPane || isCompactLayout) {
       setDividerLeft(null);
       return;
     }
@@ -484,30 +572,57 @@ export default function WorkspaceClient() {
     return () => {
       observer.disconnect();
     };
-  }, [showConversationPane, leftWidth]);
+  }, [isCompactLayout, showConversationPane, leftWidth]);
 
   React.useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
     const targetPath = snapshot?.target_dir || dirParam || "";
-    const dirName = targetPath ? targetPath.replace(/[\\/]$/, "").split(/[\\/]/).pop() || "当前任务" : "当前任务";
+    const hasTargetPath = Boolean(targetPath);
+    const dirName = hasTargetPath ? targetPath.replace(/[\\/]$/, "").split(/[\\/]/).pop() || "当前任务" : "当前任务";
     window.localStorage.setItem(
       WORKSPACE_CONTEXT_KEY,
       JSON.stringify({
         dirName,
         stage: getFriendlyStage(stage),
+        sessionId: sessionIdParam || undefined,
+        hasTargetPath,
       }),
     );
     window.dispatchEvent(new Event(APP_CONTEXT_EVENT));
-  }, [APP_CONTEXT_EVENT, WORKSPACE_CONTEXT_KEY, dirParam, snapshot?.target_dir, stage]);
+  }, [APP_CONTEXT_EVENT, WORKSPACE_CONTEXT_KEY, dirParam, sessionIdParam, snapshot?.target_dir, stage]);
+
+  React.useEffect(() => {
+    if (stageView.isScanning || stageView.isReadyToExecute || stageView.isCompleted) {
+      setIsChatCollapsed(true);
+    } else if (stageView.isDraftLike || stageView.isTargetSelection || stageView.isPlanningConversation || stageView.isRecovery) {
+      setIsChatCollapsed(false);
+    }
+  }, [
+    stageView.isCompleted,
+    stageView.isDraftLike,
+    stageView.isPlanningConversation,
+    stageView.isReadyToExecute,
+    stageView.isRecovery,
+    stageView.isScanning,
+    stageView.isTargetSelection,
+  ]);
 
   React.useEffect(() => {
     if (typeof window === "undefined" || !sessionIdParam) {
       return;
     }
-    window.localStorage.setItem(ACTIVE_WORKSPACE_ROUTE_KEY, `/workspace${window.location.search}`);
-  }, [ACTIVE_WORKSPACE_ROUTE_KEY, dirParam, isReadOnly, sessionIdParam]);
+    const canRememberWorkspaceRoute = !isReadOnly && !stageView.isCompleted;
+    if (canRememberWorkspaceRoute) {
+      window.localStorage.setItem(ACTIVE_WORKSPACE_ROUTE_KEY, `/workspace${window.location.search}`);
+      return;
+    }
+    const storedRoute = window.localStorage.getItem(ACTIVE_WORKSPACE_ROUTE_KEY);
+    if (getSessionIdFromWorkspaceRoute(storedRoute) === sessionIdParam) {
+      window.localStorage.removeItem(ACTIVE_WORKSPACE_ROUTE_KEY);
+    }
+  }, [ACTIVE_WORKSPACE_ROUTE_KEY, isReadOnly, sessionIdParam, stageView.isCompleted]);
 
   const focusPreviewItems = React.useCallback((itemIds: string[], filter?: PreviewFilter) => {
     setPreviewFocusRequest({
@@ -541,13 +656,14 @@ export default function WorkspaceClient() {
               );
             }
 
-            if (stage === "completed") {
+            if (stageView.isCompleted) {
               return (
                 <CompletionView
                   journal={journal}
                   summary={snapshot?.summary || ""}
                   loading={journalLoading || !journal}
                   targetDir={snapshot?.target_dir || ""}
+                  organizeMethod={snapshot?.strategy?.organize_method}
                   isBusy={isBusy}
                   readOnly={isReadOnly}
                   onOpenExplorer={(path) => void openExplorer(path || snapshot?.target_dir || "")}
@@ -562,15 +678,16 @@ export default function WorkspaceClient() {
               );
             }
 
-            if (stage === "ready_to_execute") {
+            if (stageView.isReadyToExecute) {
               return (
                 <PrecheckView
                   summary={snapshot?.precheck_summary || null}
+                  planItems={snapshot?.plan_snapshot?.items || []}
+                  targetSlots={snapshot?.plan_snapshot?.target_slots || []}
                   isBusy={isBusy}
                   readOnly={isReadOnly}
                   onRequestExecute={() => {
                     if (!isReadOnly) {
-                      setExecuteConfirmText("");
                       setExecuteConfirmOpen(true);
                     }
                   }}
@@ -588,20 +705,35 @@ export default function WorkspaceClient() {
               );
             }
 
-            if (stage === "idle" || stage === "draft") {
+            if (stageView.isDraftLike) {
               return (
                 <EmptyState
                   icon={Layers}
-                  title="整理预览准备中"
-                  description="先开始扫描，系统会在这里显示整理前后的目录变化。"
+                  title="等待读取目录"
+                  description="开始后会先只读扫描目录，再在这里显示整理建议。"
                   className="mx-auto h-[70vh] max-w-[1360px]"
+                />
+              );
+            }
+
+            if (stageView.isTargetSelection) {
+              return (
+                <IncrementalSelectionView
+                  rootDirectoryOptions={incrementalSelection?.root_directory_options || []}
+                  sourceTreeEntries={snapshot?.source_tree_entries || []}
+                  loading={loading}
+                  onConfirm={(selectedTargetDirs) => {
+                    if (!isReadOnly) {
+                      void confirmTargetDirectories(selectedTargetDirs);
+                    }
+                  }}
                 />
               );
             }
 
             return (
               <div className="flex h-full flex-col">
-                {(stage === "stale" || stage === "interrupted") && (
+                {stageView.isRecovery && (
                   <div className="z-10 border-b border-warning/15 bg-warning-container/8 px-4 py-2.5 backdrop-blur-sm">
                     <div className="flex items-center justify-between gap-4">
                       <div className="flex items-center gap-3">
@@ -609,7 +741,7 @@ export default function WorkspaceClient() {
                           <AlertTriangle className="h-4 w-4" />
                         </div>
                         <p className="text-[13px] font-medium text-on-surface">
-                          {stage === "stale" ? "当前方案已过期，建议重新扫描以同步目录状态。" : "任务已中断，建议重新扫描后再继续。"}
+                          {stageView.isStale ? "目录内容已变化，建议重新扫描后再继续。" : "任务已中断，建议重新扫描后再继续。"}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -623,7 +755,7 @@ export default function WorkspaceClient() {
                         <button
                           type="button"
                           onClick={() => void refreshPlan()}
-                          className="inline-flex items-center gap-1.5 rounded-[8px] bg-warning px-3 py-1.5 text-[12px] font-bold text-white shadow-sm transition-opacity hover:opacity-90"
+                          className="inline-flex items-center gap-1.5 rounded-[8px] bg-warning px-3 py-1.5 text-[12px] font-bold text-white transition-opacity hover:opacity-90"
                         >
                           <RefreshCw className="h-3.5 w-3.5" />
                           重新扫描
@@ -633,22 +765,53 @@ export default function WorkspaceClient() {
                   </div>
                 )}
                 <div className="flex-1 overflow-hidden">
-                  <PreviewPanel
-                    plan={plan}
-                    stage={stage}
-                    isBusy={isBusy}
-                    isPlanSyncing={isPlanSyncing}
-                    plannerStatus={plannerStatus}
-                    readOnly={isReadOnly}
-                    focusRequest={previewFocusRequest}
-                    precheckSummary={snapshot?.precheck_summary}
-                    onRunPrecheck={() => {
-                      if (!isReadOnly) void runPrecheck();
-                    }}
-                    onUpdateItem={async (id, payload) => {
-                      if (!isReadOnly) await updateItem({ item_id: id, ...payload });
-                    }}
-                  />
+                  {isInterruptedDuringScan ? (
+                    <EmptyState
+                      icon={FolderTree}
+                      title="扫描中断，尚未形成方案"
+                      description="这次任务还没有得到可确认的整理建议。建议先重新扫描，确认目录内容后再继续。"
+                      className="mx-auto h-full max-w-[1360px]"
+                    >
+                      <div className="flex items-center justify-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => void refreshPlan()}
+                          className="inline-flex items-center gap-1.5 rounded-[8px] bg-warning px-4 py-2 text-[13px] font-bold text-white transition-opacity hover:opacity-90"
+                        >
+                          <RefreshCw className="h-3.5 w-3.5" />
+                          重新扫描
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleExitWorkbench}
+                          className="rounded-[8px] border border-on-surface/10 bg-surface px-4 py-2 text-[13px] font-semibold text-on-surface-variant transition-colors hover:bg-on-surface/5"
+                        >
+                          结束本次任务
+                        </button>
+                      </div>
+                    </EmptyState>
+                  ) : (
+                    <PreviewPanel
+                      plan={plan}
+                      stage={stage}
+                      organizeMode={snapshot?.strategy?.organize_mode || "initial"}
+                      isBusy={isBusy}
+                      isPlanSyncing={isPlanSyncing}
+                      plannerStatus={plannerStatus}
+                      plannerRunKey={snapshot?.planner_progress?.started_at || null}
+                      readOnly={isReadOnly}
+                      focusRequest={previewFocusRequest}
+                      sourceTreeEntries={snapshot?.source_tree_entries || []}
+                      incrementalSelection={incrementalSelection}
+                      precheckSummary={snapshot?.precheck_summary}
+                      onRunPrecheck={() => {
+                        if (!isReadOnly) void runPrecheck();
+                      }}
+                      onUpdateItem={async (id, payload) => {
+                        if (!isReadOnly) await updateItem({ item_id: id, ...payload });
+                      }}
+                    />
+                  )}
                 </div>
               </div>
             );
@@ -705,10 +868,8 @@ export default function WorkspaceClient() {
       setMessageInput={setMessageInput}
       onSendMessage={handleSendMessage}
       onStartScan={handleStartScan}
-      onResolveUnresolved={(payload) => {
-        if (!isReadOnly) void resolveUnresolvedChoices(payload);
-      }}
       unresolvedCount={plan.unresolved_items.length}
+      canRunPrecheck={canRunPrecheck}
       notice={statusNotice}
       scanner={scanner}
       progressPercent={progressPercent}
@@ -716,70 +877,127 @@ export default function WorkspaceClient() {
   );
 
   const conversationHeader = (
-    <div className="z-20 flex shrink-0 items-center justify-between gap-3 border-b border-on-surface/8 bg-surface px-4 py-2 lg:px-5">
-      <div className="flex min-w-0 items-center gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-on-surface/8 bg-surface-container-low px-2 py-0.5 text-[10px] font-bold text-on-surface-variant">
-            <span className={cn(
-              "h-1.5 w-1.5 rounded-full",
-              stage === "completed" ? "bg-success" : "bg-primary/60"
-            )} />
-            {getFriendlyStage(stage)}
+    <div className="z-20 flex shrink-0 items-center justify-between gap-3 border-b border-on-surface/6 bg-surface/50 px-4 py-1.5 backdrop-blur-md">
+      <div className="flex min-w-0 items-center gap-1.5">
+        <span className="flex items-center gap-1 rounded-full bg-primary/8 px-1.5 py-0.5 text-[10px] font-black text-primary">
+          <span className={cn("h-1 w-1 rounded-full", stageView.isCompleted ? "bg-success" : "bg-primary/60")} />
+          {getFriendlyStage(stage)}
+        </span>
+
+        {assistantRuntime && (
+          <span className="flex items-center gap-1 rounded-full bg-on-surface/[0.04] px-1.5 py-0.5 text-[10px] font-bold text-ui-muted">
+            <Loader2 className="h-2.5 w-2.5 animate-spin-slow" />
+            {assistantRuntime.label}
           </span>
-          {assistantRuntime && (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/10 bg-primary/6 px-2 py-0.5 text-[10px] font-bold text-primary/75">
-              <Loader2 className="h-3 w-3 animate-spin-slow" />
-              {assistantRuntime.label}
-            </span>
-          )}
-          {streamStatus !== "connected" && (
-            <span
-              className={cn(
-                "rounded-full border px-2 py-0.5 text-[10px] font-bold",
-                streamStatus === "connecting" && "border-warning/20 bg-warning-container/20 text-warning",
-                streamStatus === "reconnecting" && "border-warning/20 bg-warning-container/30 text-warning",
-                streamStatus === "offline" && "border-on-surface/10 bg-surface-container-low text-ui-muted",
-              )}
-            >
-              {streamStatus === "connecting" ? "正在连接" : streamStatus === "reconnecting" ? "重连中" : "连接已断开"}
-            </span>
-          )}
-        </div>
-        <div className="h-3 w-[1px] bg-on-surface/10 hidden sm:block" />
-        <p className="hidden md:block truncate text-[11px] font-medium text-ui-muted" title={targetPath}>
-          {nextStepHint}
-        </p>
+        )}
+
+        {streamStatus !== "connected" && (
+          <span className={cn(
+            "flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-black uppercase tracking-widest",
+            streamStatus === "connecting" || streamStatus === "reconnecting" ? "bg-warning/10 text-warning" : "bg-on-surface/5 text-ui-muted"
+          )}>
+            {streamStatus === "connecting" ? "连接中" : streamStatus === "reconnecting" ? "重连中" : "离线"}
+          </span>
+        )}
       </div>
-      <div className="flex items-center gap-3 shrink-0">
-        <button
-          type="button"
-          onClick={handleExitWorkbench}
-          className="inline-flex items-center gap-1.5 rounded-[6px] border border-on-surface/10 bg-on-surface/[0.02] px-2.5 py-1 text-[11px] font-bold text-on-surface-variant transition-all hover:bg-on-surface/5 hover:text-on-surface active:scale-95"
-        >
-          <LogOut className="h-3.5 w-3.5" />
-          退出
-        </button>
+
+      <div className="flex shrink-0 items-center gap-2">
+        {!isCompactLayout && (
+           <button
+           type="button"
+           onClick={() => setIsChatCollapsed(true)}
+           className="flex h-6 w-6 items-center justify-center rounded-[4px] text-on-surface/30 transition-all hover:bg-on-surface/10 hover:text-on-surface"
+           title="收起聊天区 (Alt+B)"
+         >
+           <PanelLeftClose className="h-3.5 w-3.5" />
+         </button>
+        )}
+        {!isCompactLayout && (
+           <button
+            type="button"
+            onClick={handleExitWorkbench}
+            className="flex h-6 items-center gap-1.5 rounded-[4px] px-2 text-[11px] font-black text-on-surface/40 transition-colors hover:bg-on-surface/5 hover:text-on-surface"
+          >
+            <LogOut className="h-3 w-3" />
+            退出
+          </button>
+        )}
       </div>
     </div>
   );
 
   return (
     <div ref={containerRef} className="relative flex min-h-0 flex-1 overflow-hidden bg-surface">
+      {isCompactLayout && layoutReady ? (
+        <div className="absolute right-3 top-3 z-30 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setCompactConversationOpen((current) => !current)}
+            className="inline-flex items-center gap-1.5 rounded-[8px] border border-on-surface/20 bg-surface/95 px-3 py-1.5 text-[11px] font-bold text-on-surface-variant backdrop-blur transition-colors hover:bg-surface-container-low hover:text-on-surface"
+          >
+            <Layers className="h-3.5 w-3.5" />
+            {compactConversationOpen ? "返回预览" : "查看会话"}
+          </button>
+          <button
+            type="button"
+            onClick={handleExitWorkbench}
+            className="inline-flex items-center gap-1.5 rounded-[8px] border border-on-surface/20 bg-surface/95 px-3 py-1.5 text-[11px] font-bold text-on-surface-variant backdrop-blur transition-colors hover:bg-surface-container-low hover:text-on-surface"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            退出
+          </button>
+        </div>
+      ) : null}
       <ErrorBoundary fallbackTitle="页面加载出错了" className="flex-1">
         {layoutReady ? (
-          <div className="flex flex-1 min-h-0 bg-transparent">
-            {showConversationPane && (
-              <section
-                ref={leftPaneRef}
-                style={{ width: `${leftWidth}%` }}
-                className="relative flex h-full min-h-0 min-w-[360px] flex-col border-r border-on-surface/6 bg-surface-container-lowest"
-              >
-                {conversationHeader}
-                {conversationPanel}
-              </section>
+          <div className="flex flex-1 min-h-0 bg-transparent overflow-hidden">
+            <AnimatePresence initial={false}>
+              {!isChatCollapsed && (
+                <motion.section
+                  ref={leftPaneRef as any}
+                  initial={{ width: 0, opacity: 0 }}
+                  animate={{ 
+                    width: isCompactLayout ? "100%" : `${leftWidth}%`, 
+                    opacity: 1 
+                  }}
+                  exit={{ width: 0, opacity: 0 }}
+                  transition={{ ease: [0.4, 0, 0.2, 1], duration: 0.35 }}
+                  className={cn(
+                    "relative flex h-full min-h-0 flex-col bg-surface-container-lowest overflow-hidden min-w-0",
+                    isCompactLayout ? "" : "border-r border-on-surface/6",
+                  )}
+                >
+                  <div className="flex flex-col h-full min-w-[360px]">
+                    {conversationHeader}
+                    {conversationPanel}
+                  </div>
+                </motion.section>
+              )}
+            </AnimatePresence>
+
+            {isChatCollapsed && !isCompactLayout && (
+              <div className="z-50 flex h-full w-[38px] flex-col items-center bg-surface-container-lowest border-r border-on-surface/8 py-3 gap-6 animate-in slide-in-from-left duration-300">
+                 <button
+                  type="button"
+                  onClick={() => setIsChatCollapsed(false)}
+                  className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-white transition-all hover:scale-105 active:scale-95"
+                  title="展开聊天区 (Alt+B)"
+                >
+                  <PanelLeftOpen className="h-4 w-4" />
+                </button>
+                <div className="h-px w-4 bg-on-surface/[0.08]" />
+                <div className="flex-1 flex flex-col items-center justify-center">
+                  <div 
+                    className="whitespace-nowrap text-[9px] font-black uppercase tracking-[0.3em] text-on-surface/20"
+                    style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+                  >
+                    会话记录
+                  </div>
+                </div>
+              </div>
             )}
 
-            {showConversationPane && (
+            {showConversationPane && showPreviewPane && !isCompactLayout && !isChatCollapsed && (
               <div
                 ref={dividerRef}
                 onMouseDown={handleStartResizing}
@@ -793,15 +1011,15 @@ export default function WorkspaceClient() {
                   className={cn(
                     "w-[1px] h-full transition-all duration-300",
                     isResizingState
-                      ? "bg-primary/35 shadow-[0_0_12px_rgba(0,120,212,0.18)] scale-x-[1.5]"
-                      : "bg-on-surface/[0.06] group-hover:bg-primary/18",
+                      ? "bg-on-surface text-surface"
+                      : "text-ui-muted hover:text-on-surface hover:bg-on-surface/5",
                   )}
                 />
                 <div
                   className={cn(
-                    "absolute top-1/2 flex h-9 w-5 -translate-y-1/2 flex-col items-center justify-center gap-0.5 rounded-[8px] border border-on-surface/8 bg-surface-container-lowest transition-all duration-200",
+                    "absolute top-1/2 flex h-9 w-5 -translate-y-1/2 flex-col items-center justify-center gap-0.5 rounded-[8px] border border-on-surface/12 bg-surface-container-lowest transition-all duration-200",
                     isResizingState
-                      ? "scale-110 border-primary/20 opacity-100 shadow-[0_4px_10px_rgba(0,0,0,0.08)]"
+                      ? "scale-110 border-primary/20 opacity-100"
                       : "opacity-0 group-hover:opacity-100 scale-100",
                   )}
                 >
@@ -811,13 +1029,15 @@ export default function WorkspaceClient() {
               </div>
             )}
 
-            <section
-              ref={rightPaneRef as any}
-              style={{ width: showConversationPane ? `${100 - leftWidth}%` : "100%" }}
-              className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-surface-container-lowest/30"
-            >
-              <div className="flex-1 min-h-0 w-full overflow-hidden flex flex-col">{renderPreviewContent()}</div>
-            </section>
+            {showPreviewPane && (
+              <section
+                ref={rightPaneRef as any}
+                style={{ width: !isCompactLayout && showConversationPane && !isChatCollapsed ? `${100 - leftWidth}%` : "100%" }}
+                className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-surface-container-lowest/30"
+              >
+                <div className="flex-1 min-h-0 w-full overflow-hidden flex flex-col">{renderPreviewContent()}</div>
+              </section>
+            )}
           </div>
         ) : renderLayoutSkeleton()}
       </ErrorBoundary>
@@ -834,9 +1054,9 @@ export default function WorkspaceClient() {
       />
       <ConfirmDialog
         open={scanAbortConfirmOpen}
-        title="确认中断本次扫描？"
-        description="中断后会结束当前整理任务并返回首页。这一轮扫描不会继续生成后续方案。"
-        confirmLabel="确认中断"
+        title="停止本次扫描？"
+        description="停止后会结束当前整理任务并返回首页。这一轮不会继续生成整理建议。"
+        confirmLabel="停止扫描"
         cancelLabel="继续扫描"
         tone="danger"
         loading={loading}
@@ -845,16 +1065,13 @@ export default function WorkspaceClient() {
       />
       <ConfirmDialog
         open={executeConfirmOpen}
-        title={requiresTypedExecuteConfirm ? "高风险整理，确认执行？" : "确认执行这次整理？"}
-        description={requiresTypedExecuteConfirm
-          ? "这次整理涉及较多移动、较多 Review 条目，或目标目录处于根路径。请输入大写 YES 后再执行。"
-          : "执行后会真实移动本地文件。请在最后确认一次影响范围，避免误触发落盘。"}
-        confirmLabel={requiresTypedExecuteConfirm ? "输入 YES 后执行" : "开始执行"}
+        title="确认开始移动文件？"
+        description={`执行后会真实移动本地文件。本次将处理 ${precheck?.move_preview.length ?? 0} 项${reviewMoveCount > 0 ? `，其中 ${reviewMoveCount} 项会留在待确认区（Review）` : ""}${precheckItemsSummary ? `。涉及条目：${precheckItemsSummary}` : ""}。`}
+        confirmLabel="开始移动"
         cancelLabel="再看看"
         tone="primary"
         loading={loading}
         onConfirm={async () => {
-          if (requiresTypedExecuteConfirm && executeConfirmText.trim() !== "YES") return;
           const success = await execute();
           if (success) setExecuteConfirmOpen(false);
         }}
@@ -870,20 +1087,9 @@ export default function WorkspaceClient() {
             <span className="font-semibold text-on-surface">{precheck?.mkdir_preview.length ?? 0} 个</span>
           </div>
           <div className="flex items-center justify-between rounded-[10px] bg-surface-container-low px-3 py-2">
-            <span className="text-ui-muted">将进入 Review</span>
+            <span className="text-ui-muted">留在待确认区</span>
             <span className="font-semibold text-on-surface">{reviewMoveCount} 项</span>
           </div>
-          {requiresTypedExecuteConfirm && (
-            <label className="grid gap-2 pt-2">
-              <span className="text-ui-muted">请输入大写 YES 以确认高风险执行</span>
-              <input
-                value={executeConfirmText}
-                onChange={(event) => setExecuteConfirmText(event.target.value)}
-                className="h-11 rounded-[10px] border border-on-surface/8 bg-surface-container-low px-3 text-[13px] font-semibold text-on-surface outline-none"
-                placeholder="YES"
-              />
-            </label>
-          )}
         </div>
       </ConfirmDialog>
     </div>

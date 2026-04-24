@@ -1,5 +1,6 @@
 ﻿import shutil
 import unittest
+import shutil
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -21,7 +22,7 @@ class StructuredAnalysisServiceTests(unittest.TestCase):
         if self.base_dir.exists():
             shutil.rmtree(self.base_dir)
 
-    def test_render_analysis_items_preserves_compatible_scan_format(self):
+    def test_render_analysis_items_includes_entry_type_in_scan_format(self):
         items = [
             AnalysisItem(
                 entry_name="合同.pdf",
@@ -35,7 +36,7 @@ class StructuredAnalysisServiceTests(unittest.TestCase):
 
         rendered = analysis_service.render_analysis_items(items)
 
-        self.assertIn("合同.pdf | 财务/合同 | 付款协议", rendered)
+        self.assertIn("合同.pdf | file | 财务/合同 | 付款协议", rendered)
         self.assertNotIn("confidence", rendered)
 
     def test_validate_analysis_items_accepts_current_level_entries(self):
@@ -97,7 +98,7 @@ class StructuredAnalysisServiceTests(unittest.TestCase):
             saved_path = analysis_service.append_output_result(items)
 
         self.assertEqual(saved_path, result_file)
-        self.assertIn("合同.pdf | 财务/合同 | 付款协议", result_file.read_text(encoding="utf-8"))
+        self.assertIn("合同.pdf | file | 财务/合同 | 付款协议", result_file.read_text(encoding="utf-8"))
 
     def test_run_analysis_cycle_emits_wait_events_around_model_request(self):
         submitted_items = [
@@ -121,7 +122,7 @@ class StructuredAnalysisServiceTests(unittest.TestCase):
         tool_call = SimpleNamespace(
             function=SimpleNamespace(
                 name=analysis_service.SUBMIT_ANALYSIS_TOOL_NAME,
-                arguments='{"items": [{"entry_name": "合同.pdf", "entry_type": "file", "suggested_purpose": "财务/合同", "summary": "付款协议", "evidence_sources": ["filename"], "confidence": 0.9}, {"entry_name": "Screenshots", "entry_type": "dir", "suggested_purpose": "截图记录", "summary": "软件报错截图", "evidence_sources": ["directory_listing"], "confidence": 0.7}]}'
+                arguments='{"items": [{"entry_id": "F002", "entry_type": "file", "suggested_purpose": "财务/合同", "summary": "付款协议", "evidence_sources": ["filename"], "confidence": 0.9}, {"entry_id": "F001", "entry_type": "dir", "suggested_purpose": "截图记录", "summary": "软件报错截图", "evidence_sources": ["directory_listing"], "confidence": 0.7}]}'
             )
         )
         response = SimpleNamespace(
@@ -139,6 +140,116 @@ class StructuredAnalysisServiceTests(unittest.TestCase):
         self.assertIn("model_wait_start", events)
         self.assertIn("model_wait_end", events)
         self.assertLess(events.index("model_wait_start"), events.index("model_wait_end"))
+
+    def test_run_analysis_cycle_prompt_uses_entry_id_and_not_absolute_paths(self):
+        tool_call = SimpleNamespace(
+            function=SimpleNamespace(
+                name=analysis_service.SUBMIT_ANALYSIS_TOOL_NAME,
+                arguments='{"items": [{"entry_id": "F001", "entry_type": "file", "suggested_purpose": "财务/合同", "summary": "付款协议"}, {"entry_id": "F002", "entry_type": "dir", "suggested_purpose": "截图记录", "summary": "软件报错截图"}]}'
+            )
+        )
+        response = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(tool_calls=[tool_call], content=""))]
+        )
+        create_mock = mock.Mock(return_value=response)
+        client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create_mock)))
+
+        with mock.patch.object(analysis_service, "get_client", return_value=client):
+            rendered = analysis_service.run_analysis_cycle(self.base_dir)
+
+        self.assertIn("付款协议", rendered)
+        self.assertIn("软件报错截图", rendered)
+        messages = create_mock.call_args.kwargs["messages"]
+        self.assertIn("F001 |", messages[0]["content"])
+        self.assertIn("F002 |", messages[0]["content"])
+        self.assertNotIn(str(self.base_dir.resolve()), messages[0]["content"])
+
+    def test_run_analysis_cycle_logs_when_image_entries_are_not_requested_for_inspection(self):
+        image_path = self.base_dir / "IMG_001.png"
+        image_path.write_bytes(b"fake-image")
+        tool_call = SimpleNamespace(
+            function=SimpleNamespace(
+                name=analysis_service.SUBMIT_ANALYSIS_TOOL_NAME,
+                arguments='{"items": [{"entry_id": "F001", "entry_type": "file", "suggested_purpose": "财务/合同", "summary": "付款协议"}, {"entry_id": "F002", "entry_type": "dir", "suggested_purpose": "截图记录", "summary": "软件报错截图"}, {"entry_id": "F003", "entry_type": "file", "suggested_purpose": "待判断", "summary": "未查看图片"}]}'
+            )
+        )
+        response = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(tool_calls=[tool_call], content=""))]
+        )
+        client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=mock.Mock(return_value=response))))
+
+        with mock.patch.object(analysis_service, "get_client", return_value=client), mock.patch.object(
+            analysis_service, "_vision_prompt_enabled", return_value=True
+        ), mock.patch.object(analysis_service, "_write_analysis_debug_event") as write_debug_event:
+            analysis_service.run_analysis_cycle(self.base_dir)
+
+        event_kinds = [call.args[1] for call in write_debug_event.call_args_list]
+        self.assertIn("analysis.vision.skipped_not_requested", event_kinds)
+
+    def test_extract_image_probe_statuses_parses_structured_image_blocks(self):
+        result = (
+            "--- 条目 [F001 | IMG_001.png] 内容开始 ---\n"
+            "--- 图片识别结果开始 ---\n"
+            "status: failed\n"
+            "error_code: vision_request_failed\n"
+            "error_message: provider failed\n"
+            "--- 图片识别结果结束 ---\n"
+            "--- 内容结束 ---"
+        )
+
+        statuses = analysis_service._extract_image_probe_statuses(result)
+
+        self.assertEqual(statuses["F001"]["status"], "failed")
+        self.assertEqual(statuses["F001"]["error_code"], "vision_request_failed")
+
+    def test_validate_failed_image_probe_items_rejects_specific_scene_when_probe_failed(self):
+        items = [
+            AnalysisItem(
+                entry_id="F001",
+                entry_name="IMG_001.png",
+                entry_type="file",
+                suggested_purpose="图片/照片",
+                summary="聚餐场景照片，显示多人围坐圆桌用餐",
+            )
+        ]
+
+        failures = analysis_service._validate_failed_image_probe_items(
+            items,
+            {"F001": {"status": "failed", "error_code": "vision_request_failed", "error_message": "provider failed"}},
+        )
+
+        self.assertEqual(failures, ["F001"])
+
+    def test_batch_read_tool_resolves_entry_ids_without_exposing_absolute_paths(self):
+        entry_context = {
+            "F001": {
+                "entry_id": "F001",
+                "entry_name": "合同.pdf",
+                "display_name": "合同.pdf",
+                "entry_type": "file",
+                "absolute_path": str((self.base_dir / "合同.pdf").resolve()),
+            }
+        }
+
+        result = analysis_service._dispatch_tool_call(
+            self.base_dir,
+            analysis_service.BATCH_READ_TOOL_NAME,
+            {"entry_ids": ["F001"]},
+            entry_context=entry_context,
+        )
+
+        self.assertIn("条目 [F001 | 合同.pdf] 内容开始", result)
+        self.assertNotIn(str((self.base_dir / "合同.pdf").resolve()), result)
+
+    def test_submit_analysis_tool_schema_no_longer_exposes_entry_name(self):
+        submit_tool = next(
+            tool
+            for tool in analysis_service.tools
+            if tool["function"]["name"] == analysis_service.SUBMIT_ANALYSIS_TOOL_NAME
+        )
+
+        item_properties = submit_tool["function"]["parameters"]["properties"]["items"]["items"]["properties"]
+        self.assertNotIn("entry_name", item_properties)
 
     def test_run_analysis_cycle_serializes_tool_call_messages_before_retrying(self):
         first_response = SimpleNamespace(
@@ -171,7 +282,7 @@ class StructuredAnalysisServiceTests(unittest.TestCase):
                                 type="function",
                                 function=SimpleNamespace(
                                     name=analysis_service.SUBMIT_ANALYSIS_TOOL_NAME,
-                                    arguments='{"items": [{"entry_name": "合同.pdf", "suggested_purpose": "财务/合同", "summary": "付款协议"}, {"entry_name": "Screenshots", "suggested_purpose": "截图记录", "summary": "软件报错截图"}]}',
+                                    arguments='{"items": [{"entry_id": "F002", "entry_type": "file", "suggested_purpose": "财务/合同", "summary": "付款协议"}, {"entry_id": "F001", "entry_type": "dir", "suggested_purpose": "截图记录", "summary": "软件报错截图"}]}',
                                 ),
                             )
                         ],
@@ -187,7 +298,7 @@ class StructuredAnalysisServiceTests(unittest.TestCase):
         ), mock.patch.object(analysis_service, "_dispatch_tool_call", return_value="目录列表"):
             rendered = analysis_service.run_analysis_cycle(self.base_dir)
 
-        self.assertIn("合同.pdf | 财务/合同 | 付款协议", rendered)
+        self.assertIn("合同.pdf | file | 财务/合同 | 付款协议", rendered)
         self.assertEqual(create_mock.call_count, 2)
         second_messages = create_mock.call_args_list[1].kwargs["messages"]
         analysis_service.json.dumps(second_messages, ensure_ascii=False)
@@ -225,7 +336,7 @@ class StructuredAnalysisServiceTests(unittest.TestCase):
                                 type="function",
                                 function=SimpleNamespace(
                                     name=analysis_service.SUBMIT_ANALYSIS_TOOL_NAME,
-                                    arguments='{"items": [{"entry_name": "合同.pdf", "suggested_purpose": "财务/合同", "summary": "付款协议"}, {"entry_name": "Screenshots", "suggested_purpose": "截图记录", "summary": "软件报错截图"}]}',
+                                    arguments='{"items": [{"entry_id": "F002", "entry_type": "file", "suggested_purpose": "财务/合同", "summary": "付款协议"}, {"entry_id": "F001", "entry_type": "dir", "suggested_purpose": "截图记录", "summary": "软件报错截图"}]}',
                                 ),
                             )
                         ],
@@ -241,7 +352,7 @@ class StructuredAnalysisServiceTests(unittest.TestCase):
         ), mock.patch.object(analysis_service, "_dispatch_tool_call", return_value="目录列表"):
             rendered = analysis_service.run_analysis_cycle(self.base_dir)
 
-        self.assertIn("合同.pdf | 财务/合同 | 付款协议", rendered)
+        self.assertIn("合同.pdf | file | 财务/合同 | 付款协议", rendered)
         second_messages = create_mock.call_args_list[1].kwargs["messages"]
         synthesized_id = second_messages[2]["tool_calls"][0]["id"]
         self.assertTrue(synthesized_id)
@@ -261,8 +372,8 @@ class StructuredAnalysisServiceTests(unittest.TestCase):
         ):
             rendered = analysis_service.run_analysis_cycle(self.base_dir)
 
-        self.assertIn("合同.pdf | 财务/合同 | 付款协议", rendered)
-        self.assertIn("Screenshots | 截图记录 | 软件报错截图", rendered)
+        self.assertIn("合同.pdf | file | 财务/合同 | 付款协议", rendered)
+        self.assertIn("Screenshots | dir | 截图记录 | 软件报错截图", rendered)
 
     def test_run_analysis_cycle_accepts_json_string_response(self):
         response = (
@@ -278,8 +389,8 @@ class StructuredAnalysisServiceTests(unittest.TestCase):
         ):
             rendered = analysis_service.run_analysis_cycle(self.base_dir)
 
-        self.assertIn("合同.pdf | 财务/合同 | 付款协议", rendered)
-        self.assertIn("Screenshots | 截图记录 | 软件报错截图", rendered)
+        self.assertIn("合同.pdf | file | 财务/合同 | 付款协议", rendered)
+        self.assertIn("Screenshots | dir | 截图记录 | 软件报错截图", rendered)
 
     def test_run_analysis_cycle_falls_back_to_stream_when_non_stream_message_is_empty(self):
         empty_response = SimpleNamespace(
@@ -298,7 +409,7 @@ class StructuredAnalysisServiceTests(unittest.TestCase):
                                     "type": "function",
                                     "function": {
                                         "name": "submit_analysis_result",
-                                        "arguments": '{"items": [{"entry_name": "合同.pdf", "suggested_purpose": "finance/contract", "summary": "payment agreement"}, {"entry_name": "Screenshots", "suggested_purpose": "screenshots", "summary": "error screenshots"}]}'
+                                        "arguments": '{"items": [{"entry_id": "F002", "entry_type": "file", "suggested_purpose": "finance/contract", "summary": "payment agreement"}, {"entry_id": "F001", "entry_type": "dir", "suggested_purpose": "screenshots", "summary": "error screenshots"}]}'
                                     },
                                 }
                             ]
@@ -316,7 +427,7 @@ class StructuredAnalysisServiceTests(unittest.TestCase):
         ):
             rendered = analysis_service.run_analysis_cycle(self.base_dir)
 
-        self.assertIn("合同.pdf | finance/contract | payment agreement", rendered)
+        self.assertIn("合同.pdf | file | finance/contract | payment agreement", rendered)
         self.assertEqual(create_mock.call_count, 2)
         self.assertNotIn("stream", create_mock.call_args_list[0].kwargs)
         self.assertTrue(create_mock.call_args_list[1].kwargs["stream"])

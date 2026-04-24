@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { CheckCircle2, Layers3, Sparkles, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Layers3, Sparkles, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -18,6 +18,7 @@ import { SessionStrategySelection } from "@/types/session";
 export function StrategyDialog({
   open,
   loading,
+  error,
   targetDir,
   strategy,
   onClose,
@@ -27,10 +28,13 @@ export function StrategyDialog({
   onChangeDensity,
   onChangePrefixStyle,
   onChangeCaution,
+  onChangeOrganizeMode,
+  onChangeDestinationIndexDepth,
   onChangeNote,
 }: {
   open: boolean;
   loading: boolean;
+  error?: string | null;
   targetDir: string;
   strategy: SessionStrategySelection;
   onClose: () => void;
@@ -40,8 +44,11 @@ export function StrategyDialog({
   onChangeDensity: (id: SessionStrategySelection["density"]) => void;
   onChangePrefixStyle: (id: SessionStrategySelection["prefix_style"]) => void;
   onChangeCaution: (id: SessionStrategySelection["caution_level"]) => void;
+  onChangeOrganizeMode: (mode: SessionStrategySelection["organize_mode"]) => void;
+  onChangeDestinationIndexDepth: (depth: SessionStrategySelection["destination_index_depth"]) => void;
   onChangeNote: (value: string) => void;
 }) {
+  const isIncremental = strategy.organize_mode === "incremental";
   const currentTemplate = useMemo(() => getTemplateMeta(strategy.template_id), [strategy.template_id]);
   const summary = useMemo(() => buildStrategySummary(strategy), [strategy]);
 
@@ -68,7 +75,7 @@ export function StrategyDialog({
             exit={{ opacity: 0, scale: 0.97, y: 20 }}
             className="ui-dialog flex h-[min(92vh,820px)] w-full max-w-[1080px] flex-col overflow-hidden bg-surface-container-lowest"
           >
-            <div className="flex items-start justify-between gap-6 border-b border-on-surface/8 bg-surface px-5 py-3 lg:px-6 shadow-sm">
+            <div className="flex items-start justify-between gap-6 border-b border-on-surface/8 bg-surface px-5 py-3 lg:px-6">
               <div className="space-y-1.5">
                 <div className="inline-flex items-center gap-1.5 rounded-[6px] border border-primary/12 bg-primary/8 px-2 py-0.5 text-[11px] font-bold text-primary">
                   <Layers3 className="h-3 w-3" />
@@ -76,7 +83,11 @@ export function StrategyDialog({
                 </div>
                 <div className="space-y-0.5">
                   <h2 className="text-[1.1rem] font-black tracking-tight text-on-surface">补充本轮整理策略</h2>
-                  <p className="max-w-2xl text-[12px] leading-relaxed text-ui-muted">完成模板、命名和整理偏好设置，随后进入 AI 扫描分析。</p>
+                  <p className="max-w-2xl text-[12px] leading-relaxed text-ui-muted">
+                    {isIncremental
+                      ? "确认目标目录导向规则和目标目录可见深度，随后进入扫描与规划。"
+                      : "完成模板、命名和整理偏好设置，随后进入 AI 扫描分析。"}
+                  </p>
                 </div>
               </div>
 
@@ -92,74 +103,127 @@ export function StrategyDialog({
             </div>
 
             <div className="min-h-0 flex-1 overflow-auto px-5 py-4 lg:px-6 bg-surface-container-lowest/30">
-              <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
-                <section className="rounded-[10px] border border-on-surface/8 bg-surface p-3">
-                  <div className="mb-2 px-1">
-                    <p className="text-[10.5px] font-bold uppercase tracking-[0.15em] text-ui-muted">整理模板</p>
+              {error ? (
+                <div className="mb-4 rounded-[10px] border border-error/14 bg-error-container/14 px-4 py-3 text-error">
+                  <div className="flex items-start gap-2.5">
+                    <AlertTriangle className="mt-0.5 h-4.5 w-4.5 shrink-0" />
+                    <p className="text-[12.5px] font-semibold leading-relaxed">{error}</p>
                   </div>
-                  <div className="space-y-1.5">
-                    {STRATEGY_TEMPLATES.map((template) => {
-                      const active = strategy.template_id === template.id;
-                      return (
-                        <button
-                          key={template.id}
-                          type="button"
-                          onClick={() => onTemplateSelect(template.id)}
-                          disabled={loading}
-                          className={cn(
-                            "flex w-full flex-col rounded-[8px] border px-3 py-2.5 text-left transition-all disabled:opacity-50",
-                            active ? "border-primary/25 bg-primary/10 shadow-sm" : "border-transparent bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
-                          )}
-                        >
-                          <div className="mb-1 flex items-center justify-between gap-3">
-                            <p className={cn("text-[13px] font-bold tracking-tight", active ? "text-primary" : "text-on-surface")}>{template.label}</p>
-                            {active ? <CheckCircle2 className="h-4 w-4 text-primary" /> : null}
-                          </div>
-                          <p className="text-[11px] leading-[1.5] text-ui-muted">{template.applicableScenarios}</p>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </section>
+                </div>
+              ) : null}
+              <div className={cn("grid gap-4", isIncremental ? "lg:grid-cols-1" : "lg:grid-cols-[260px_minmax(0,1fr)]")}>
+                {!isIncremental ? (
+                  <section className="rounded-[10px] border border-on-surface/8 bg-surface p-3">
+                    <div className="mb-2 px-1">
+                      <p className="text-[10.5px] font-bold uppercase tracking-[0.15em] text-ui-muted">整理模板</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      {STRATEGY_TEMPLATES.map((template) => {
+                        const active = strategy.template_id === template.id;
+                        return (
+                          <button
+                            key={template.id}
+                            type="button"
+                            onClick={() => onTemplateSelect(template.id)}
+                            disabled={loading}
+                            className={cn(
+                              "flex w-full flex-col rounded-[8px] border px-3 py-2.5 text-left transition-all disabled:opacity-50",
+                              active ? "border-primary/25 bg-primary/10" : "border-transparent bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
+                            )}
+                          >
+                            <div className="mb-1 flex items-center justify-between gap-3">
+                              <p className={cn("text-[13px] font-bold tracking-tight", active ? "text-primary" : "text-on-surface")}>{template.label}</p>
+                              {active ? <CheckCircle2 className="h-4 w-4 text-primary" /> : null}
+                            </div>
+                            <p className="text-[11px] leading-[1.5] text-ui-muted">{template.applicableScenarios}</p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ) : null}
 
                 <section className="space-y-4">
                   <div className="rounded-[10px] border border-on-surface/8 bg-surface-container-lowest p-4">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full border border-primary/12 bg-primary/8 px-2.5 py-0.5 text-[11px] font-bold text-primary">{currentTemplate.label}</span>
-                      <span className="rounded-full border border-on-surface/8 bg-surface px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant/70">{summary.language_label}</span>
-                      <span className="rounded-full border border-on-surface/8 bg-surface px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant/70">{summary.density_label}</span>
-                      <span className="rounded-full border border-on-surface/8 bg-surface px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant/70">{summary.prefix_style_label}</span>
-                      <span className="rounded-full border border-on-surface/8 bg-surface px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant/70">{summary.caution_level_label}</span>
+                      {!isIncremental ? (
+                        <>
+                          <span className="rounded-full border border-primary/12 bg-primary/8 px-2.5 py-0.5 text-[11px] font-bold text-primary">{currentTemplate.label}</span>
+                          <span className="rounded-full border border-on-surface/8 bg-surface px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant/70">{summary.language_label}</span>
+                          <span className="rounded-full border border-on-surface/8 bg-surface px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant/70">{summary.density_label}</span>
+                          <span className="rounded-full border border-on-surface/8 bg-surface px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant/70">{summary.prefix_style_label}</span>
+                          <span className="rounded-full border border-on-surface/8 bg-surface px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant/70">{summary.caution_level_label}</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="rounded-full border border-primary/12 bg-primary/8 px-2.5 py-0.5 text-[11px] font-bold text-primary">{summary.organize_mode_label}</span>
+                          <span className="rounded-full border border-on-surface/8 bg-surface px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant/70">目标目录深度 {summary.destination_index_depth}</span>
+                          <span className="rounded-full border border-on-surface/8 bg-surface px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant/70">{summary.caution_level_label}</span>
+                        </>
+                      )}
                     </div>
-                    <p className="mt-2.5 text-[13px] leading-relaxed text-ui-muted">{currentTemplate.description}</p>
+                    <p className="mt-2.5 text-[13px] leading-relaxed text-ui-muted">
+                      {isIncremental
+                        ? "本模式会先让你选择目标目录，再把剩余根级条目作为待整理项进行规划。优先复用已有目录结构，但必要时仍可创建新的顶级目录。"
+                        : currentTemplate.description}
+                    </p>
 
-                    <div className="mt-4 rounded-[10px] border border-on-surface/8 bg-surface px-3.5 py-2.5">
-                      <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ui-muted/60">预计目录结构</div>
-                      <div className="mt-2.5 flex flex-wrap gap-1.5">
-                        {summary.preview_directories?.map((directory) => (
-                          <span key={`${strategy.template_id}-${strategy.language}-${strategy.density}-${strategy.prefix_style}-${directory}`} className="rounded-[4px] border border-on-surface/8 bg-surface-container-lowest px-2 py-0.5 text-[11px] font-semibold text-on-surface">
-                            {directory}
-                          </span>
-                        ))}
+                    {!isIncremental ? (
+                      <div className="mt-4 rounded-[10px] border border-on-surface/8 bg-surface px-3.5 py-2.5">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ui-muted/60">预计目录结构</div>
+                        <div className="mt-2.5 flex flex-wrap gap-1.5">
+                          {summary.preview_directories?.map((directory) => (
+                            <span key={`${strategy.template_id}-${strategy.language}-${strategy.density}-${strategy.prefix_style}-${directory}`} className="rounded-[4px] border border-on-surface/8 bg-surface-container-lowest px-2 py-0.5 text-[11px] font-semibold text-on-surface">
+                              {directory}
+                            </span>
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="mt-4 rounded-[10px] border border-on-surface/8 bg-surface px-3.5 py-2.5">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ui-muted/60">归入已有目录约束</div>
+                        <div className="mt-2.5 flex flex-wrap gap-1.5">
+                          {[
+                            "先选择目标目录",
+                            "只处理未纳入目标池的根级条目",
+                            "优先归入已有目标目录",
+                            "必要时可新建顶级目录",
+                          ].map((rule) => (
+                            <span key={rule} className="rounded-[4px] border border-on-surface/8 bg-surface-container-lowest px-2 py-0.5 text-[11px] font-semibold text-on-surface">
+                              {rule}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid gap-4 xl:grid-cols-2">
-                    <div className="rounded-[10px] border border-on-surface/8 bg-surface p-3.5">
-                      <div className="mb-2.5 text-[10px] font-bold uppercase tracking-[0.15em] text-ui-muted">目录语言</div>
-                      <div className="grid gap-1.5">
-                        {LANGUAGE_OPTIONS.map((option) => {
-                          const active = strategy.language === option.id;
+                    <div className="rounded-[10px] border border-on-surface/8 bg-surface p-3.5 xl:col-span-2">
+                      <div className="mb-2.5 text-[10px] font-bold uppercase tracking-[0.15em] text-ui-muted">任务类型</div>
+                      <div className="grid gap-2 md:grid-cols-2">
+                        {[
+                          {
+                            id: "initial" as const,
+                            label: "整理整个目录",
+                            description: "适合整体整理当前目录，可新建目标目录。",
+                          },
+                          {
+                            id: "incremental" as const,
+                            label: "归入已有目录",
+                            description: "先选目标目录，再整理剩余根级条目。",
+                          },
+                        ].map((option) => {
+                          const active = strategy.organize_mode === option.id;
                           return (
                             <button
                               key={option.id}
                               type="button"
-                              onClick={() => onChangeLanguage(option.id)}
+                              onClick={() => onChangeOrganizeMode(option.id)}
                               disabled={loading}
                               className={cn(
-                                "rounded-[8px] border px-3 py-2 text-left transition-all disabled:opacity-50",
-                                active ? "border-primary/25 bg-primary/10 shadow-sm" : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
+                                "rounded-[8px] border px-3 py-2.5 text-left transition-all disabled:opacity-50",
+                                active ? "border-primary/25 bg-primary/10" : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
                               )}
                             >
                               <div className="flex items-center justify-between gap-3">
@@ -171,64 +235,119 @@ export function StrategyDialog({
                           );
                         })}
                       </div>
+                      {strategy.organize_mode === "incremental" && (
+                        <div className="mt-3 grid gap-2 md:grid-cols-3">
+                          {[1, 2, 3].map((depth) => {
+                            const active = strategy.destination_index_depth === depth;
+                            return (
+                              <button
+                                key={depth}
+                                type="button"
+                                onClick={() => onChangeDestinationIndexDepth(depth as SessionStrategySelection["destination_index_depth"])}
+                                disabled={loading}
+                                className={cn(
+                                  "rounded-[8px] border px-3 py-2 text-left transition-all disabled:opacity-50",
+                                  active ? "border-primary/25 bg-primary/10" : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
+                                )}
+                              >
+                                <p className={cn("text-[12px] font-bold", active ? "text-primary" : "text-on-surface")}>目标目录深度 {depth}</p>
+                                <p className="mt-0.5 text-[11px] leading-[1.5] text-ui-muted/80">读取已有目录结构到第 {depth} 层。</p>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
 
+                    {!isIncremental ? (
+                      <>
+                        <div className="rounded-[10px] border border-on-surface/8 bg-surface p-3.5">
+                          <div className="mb-2.5 text-[10px] font-bold uppercase tracking-[0.15em] text-ui-muted">目录语言</div>
+                          <div className="grid gap-1.5">
+                            {LANGUAGE_OPTIONS.map((option) => {
+                              const active = strategy.language === option.id;
+                              return (
+                                <button
+                                  key={option.id}
+                                  type="button"
+                                  onClick={() => onChangeLanguage(option.id)}
+                                  disabled={loading}
+                                  className={cn(
+                                    "rounded-[8px] border px-3 py-2 text-left transition-all disabled:opacity-50",
+                                    active ? "border-primary/25 bg-primary/10" : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
+                                  )}
+                                >
+                                  <div className="flex items-center justify-between gap-3">
+                                    <p className={cn("text-[12.5px] font-bold", active ? "text-primary" : "text-on-surface")}>{option.label}</p>
+                                    {active ? <CheckCircle2 className="h-3.5 w-3.5 text-primary" /> : null}
+                                  </div>
+                                  <p className="mt-0.5 text-[11px] leading-[1.5] text-ui-muted/80">{option.description}</p>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div className="rounded-[10px] border border-on-surface/8 bg-surface p-3.5">
+                          <div className="mb-2.5 text-[10px] font-bold uppercase tracking-[0.15em] text-ui-muted">分类粒度</div>
+                          <div className="grid gap-1.5">
+                            {DENSITY_OPTIONS.map((option) => {
+                              const active = strategy.density === option.id;
+                              return (
+                                <button
+                                  key={option.id}
+                                  type="button"
+                                  onClick={() => onChangeDensity(option.id)}
+                                  disabled={loading}
+                                  className={cn(
+                                    "rounded-[8px] border px-3 py-2 text-left transition-all disabled:opacity-50",
+                                    active ? "border-primary/25 bg-primary/10" : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
+                                  )}
+                                >
+                                  <div className="flex items-center justify-between gap-3">
+                                    <p className={cn("text-[12.5px] font-bold", active ? "text-primary" : "text-on-surface")}>{option.label}</p>
+                                    {active ? <CheckCircle2 className="h-3.5 w-3.5 text-primary" /> : null}
+                                  </div>
+                                  <p className="mt-0.5 text-[11px] leading-[1.5] text-ui-muted/80">{option.description}</p>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div className="rounded-[10px] border border-on-surface/8 bg-surface p-3.5">
+                          <div className="mb-2.5 text-[10px] font-bold uppercase tracking-[0.15em] text-ui-muted">目录前缀</div>
+                          <div className="grid gap-1.5">
+                            {PREFIX_STYLE_OPTIONS.map((option) => {
+                              const active = strategy.prefix_style === option.id;
+                              return (
+                                <button
+                                  key={option.id}
+                                  type="button"
+                                  onClick={() => onChangePrefixStyle(option.id)}
+                                  disabled={loading}
+                                  className={cn(
+                                    "rounded-[8px] border px-3 py-2 text-left transition-all disabled:opacity-50",
+                                    active ? "border-primary/25 bg-primary/10" : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
+                                  )}
+                                >
+                                  <div className="flex items-center justify-between gap-3">
+                                    <p className={cn("text-[12.5px] font-bold", active ? "text-primary" : "text-on-surface")}>{option.label}</p>
+                                    {active ? <CheckCircle2 className="h-3.5 w-3.5 text-primary" /> : null}
+                                  </div>
+                                  <p className="mt-0.5 text-[11px] leading-[1.5] text-ui-muted/80">{option.description}</p>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </>
+                    ) : null}
+
                     <div className="rounded-[10px] border border-on-surface/8 bg-surface p-3.5">
-                      <div className="mb-2.5 text-[10px] font-bold uppercase tracking-[0.15em] text-ui-muted">分类粒度</div>
-                      <div className="grid gap-1.5">
-                        {DENSITY_OPTIONS.map((option) => {
-                          const active = strategy.density === option.id;
-                          return (
-                            <button
-                              key={option.id}
-                              type="button"
-                              onClick={() => onChangeDensity(option.id)}
-                              disabled={loading}
-                              className={cn(
-                                "rounded-[8px] border px-3 py-2 text-left transition-all disabled:opacity-50",
-                                active ? "border-primary/25 bg-primary/10 shadow-sm" : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
-                              )}
-                            >
-                              <div className="flex items-center justify-between gap-3">
-                                <p className={cn("text-[12.5px] font-bold", active ? "text-primary" : "text-on-surface")}>{option.label}</p>
-                                {active ? <CheckCircle2 className="h-3.5 w-3.5 text-primary" /> : null}
-                              </div>
-                              <p className="mt-0.5 text-[11px] leading-[1.5] text-ui-muted/80">{option.description}</p>
-                            </button>
-                          );
-                        })}
+                      <div className="mb-2.5 text-[10px] font-bold uppercase tracking-[0.15em] text-ui-muted">
+                        {isIncremental ? "归档倾向" : "整理方式"}
                       </div>
-                    </div>
-
-                    <div className="rounded-[10px] border border-on-surface/8 bg-surface p-3.5">
-                      <div className="mb-2.5 text-[10px] font-bold uppercase tracking-[0.15em] text-ui-muted">目录前缀</div>
-                      <div className="grid gap-1.5">
-                        {PREFIX_STYLE_OPTIONS.map((option) => {
-                          const active = strategy.prefix_style === option.id;
-                          return (
-                            <button
-                              key={option.id}
-                              type="button"
-                              onClick={() => onChangePrefixStyle(option.id)}
-                              disabled={loading}
-                              className={cn(
-                                "rounded-[8px] border px-3 py-2 text-left transition-all disabled:opacity-50",
-                                active ? "border-primary/25 bg-primary/10 shadow-sm" : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
-                              )}
-                            >
-                              <div className="flex items-center justify-between gap-3">
-                                <p className={cn("text-[12.5px] font-bold", active ? "text-primary" : "text-on-surface")}>{option.label}</p>
-                                {active ? <CheckCircle2 className="h-3.5 w-3.5 text-primary" /> : null}
-                              </div>
-                              <p className="mt-0.5 text-[11px] leading-[1.5] text-ui-muted/80">{option.description}</p>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    <div className="rounded-[10px] border border-on-surface/8 bg-surface p-3.5">
-                      <div className="mb-2.5 text-[10px] font-bold uppercase tracking-[0.15em] text-ui-muted">整理方式</div>
                       <div className="grid gap-1.5">
                         {CAUTION_LEVEL_OPTIONS.map((option) => {
                           const active = strategy.caution_level === option.id;
@@ -240,7 +359,7 @@ export function StrategyDialog({
                               disabled={loading}
                               className={cn(
                                 "rounded-[8px] border px-3 py-2 text-left transition-all disabled:opacity-50",
-                                active ? "border-primary/25 bg-primary/10 shadow-sm" : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
+                                active ? "border-primary/25 bg-primary/10" : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
                               )}
                             >
                               <div className="flex items-center justify-between gap-3">
@@ -264,15 +383,15 @@ export function StrategyDialog({
                       value={strategy.note}
                       disabled={loading}
                       onChange={(event) => onChangeNote(event.target.value.slice(0, 200))}
-                      placeholder="例如：项目文件尽量放在一起；拿不准的先放 Review。"
+                      placeholder="例如：项目文件尽量放在一起；拿不准的先放待确认区（Review）。"
                       className="min-h-[70px] w-full resize-none rounded-[10px] border border-on-surface/8 bg-surface-container-low px-4 py-3 text-[13px] leading-relaxed text-on-surface outline-none transition-all placeholder:text-on-surface-variant/35 focus:border-primary/30"
                     />
                     <div className="mt-3 flex items-start gap-3 rounded-[8px] border border-primary/10 bg-primary/4 p-2.5">
-                      <div className="flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-[6px] bg-primary/10 text-primary shadow-sm border border-primary/10">
+                      <div className="flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-[6px] bg-primary/10 text-primary border border-primary/20">
                         <Sparkles className="h-3.5 w-3.5" />
                       </div>
                       <p className="text-[11px] leading-tight text-primary/80">
-                        只补充会影响结果的偏好，例如“拿不准的先放 Review”“课程资料按学期整理”。
+                        只补充会影响结果的偏好，例如“拿不准的先放待确认区（Review）”“课程资料按学期整理”。
                       </p>
                     </div>
                   </div>
@@ -283,11 +402,21 @@ export function StrategyDialog({
             <div className="shrink-0 border-t border-on-surface/8 bg-surface px-5 py-3 lg:px-6">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div className="flex flex-wrap items-center gap-1.5 opacity-80">
-                  <span className="rounded-full border border-primary/12 bg-primary/8 px-2.5 py-0.5 text-[11px] font-bold text-primary">{currentTemplate.label}</span>
-                  <span className="rounded-full border border-on-surface/8 bg-surface-container-lowest px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant">{summary.language_label}</span>
-                  <span className="rounded-full border border-on-surface/8 bg-surface-container-lowest px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant">{summary.density_label}</span>
-                  <span className="rounded-full border border-on-surface/8 bg-surface-container-lowest px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant">{summary.prefix_style_label}</span>
-                  <span className="rounded-full border border-on-surface/8 bg-surface-container-lowest px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant">{summary.caution_level_label}</span>
+                  {!isIncremental ? (
+                    <>
+                      <span className="rounded-full border border-primary/12 bg-primary/8 px-2.5 py-0.5 text-[11px] font-bold text-primary">{currentTemplate.label}</span>
+                      <span className="rounded-full border border-on-surface/8 bg-surface-container-lowest px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant">{summary.language_label}</span>
+                      <span className="rounded-full border border-on-surface/8 bg-surface-container-lowest px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant">{summary.density_label}</span>
+                      <span className="rounded-full border border-on-surface/8 bg-surface-container-lowest px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant">{summary.prefix_style_label}</span>
+                      <span className="rounded-full border border-on-surface/8 bg-surface-container-lowest px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant">{summary.caution_level_label}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="rounded-full border border-primary/12 bg-primary/8 px-2.5 py-0.5 text-[11px] font-bold text-primary">{summary.organize_mode_label}</span>
+                      <span className="rounded-full border border-on-surface/8 bg-surface-container-lowest px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant">目标目录深度 {summary.destination_index_depth}</span>
+                      <span className="rounded-full border border-on-surface/8 bg-surface-container-lowest px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant">{summary.caution_level_label}</span>
+                    </>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2.5">

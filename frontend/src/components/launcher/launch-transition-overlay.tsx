@@ -18,7 +18,7 @@ export function LaunchTransitionOverlay({ open, targetDir }: { open: boolean; ta
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.98 }}
             transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
-            className="w-full max-w-[420px] overflow-hidden rounded-[18px] border border-on-surface/8 bg-surface/92 p-6 shadow-[0_24px_80px_rgba(15,23,42,0.16)]"
+            className="w-full max-w-[420px] overflow-hidden rounded-[18px] border border-on-surface/12 bg-surface/96 p-6"
           >
             <div className="flex items-start gap-4">
               <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-[16px] border border-primary/16 bg-primary/8 text-primary">
@@ -37,13 +37,13 @@ export function LaunchTransitionOverlay({ open, targetDir }: { open: boolean; ta
 
               <div className="min-w-0 flex-1">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary/72">
-                  正在进入扫描工作区
+                  正在打开整理工作区
                 </p>
                 <h3 className="mt-2 text-[22px] font-black tracking-tight text-on-surface">
-                  正在建立扫描任务
+                  正在准备读取目录
                 </h3>
                 <p className="mt-2 text-[13px] leading-6 text-on-surface-variant/78">
-                  已确认目录，正在初始化扫描任务并同步工作区状态。
+                  已确认整理对象，正在进入只读扫描阶段。
                 </p>
 
                 <div className="mt-4 rounded-[12px] border border-on-surface/8 bg-surface-container-low/70 px-4 py-3">

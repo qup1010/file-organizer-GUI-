@@ -20,18 +20,18 @@ export function EmptyState({
     <motion.div 
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      className={cn("flex flex-col items-center justify-center text-center p-12", className)}
+      className={cn("flex flex-col items-center justify-center text-center p-8", className)}
     >
-      <div className="ui-panel flex w-full max-w-[460px] flex-col items-center gap-5 px-8 py-10">
-        <div className="flex h-[72px] w-[72px] items-center justify-center rounded-[8px] border border-on-surface/6 bg-surface-container-low text-primary/65 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]">
-          <Icon className="h-9 w-9" />
+      <div className="group relative flex w-full max-w-[420px] flex-col items-center gap-6 overflow-hidden rounded-2xl border border-on-surface/10 bg-surface-container-lowest/50 px-8 py-12 ring-1 ring-black/[0.02]">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/5 text-primary/60 ring-1 ring-primary/10 transition-transform duration-500 group-hover:scale-105 group-hover:rotate-3">
+          <Icon className="h-8 w-8" />
         </div>
-        <div className="max-w-[360px] space-y-2.5">
-          <h3 className="text-[1.15rem] font-black font-headline tracking-tight text-on-surface">{title}</h3>
-          <p className="text-[14px] leading-6 text-ui-subtle">{description}</p>
+        <div className="max-w-[320px] space-y-2">
+          <h3 className="text-[17px] font-black tracking-tight text-on-surface">{title}</h3>
+          <p className="text-[13px] font-medium leading-relaxed text-ui-muted opacity-60">{description}</p>
         </div>
 
-        {children ? <div className="pt-1">{children}</div> : null}
+        {children ? <div className="pt-2">{children}</div> : null}
       </div>
     </motion.div>
   );

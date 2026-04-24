@@ -114,6 +114,8 @@ class SettingsServiceTests(unittest.TestCase):
         self.assertEqual(snapshot["families"]["icon_image"]["active_preset"]["image_model"]["secret_state"], "stored")
         self.assertIn("analysis_concurrency_limit", snapshot["families"]["icon_image"]["active_preset"])
         self.assertIn("image_concurrency_limit", snapshot["families"]["icon_image"]["active_preset"])
+        self.assertTrue(snapshot["runtime"]["log_paths"]["runtime_log"].endswith("logs\\backend\\runtime.log"))
+        self.assertTrue(snapshot["runtime"]["log_paths"]["debug_log"].endswith("logs\\backend\\debug.jsonl"))
 
     def test_icon_image_runtime_supports_split_concurrency_limits(self):
         service = SettingsService(
@@ -145,6 +147,49 @@ class SettingsServiceTests(unittest.TestCase):
         self.assertEqual(runtime["image_concurrency_limit"], 2)
         self.assertEqual(snapshot["families"]["icon_image"]["active_preset"]["analysis_concurrency_limit"], 4)
         self.assertEqual(snapshot["families"]["icon_image"]["active_preset"]["image_concurrency_limit"], 2)
+
+    def test_add_vision_preset_prefers_explicit_name_over_stale_patch_name(self):
+        service = SettingsService(
+            config_path=self.config_path,
+            legacy_icon_config_path=self.legacy_icon_path,
+        )
+        service.update_settings(
+            {
+                "families": {
+                    "vision": {
+                        "preset": {
+                            "IMAGE_ANALYSIS_NAME": "默认图片模型",
+                            "IMAGE_ANALYSIS_BASE_URL": "https://vision.example/v1",
+                            "IMAGE_ANALYSIS_MODEL": "gpt-4.1-mini",
+                        },
+                        "secret": {"action": "replace", "value": "vision-secret"},
+                    }
+                }
+            }
+        )
+
+        preset_id = service.add_preset(
+            "vision",
+            "我的图片预设",
+            copy_from_active=True,
+            preset_patch={
+                "IMAGE_ANALYSIS_NAME": "默认图片模型",
+                "IMAGE_ANALYSIS_BASE_URL": "https://vision-backup.example/v1",
+                "IMAGE_ANALYSIS_MODEL": "gpt-4.1",
+            },
+        )
+
+        snapshot = service.get_settings_snapshot()
+        saved = json.loads(self.config_path.read_text(encoding="utf-8"))
+        active = snapshot["families"]["vision"]["active_preset"]
+
+        self.assertEqual(snapshot["families"]["vision"]["active_preset_id"], preset_id)
+        self.assertEqual(active["name"], "我的图片预设")
+        self.assertEqual(active["IMAGE_ANALYSIS_NAME"], "我的图片预设")
+        self.assertEqual(active["IMAGE_ANALYSIS_BASE_URL"], "https://vision-backup.example/v1")
+        self.assertEqual(active["IMAGE_ANALYSIS_MODEL"], "gpt-4.1")
+        self.assertEqual(saved["vision_presets"][preset_id]["name"], "我的图片预设")
+        self.assertEqual(saved["vision_presets"][preset_id]["IMAGE_ANALYSIS_NAME"], "我的图片预设")
 
     def test_icon_image_legacy_concurrency_limit_migrates_to_both_fields(self):
         self.config_path.write_text(

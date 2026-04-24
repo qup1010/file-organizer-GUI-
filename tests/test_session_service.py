@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from unittest import mock
 
+from file_organizer.app.models import OrganizerSession, PendingPlanPayload, PlanSnapshotPayload, TaskState
 from file_organizer.app.session_service import OrganizerSessionService
 from file_organizer.app.session_store import SessionStore
 from file_organizer.organize.models import PendingPlan, PlanMove
@@ -45,6 +46,23 @@ class OrganizerSessionServiceTests(unittest.TestCase):
             if last_error is not None:
                 raise last_error
 
+    @staticmethod
+    def _plan_item_target_directory(snapshot: dict, source_relpath: str) -> str:
+        plan = snapshot["plan_snapshot"]
+        item = next(entry for entry in plan["items"] if entry["source_relpath"] == source_relpath)
+        slot_id = str(item.get("target_slot_id") or "")
+        if slot_id == "Review" or item.get("status") == "review":
+            return "Review"
+        if not slot_id:
+            return ""
+        slot = next((entry for entry in plan.get("target_slots", []) if entry.get("slot_id") == slot_id), None)
+        return str(slot.get("relpath") or "") if slot else ""
+
+    def _plan_item_target_path(self, snapshot: dict, source_relpath: str) -> str:
+        directory = self._plan_item_target_directory(snapshot, source_relpath)
+        filename = source_relpath.replace("\\", "/").split("/")[-1]
+        return f"{directory}/{filename}" if directory else filename
+
     def test_create_session_returns_created_mode(self):
         result = self.service.create_session(str(self.target_dir), resume_if_exists=False)
 
@@ -61,6 +79,51 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         self.assertEqual(resumed.mode, "resume_available")
         self.assertIsNotNone(resumed.restorable_session)
         self.assertEqual(resumed.restorable_session.session_id, created.session.session_id)
+
+    def test_create_session_does_not_resume_when_source_collection_differs(self):
+        source_a = self.root / "SourceA"
+        source_b = self.root / "SourceB"
+        source_a.mkdir()
+        source_b.mkdir()
+
+        created = self.service.create_session(
+            [{"source_type": "directory", "path": str(source_a), "directory_mode": "atomic"}],
+            resume_if_exists=False,
+            organize_method="categorize_into_new_structure",
+            output_dir=str(self.target_dir),
+        )
+
+        next_result = self.service.create_session(
+            [{"source_type": "directory", "path": str(source_b), "directory_mode": "atomic"}],
+            resume_if_exists=True,
+            organize_method="categorize_into_new_structure",
+            output_dir=str(self.target_dir),
+        )
+
+        self.assertEqual(next_result.mode, "created")
+        self.assertIsNotNone(next_result.session)
+        self.assertNotEqual(next_result.session.session_id, created.session.session_id)
+        abandoned = self.store.load(created.session.session_id)
+        self.assertEqual(abandoned.stage, "abandoned")
+
+    def test_create_session_does_not_resume_when_strategy_differs(self):
+        created = self.service.create_session(
+            str(self.target_dir),
+            resume_if_exists=False,
+            strategy={"note": "旧要求"},
+        )
+
+        next_result = self.service.create_session(
+            str(self.target_dir),
+            resume_if_exists=True,
+            strategy={"note": "新要求"},
+        )
+
+        self.assertEqual(next_result.mode, "created")
+        self.assertIsNotNone(next_result.session)
+        self.assertNotEqual(next_result.session.session_id, created.session.session_id)
+        abandoned = self.store.load(created.session.session_id)
+        self.assertEqual(abandoned.stage, "abandoned")
 
     def test_create_session_allows_new_session_when_latest_session_completed(self):
         created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
@@ -101,6 +164,8 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         self.assertEqual(session.user_constraints, ["项目文件尽量按交付物归档"])
         self.assertEqual(snapshot["strategy"]["template_id"], "project_workspace")
         self.assertEqual(snapshot["strategy"]["template_label"], "项目资料")
+        self.assertEqual(snapshot["strategy"]["task_type"], "organize_full_directory")
+        self.assertEqual(snapshot["strategy"]["task_type_label"], "整理整个目录")
         self.assertEqual(snapshot["strategy"]["language_label"], "英文目录")
         self.assertEqual(snapshot["strategy"]["density_label"], "常规分类")
         self.assertEqual(snapshot["strategy"]["prefix_style_label"], "无前缀")
@@ -128,6 +193,95 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         self.assertEqual(snapshot["strategy"]["template_id"], "personal_archive")
         self.assertEqual(snapshot["strategy"]["template_label"], "个人资料")
         self.assertEqual(snapshot["strategy"]["note"], "证件和账单优先分开")
+
+    def test_create_session_persists_incremental_mode_and_destination_depth(self):
+        created = self.service.create_session(
+            str(self.target_dir),
+            resume_if_exists=False,
+            strategy={
+                "template_id": "general_downloads",
+                "organize_mode": "incremental",
+                "destination_index_depth": 3,
+                "language": "zh",
+                "density": "normal",
+                "prefix_style": "none",
+                "caution_level": "balanced",
+                "note": "",
+            },
+        )
+
+        session = created.session
+        assert session is not None
+        snapshot = self.service.get_snapshot(session.session_id)
+
+        self.assertEqual(session.organize_mode, "incremental")
+        self.assertEqual(session.destination_index_depth, 3)
+        self.assertEqual(snapshot["strategy"]["task_type"], "organize_into_existing")
+        self.assertEqual(snapshot["strategy"]["task_type_label"], "归入已有目录")
+        self.assertEqual(snapshot["strategy"]["organize_mode"], "incremental")
+        self.assertEqual(snapshot["strategy"]["destination_index_depth"], 3)
+        self.assertTrue(snapshot["incremental_selection"]["required"])
+
+    def test_create_session_accepts_task_type_without_organize_mode(self):
+        created = self.service.create_session(
+            str(self.target_dir),
+            resume_if_exists=False,
+            strategy={
+                "template_id": "general_downloads",
+                "task_type": "organize_into_existing",
+                "destination_index_depth": 2,
+                "language": "zh",
+                "density": "normal",
+                "prefix_style": "none",
+                "caution_level": "balanced",
+                "note": "",
+            },
+        )
+
+        session = created.session
+        assert session is not None
+        snapshot = self.service.get_snapshot(session.session_id)
+
+        self.assertEqual(session.organize_mode, "incremental")
+        self.assertEqual(snapshot["strategy"]["task_type"], "organize_into_existing")
+        self.assertEqual(snapshot["strategy"]["organize_mode"], "incremental")
+
+    def test_create_session_rejects_conflicting_task_type_and_organize_mode(self):
+        with self.assertRaisesRegex(ValueError, "TASK_TYPE_CONFLICT"):
+            self.service.create_session(
+                str(self.target_dir),
+                resume_if_exists=False,
+                strategy={
+                    "template_id": "general_downloads",
+                    "task_type": "organize_into_existing",
+                    "organize_mode": "initial",
+                    "destination_index_depth": 2,
+                    "language": "zh",
+                    "density": "normal",
+                    "prefix_style": "none",
+                    "caution_level": "balanced",
+                    "note": "",
+                },
+            )
+
+    def test_get_snapshot_repairs_missing_incremental_organize_method(self):
+        session = OrganizerSession(
+            session_id="legacy-session",
+            target_dir=str(self.target_dir),
+            organize_mode="incremental",
+            organize_method="",
+        )
+        self.store.save(session)
+
+        reloaded = self.store.load("legacy-session")
+        self.assertEqual(reloaded.organize_mode, "incremental")
+        self.assertEqual(reloaded.organize_method, "assign_into_existing_categories")
+
+        snapshot = self.service.get_snapshot("legacy-session")
+
+        self.assertEqual(snapshot["strategy"]["organize_mode"], "incremental")
+        self.assertEqual(snapshot["strategy"]["organize_method"], "assign_into_existing_categories")
+        self.assertEqual(snapshot["strategy"]["task_type"], "organize_into_existing")
 
     def test_create_session_requires_abandon_before_replacing_active_session(self):
         self.service.create_session(str(self.target_dir), resume_if_exists=False)
@@ -171,6 +325,28 @@ class OrganizerSessionServiceTests(unittest.TestCase):
 
         self.assertEqual(resumed.stage, "stale")
         self.assertEqual(resumed.stale_reason, "directory_changed")
+
+    def test_create_session_allows_replacement_after_latest_session_becomes_stale(self):
+        created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
+        session = created.session
+        assert session is not None
+        session.stage = "stale"
+        self.store.save(session)
+
+        replacement = self.service.create_session(str(self.target_dir), resume_if_exists=False)
+
+        self.assertEqual(replacement.mode, "created")
+        self.assertNotEqual(replacement.session.session_id, session.session_id)
+
+    def test_create_session_still_blocks_when_latest_session_is_interrupted(self):
+        created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
+        session = created.session
+        assert session is not None
+        session.stage = "interrupted"
+        self.store.save(session)
+
+        with self.assertRaisesRegex(RuntimeError, "SESSION_LOCKED"):
+            self.service.create_session(str(self.target_dir), resume_if_exists=False)
 
     def test_run_precheck_sets_ready_to_execute_for_valid_pending_plan(self):
         (self.target_dir / "a.txt").write_text("hello", encoding="utf-8")
@@ -288,6 +464,346 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         self.assertEqual(scanned.stage, "planning")
         self.assertEqual(scanned.scan_lines, "a.txt | 文档 | A")
         self.assertEqual(scanned.scanner_progress["status"], "completed")
+
+    def test_initial_source_collection_scan_progress_uses_selected_source_count(self):
+        extra_dir = self.target_dir / "extra"
+        extra_dir.mkdir()
+        for index in range(20):
+            (extra_dir / f"noise-{index}.txt").write_text("noise", encoding="utf-8")
+
+        selected_files = []
+        for name in ["a.txt", "b.txt", "c.txt", "d.txt"]:
+            path = self.target_dir / name
+            path.write_text(name, encoding="utf-8")
+            selected_files.append({"source_type": "file", "path": str(path)})
+
+        created = self.service.create_session(
+            selected_files,
+            resume_if_exists=False,
+            organize_method="categorize_into_new_structure",
+            output_dir=str(self.target_dir),
+        )
+        session = created.session
+        assert session is not None
+
+        progress = self.service._initial_source_collection_scan_progress(session)
+
+        self.assertEqual(progress["total_count"], 4)
+        self.assertEqual(len(progress["recent_analysis_items"]), 4)
+        self.assertEqual(progress["message"], "正在读取本次整理来源")
+
+    def test_start_scan_in_incremental_mode_enters_target_selection_without_auto_planning(self):
+        created = self.service.create_session(
+            str(self.target_dir),
+            resume_if_exists=False,
+            strategy={"organize_mode": "incremental", "destination_index_depth": 2},
+        )
+        session = created.session
+        assert session is not None
+        (self.target_dir / "docs").mkdir()
+        (self.target_dir / "docs" / "nested").mkdir()
+        (self.target_dir / "new.txt").write_text("hello", encoding="utf-8")
+
+        self.service.start_scan(
+            session.session_id,
+            scan_runner=lambda path: "docs | dir | 已整理目录 | 保留原结构\nnew.txt | file | 新增文件 | 待归档",
+        )
+        scanned = self.store.load(session.session_id)
+
+        self.assertIsNotNone(scanned)
+        assert scanned is not None
+        self.assertEqual(scanned.stage, "selecting_incremental_scope")
+        self.assertEqual(scanned.incremental_selection["status"], "pending")
+        self.assertEqual(scanned.incremental_selection["root_directory_options"], ["docs"])
+        self.assertEqual(scanned.incremental_selection["target_directories"], [])
+        self.assertFalse(scanned.incremental_selection["source_scan_completed"])
+        self.assertEqual(scanned.planner_items, [])
+
+    def test_confirm_target_directories_builds_planner_items_for_unselected_roots(self):
+        created = self.service.create_session(
+            str(self.target_dir),
+            resume_if_exists=False,
+            strategy={"organize_mode": "incremental", "destination_index_depth": 2},
+        )
+        session = created.session
+        assert session is not None
+        session.selected_target_directories = []
+        session.incremental_selection = {}
+        self.store.save(session)
+        (self.target_dir / "Docs").mkdir()
+        (self.target_dir / "Docs" / "Finance").mkdir(parents=True, exist_ok=True)
+        (self.target_dir / "invoice.pdf").write_text("hello", encoding="utf-8")
+        (self.target_dir / "notes.txt").write_text("note", encoding="utf-8")
+        self.service.start_scan(
+            session.session_id,
+            scan_runner=lambda path: "Docs | dir | 已整理目录 | 保留原结构\ninvoice.pdf | file | 财务票据 | 发票\nnotes.txt | file | 学习笔记 | 笔记",
+        )
+
+        with mock.patch(
+            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            return_value=(
+                "已生成增量方案",
+                {
+                    "pending_plan": PendingPlan(
+                        moves=[
+                            PlanMove(source="invoice.pdf", target="Docs/Finance/invoice.pdf"),
+                            PlanMove(source="notes.txt", target="notes.txt"),
+                        ],
+                        unresolved_items=[],
+                        summary="已分类 2 项，调整 2 项，仍剩 0 项待定",
+                    ),
+                    "assistant_message": {"role": "assistant", "content": "已生成增量方案"},
+                },
+            ),
+        ):
+            result = self.service.confirm_target_directories(
+                session.session_id,
+                ["Docs"],
+                scan_runner=lambda path: "Docs | dir | 已整理目录 | 保留原结构\ninvoice.pdf | file | 财务票据 | 发票\nnotes.txt | file | 学习笔记 | 笔记",
+            )
+
+        self.assertEqual(result.session_snapshot["stage"], "ready_for_precheck")
+        self.assertEqual(result.session_snapshot["incremental_selection"]["target_directories"], ["Docs"])
+        self.assertTrue(result.session_snapshot["incremental_selection"]["source_scan_completed"])
+        self.assertEqual(result.session_snapshot["incremental_selection"]["pending_items_count"], 2)
+        self.assertEqual(
+            [item["source_relpath"] for item in self.store.load(session.session_id).planner_items],
+            ["invoice.pdf", "notes.txt"],
+        )
+
+    def test_confirm_target_directories_reconciles_incremental_organize_method(self):
+        created = self.service.create_session(
+            str(self.target_dir),
+            resume_if_exists=False,
+            strategy={"organize_mode": "incremental", "destination_index_depth": 2},
+        )
+        session = created.session
+        assert session is not None
+        session.organize_method = ""
+        session.selected_target_directories = []
+        session.incremental_selection = {}
+        self.store.save(session)
+        (self.target_dir / "Docs").mkdir()
+        (self.target_dir / "invoice.pdf").write_text("hello", encoding="utf-8")
+
+        self.service.start_scan(
+            session.session_id,
+            scan_runner=lambda path: "Docs | dir | 已整理目录 | 保留原结构\ninvoice.pdf | file | 财务票据 | 发票",
+        )
+
+        with mock.patch(
+            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            return_value=(
+                "已生成增量方案",
+                {
+                    "pending_plan": PendingPlan(
+                        moves=[PlanMove(source="invoice.pdf", target="Docs/invoice.pdf")],
+                        unresolved_items=[],
+                        summary="已分类 1 项，调整 1 项，仍剩 0 项待定",
+                    ),
+                    "assistant_message": {"role": "assistant", "content": "已生成增量方案"},
+                },
+            ),
+        ):
+            result = self.service.confirm_target_directories(
+                session.session_id,
+                ["Docs"],
+                scan_runner=lambda path: "Docs | dir | 已整理目录 | 保留原结构\ninvoice.pdf | file | 财务票据 | 发票",
+            )
+
+        reloaded = self.store.load(session.session_id)
+        self.assertEqual(reloaded.organize_mode, "incremental")
+        self.assertEqual(reloaded.organize_method, "assign_into_existing_categories")
+        self.assertEqual(result.session_snapshot["strategy"]["task_type"], "organize_into_existing")
+        self.assertEqual(result.session_snapshot["strategy"]["organize_method"], "assign_into_existing_categories")
+
+    def test_run_precheck_blocks_incremental_target_outside_allowed_roots(self):
+        created = self.service.create_session(
+            str(self.target_dir),
+            resume_if_exists=False,
+            strategy={"organize_mode": "incremental", "destination_index_depth": 2},
+        )
+        session = created.session
+        assert session is not None
+        session.stage = "planning"
+        session.scan_lines = "invoice.pdf | file | 财务票据 | 发票"
+        session.planner_items = [
+            {
+                "planner_id": "F001",
+                "source_relpath": "invoice.pdf",
+                "display_name": "invoice.pdf",
+                "suggested_purpose": "财务票据",
+                "summary": "发票",
+                "entry_type": "file",
+                "ext": "pdf",
+                "parent_hint": "",
+            }
+        ]
+        session.pending_plan = self.service._pending_plan_to_dict(
+            PendingPlan(
+                moves=[PlanMove(source="invoice.pdf", target="Archive/invoice.pdf")],
+                unresolved_items=[],
+                summary="已分类 1 项，调整 1 项，仍剩 0 项待定",
+            )
+        )
+        session.incremental_selection = {
+            "required": True,
+            "status": "ready",
+            "root_directory_options": ["Archive", "Docs"],
+            "target_directories": ["Docs"],
+            "target_directory_tree": [{"relpath": "Docs", "name": "Docs", "children": []}],
+            "pending_items_count": 1,
+            "source_scan_completed": True,
+        }
+        self.store.save(session)
+
+        result = self.service.run_precheck(session.session_id)
+
+        self.assertFalse(result.session_snapshot["precheck_summary"]["can_execute"])
+        self.assertTrue(
+            any("“归入已有目录”任务的目标超出允许范围" in item for item in result.session_snapshot["precheck_summary"]["blocking_errors"])
+        )
+
+    def test_run_precheck_uses_mapping_item_ids_for_move_preview(self):
+        (self.target_dir / "invoice.pdf").write_text("hello", encoding="utf-8")
+        created = self.service.create_session(
+            str(self.target_dir),
+            resume_if_exists=False,
+            strategy={"organize_mode": "incremental", "destination_index_depth": 2},
+        )
+        session = created.session
+        assert session is not None
+        session.stage = "planning"
+        session.scan_lines = "invoice.pdf | file | 财务票据 | 发票"
+        session.planner_items = [
+            {
+                "planner_id": "F001",
+                "source_relpath": "invoice.pdf",
+                "display_name": "invoice.pdf",
+                "suggested_purpose": "财务票据",
+                "summary": "发票",
+                "entry_type": "file",
+                "ext": "pdf",
+                "parent_hint": "",
+            }
+        ]
+        session.incremental_selection = {
+            "required": True,
+            "status": "ready",
+            "destination_index_depth": 2,
+            "root_directory_options": ["Docs"],
+            "target_directories": ["Docs"],
+            "target_directory_tree": [{"relpath": "Docs", "name": "Docs", "children": []}],
+            "pending_items_count": 1,
+            "source_scan_completed": True,
+        }
+        session.pending_plan = {
+            "directories": ["Docs"],
+            "moves": [{"source": "invoice.pdf", "target": "Docs/invoice.pdf"}],
+            "unresolved_items": [],
+            "summary": "move to docs",
+        }
+        self.store.save(session)
+
+        result = self.service.run_precheck(session.session_id)
+
+        preview = result.session_snapshot["precheck_summary"]["move_preview"]
+        self.assertEqual(preview[0]["item_id"], "F001")
+        self.assertEqual(preview[0]["source"], "invoice.pdf")
+        self.assertEqual(preview[0]["target"], "Docs/invoice.pdf")
+
+    def test_plan_snapshot_groups_follow_mapping_target_slot(self):
+        created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
+        session = created.session
+        assert session is not None
+        session.stage = "planning"
+        session.scan_lines = "a.txt | file | 学习资料 | A"
+        session.planner_items = [
+            {
+                "planner_id": "F001",
+                "source_relpath": "a.txt",
+                "display_name": "a.txt",
+                "suggested_purpose": "学习资料",
+                "summary": "A",
+                "entry_type": "file",
+                "ext": "txt",
+                "parent_hint": "",
+            }
+        ]
+        session.pending_plan = {
+            "directories": ["Docs"],
+            "moves": [{"source": "a.txt", "target": "Docs/a.txt"}],
+            "unresolved_items": [],
+            "summary": "move to docs",
+        }
+        self.store.save(session)
+
+        snapshot = self.service.get_snapshot(session.session_id)
+
+        self.assertEqual(snapshot["plan_snapshot"]["items"][0]["item_id"], "F001")
+        self.assertEqual(snapshot["plan_snapshot"]["items"][0]["target_slot_id"], "D001")
+        self.assertEqual(snapshot["plan_snapshot"]["groups"][0]["directory"], "Docs")
+        self.assertEqual(snapshot["plan_snapshot"]["groups"][0]["items"][0]["item_id"], "F001")
+
+    def test_build_manual_sync_diff_lines_uses_item_id_as_primary_key(self):
+        previous_snapshot = {
+            "items": [
+                {
+                    "item_id": "F001",
+                    "display_name": "report.pdf",
+                    "source_relpath": "old/report.pdf",
+                    "target_slot_id": "D001",
+                }
+            ],
+            "target_slots": [
+                {"slot_id": "D001", "display_name": "Docs", "relpath": "Docs", "depth": 0, "is_new": False},
+                {"slot_id": "D002", "display_name": "Archive", "relpath": "Archive", "depth": 0, "is_new": False},
+            ],
+            "unresolved_items": [],
+        }
+        updated_snapshot = {
+            "items": [
+                {
+                    "item_id": "F001",
+                    "display_name": "report.pdf",
+                    "source_relpath": "new/report.pdf",
+                    "target_slot_id": "D002",
+                }
+            ],
+            "target_slots": [
+                {"slot_id": "D001", "display_name": "Docs", "relpath": "Docs", "depth": 0, "is_new": False},
+                {"slot_id": "D002", "display_name": "Archive", "relpath": "Archive", "depth": 0, "is_new": False},
+            ],
+            "unresolved_items": [],
+        }
+
+        diff_lines = self.service.snapshot_builder.build_manual_sync_diff_lines(previous_snapshot, updated_snapshot)
+
+        self.assertIn("调整移动：report.pdf -> Archive/report.pdf", diff_lines)
+
+    def test_start_scan_snapshot_includes_complete_source_tree_entries(self):
+        created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
+        session = created.session
+        assert session is not None
+        (self.target_dir / "docs").mkdir()
+        (self.target_dir / "docs" / "a.txt").write_text("hello", encoding="utf-8")
+        (self.target_dir / "notes.txt").write_text("note", encoding="utf-8")
+
+        self.service.start_scan(
+            session.session_id,
+            scan_runner=lambda path: "docs | dir | 项目目录 | 原始目录\ndocs/a.txt | file | 文档 | A\nnotes.txt | file | 记录 | B",
+        )
+
+        snapshot = self.service.get_snapshot(session.session_id)
+
+        self.assertEqual(
+            snapshot["source_tree_entries"],
+            [
+                {"source_relpath": "docs", "display_name": "docs", "entry_type": "directory"},
+                {"source_relpath": "notes.txt", "display_name": "notes.txt", "entry_type": "file"},
+                {"source_relpath": "docs/a.txt", "display_name": "a.txt", "entry_type": "file"},
+            ],
+        )
 
     def test_start_scan_marks_session_interrupted_when_async_scan_returns_empty_for_nonempty_directory(self):
         service = OrganizerSessionService(self.store, scanner=ImmediateScanner())
@@ -799,65 +1315,7 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         self.assertEqual(stored.messages[-1]["role"], "tool")
         self.assertEqual(stored.messages[-1]["tool_call_id"], "call_1")
 
-    def test_resolve_unresolved_choices_updates_plan_and_marks_block_submitted(self):
-        created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
-        session = created.session
-        assert session is not None
-        session.stage = "planning"
-        session.scan_lines = "md | 学习资料 | 笔记\nzip | 项目资料 | 源码包"
-        session.pending_plan = {
-            "directories": ["Review"],
-            "moves": [
-                {"source": "md", "target": "Review/md"},
-                {"source": "zip", "target": "Review/zip"},
-            ],
-            "unresolved_items": ["md", "zip"],
-            "summary": "needs choices",
-        }
-        session.messages = [
-            {
-                "role": "assistant",
-                "content": "",
-                "blocks": [
-                    {
-                        "type": "unresolved_choices",
-                        "request_id": "req_1",
-                        "summary": "请确认 2 个文件",
-                        "status": "pending",
-                        "items": [
-                            {"item_id": "md", "display_name": "md", "question": "放哪里？", "suggested_folders": ["学习资料", "文档资料"]},
-                            {"item_id": "zip", "display_name": "zip", "question": "放哪里？", "suggested_folders": ["项目资料", "安装程序"]},
-                        ],
-                    }
-                ],
-            }
-        ]
-        session.assistant_message = dict(session.messages[0])
-        self.store.save(session)
-        snapshot = self.service.get_snapshot(session.session_id)
-        unresolved_block = snapshot["messages"][0]["blocks"][0]
-        unresolved_ids = {item["display_name"]: item["item_id"] for item in unresolved_block["items"]}
-
-        result = self.service.resolve_unresolved_choices(
-            session.session_id,
-            "req_1",
-            [
-                {"item_id": unresolved_ids["md"], "selected_folder": "学习资料", "note": ""},
-                {"item_id": unresolved_ids["zip"], "selected_folder": "Review", "note": ""},
-            ],
-        )
-
-        snapshot = result.session_snapshot
-        self.assertEqual(snapshot["plan_snapshot"]["unresolved_items"], [])
-        targets = {item["source_relpath"]: item["target_relpath"] for item in snapshot["plan_snapshot"]["items"]}
-        self.assertEqual(targets["md"], "学习资料/md")
-        self.assertEqual(targets["zip"], "Review/zip")
-        self.assertEqual(snapshot["messages"][0]["blocks"][0]["status"], "submitted")
-        self.assertEqual(snapshot["messages"][1]["role"], "user")
-        self.assertEqual(snapshot["messages"][1]["visibility"], "internal")
-        self.assertIn("md -> 学习资料", snapshot["messages"][1]["content"])
-
-    def test_resolve_unresolved_choices_with_note_triggers_followup_cycle(self):
+    def test_get_snapshot_tolerates_legacy_unresolved_choice_blocks(self):
         created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
         session = created.session
         assert session is not None
@@ -867,7 +1325,7 @@ class OrganizerSessionServiceTests(unittest.TestCase):
             "directories": ["Review"],
             "moves": [{"source": "md", "target": "Review/md"}],
             "unresolved_items": ["md"],
-            "summary": "needs choices",
+            "summary": "needs review",
         }
         session.messages = [
             {
@@ -876,95 +1334,9 @@ class OrganizerSessionServiceTests(unittest.TestCase):
                 "blocks": [
                     {
                         "type": "unresolved_choices",
-                        "request_id": "req_2",
-                        "summary": "请确认文件归类",
+                        "request_id": "legacy_1",
                         "status": "pending",
-                        "items": [
-                            {"item_id": "md", "display_name": "md", "question": "放哪里？", "suggested_folders": ["学习资料", "文档资料"]},
-                        ],
-                    }
-                ],
-            }
-        ]
-        session.assistant_message = dict(session.messages[0])
-        self.store.save(session)
-        snapshot = self.service.get_snapshot(session.session_id)
-        unresolved_id = snapshot["messages"][0]["blocks"][0]["items"][0]["item_id"]
-
-        updated_pending = PendingPlan(
-            directories=["学习资料"],
-            moves=[PlanMove(source="md", target="学习资料/md")],
-            unresolved_items=[],
-            summary="已确认",
-        )
-
-        with mock.patch(
-            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
-            return_value=(
-                "已根据你的说明更新计划",
-                {
-                    "pending_plan": updated_pending,
-                    "is_valid": False,
-                    "diff_summary": ["已确认 md"],
-                    "assistant_message": {"role": "assistant", "content": "已根据你的说明更新计划"},
-                },
-            ),
-        ) as cycle_mock:
-            result = self.service.resolve_unresolved_choices(
-                session.session_id,
-                "req_2",
-                [{"item_id": unresolved_id, "selected_folder": "", "note": "这是课程笔记，优先归到学习资料"}],
-            )
-
-        self.assertTrue(cycle_mock.called)
-        self.assertEqual(result.session_snapshot["plan_snapshot"]["unresolved_items"], [])
-        self.assertEqual(result.session_snapshot["messages"][-1]["content"], "已根据你的说明更新计划")
-
-    def test_get_snapshot_normalizes_legacy_unresolved_choice_ids_for_duplicate_filenames(self):
-        created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
-        session = created.session
-        assert session is not None
-        session.stage = "planning"
-        session.scan_lines = (
-            "archive/new_summary_232.bak | 备份文件 | 第一份备份\n"
-            "drafts/new_summary_232.bak | 备份文件 | 第二份备份"
-        )
-        session.pending_plan = {
-            "directories": ["Review/archive", "Review/drafts"],
-            "moves": [
-                {"source": "archive/new_summary_232.bak", "target": "Review/archive/new_summary_232.bak"},
-                {"source": "drafts/new_summary_232.bak", "target": "Review/drafts/new_summary_232.bak"},
-            ],
-            "unresolved_items": [
-                "archive/new_summary_232.bak",
-                "drafts/new_summary_232.bak",
-            ],
-            "summary": "needs choices",
-        }
-        session.messages = [
-            {
-                "role": "assistant",
-                "content": "",
-                "blocks": [
-                    {
-                        "type": "unresolved_choices",
-                        "request_id": "req_dup",
-                        "summary": "请确认 2 个同名文件",
-                        "status": "pending",
-                        "items": [
-                            {
-                                "item_id": "new_summary_232.bak",
-                                "display_name": "new_summary_232.bak",
-                                "question": "第一份更像项目备份还是归档资料？",
-                                "suggested_folders": ["项目资料", "备份归档"],
-                            },
-                            {
-                                "item_id": "new_summary_232.bak",
-                                "display_name": "new_summary_232.bak",
-                                "question": "第二份更像学习备份还是归档资料？",
-                                "suggested_folders": ["学习资料", "备份归档"],
-                            },
-                        ],
+                        "items": [{"item_id": "F001", "display_name": "md"}],
                     }
                 ],
             }
@@ -973,94 +1345,10 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         self.store.save(session)
 
         snapshot = self.service.get_snapshot(session.session_id)
-        block = snapshot["messages"][0]["blocks"][0]
-        normalized_ids = [item["item_id"] for item in block["items"]]
 
-        self.assertEqual(len(normalized_ids), 2)
-        self.assertTrue(all(item_id.startswith("F") for item_id in normalized_ids))
-
-        result = self.service.resolve_unresolved_choices(
-            session.session_id,
-            "req_dup",
-            [
-                {"item_id": normalized_ids[0], "selected_folder": "项目资料", "note": ""},
-                {"item_id": normalized_ids[1], "selected_folder": "Review", "note": ""},
-            ],
-        )
-
-        targets = {
-            item["source_relpath"]: item["target_relpath"]
-            for item in result.session_snapshot["plan_snapshot"]["items"]
-        }
-        self.assertEqual(targets["archive/new_summary_232.bak"], "项目资料/new_summary_232.bak")
-        self.assertEqual(targets["drafts/new_summary_232.bak"], "Review/new_summary_232.bak")
-        self.assertEqual(result.session_snapshot["plan_snapshot"]["unresolved_items"], [])
-
-    def test_get_snapshot_repairs_planner_id_unresolved_duplicates_after_review_submission(self):
-        created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
-        session = created.session
-        assert session is not None
-        session.stage = "planning"
-        session.scan_lines = "md | 学习资料 | 笔记"
-        session.planner_items = self.service._build_planner_items(session.scan_lines)
-        planner_id = session.planner_items[0]["planner_id"]
-        session.pending_plan = {
-            "directories": ["Review"],
-            "moves": [
-                {"source": "md", "target": "Review/md"},
-                {"source": planner_id, "target": "Review"},
-            ],
-            "unresolved_items": ["md", planner_id],
-            "summary": "needs choices",
-        }
-        session.messages = [
-            {
-                "role": "assistant",
-                "content": "",
-                "blocks": [
-                    {
-                        "type": "unresolved_choices",
-                        "request_id": "req_repair",
-                        "summary": "请确认文件归类",
-                        "status": "submitted",
-                        "items": [
-                            {
-                                "item_id": planner_id,
-                                "display_name": "md",
-                                "question": "放哪里？",
-                                "suggested_folders": ["学习资料", "文档资料"],
-                            }
-                        ],
-                        "submitted_resolutions": [
-                            {
-                                "item_id": planner_id,
-                                "display_name": "md",
-                                "selected_folder": "Review",
-                                "note": "",
-                            }
-                        ],
-                    }
-                ],
-            }
-        ]
-        session.assistant_message = dict(session.messages[0])
-        self.store.save(session)
-
-        snapshot = self.service.get_snapshot(session.session_id)
-        reloaded = self.store.load(session.session_id)
-        assert reloaded is not None
-
-        self.assertEqual(snapshot["plan_snapshot"]["unresolved_items"], [])
-        self.assertEqual(snapshot["plan_snapshot"]["stats"]["unresolved_count"], 0)
-        self.assertEqual(
-            [(item["source_relpath"], item["target_relpath"]) for item in snapshot["plan_snapshot"]["items"]],
-            [("md", "Review/md")],
-        )
-        self.assertEqual(reloaded.pending_plan["unresolved_items"], [])
-        self.assertEqual(
-            [(move["source"], move["target"]) for move in reloaded.pending_plan["moves"]],
-            [("md", "Review/md")],
-        )
+        self.assertEqual(self._plan_item_target_path(snapshot, "md"), "Review/md")
+        self.assertIn(snapshot["plan_snapshot"]["stats"]["unresolved_count"], [0, 1])
+        self.assertEqual(snapshot["messages"][0]["blocks"][0]["type"], "unresolved_choices")
 
     def test_get_snapshot_assigns_stable_message_ids(self):
         created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
@@ -1135,6 +1423,9 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         with mock.patch(
             "file_organizer.app.session_service.analysis_service.run_analysis_cycle",
             return_value="a.txt | 文档 | A",
+        ), mock.patch(
+            "file_organizer.app.session_service.analysis_service.run_analysis_cycle_for_entries",
+            return_value="loose.txt | 文档 | 单文件说明",
         ), mock.patch(
             "file_organizer.app.session_service.organize_service.build_initial_messages",
             return_value=[{"role": "system", "content": "scan"}],
@@ -1263,7 +1554,164 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         debug_lines = [json.loads(line) for line in debug_path.read_text(encoding="utf-8").splitlines() if line.strip()]
         self.assertIn("plan.auto_failed", [entry["kind"] for entry in debug_lines])
 
+    def test_start_scan_auto_plans_for_multi_source_sync_path(self):
+        service = OrganizerSessionService(self.store, scanner=ImmediateScanner())
+        extra_file = self.root / "loose.txt"
+        extra_file.write_text("note", encoding="utf-8")
+        created = service.create_session(
+            [
+                {"source_type": "directory", "path": str(self.target_dir)},
+                {"source_type": "file", "path": str(extra_file)},
+            ],
+            resume_if_exists=False,
+            organize_method="categorize_into_new_structure",
+            strategy={
+                "template_id": "general_downloads",
+                "organize_method": "categorize_into_new_structure",
+            },
+            output_dir=str(self.target_dir),
+        )
+        session = created.session
+        assert session is not None
+
+        with mock.patch(
+            "file_organizer.app.session_service.analysis_service.run_analysis_cycle",
+            return_value="a.txt | 文档 | A",
+        ), mock.patch(
+            "file_organizer.app.session_service.organize_service.build_initial_messages",
+            return_value=[{"role": "system", "content": "scan"}],
+        ), mock.patch(
+            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+        ) as organizer_cycle_mock:
+            organizer_cycle_mock.return_value = (
+                "已生成方案",
+                {
+                    "pending_plan": PendingPlan(
+                        moves=[PlanMove(source="a.txt", target="Docs/a.txt")],
+                        unresolved_items=[],
+                        summary="已规划 1 项",
+                    ),
+                    "assistant_message": {"role": "assistant", "content": "已生成方案"},
+                },
+            )
+            service.start_scan(session.session_id)
+
+        reloaded = service.store.load(session.session_id)
+        self.assertIsNotNone(reloaded)
+        assert reloaded is not None
+        organizer_cycle_mock.assert_called_once()
+        self.assertEqual(reloaded.stage, "planning")
+        self.assertEqual(reloaded.assistant_message["content"], "已生成方案")
+
+    def test_start_scan_auto_plans_for_incremental_session_with_preselected_targets(self):
+        service = OrganizerSessionService(self.store, scanner=ImmediateScanner())
+        created = service.create_session(
+            [{"source_type": "directory", "path": str(self.target_dir)}],
+            resume_if_exists=False,
+            organize_method="assign_into_existing_categories",
+            strategy={
+                "template_id": "general_downloads",
+                "organize_method": "assign_into_existing_categories",
+                "organize_mode": "incremental",
+            },
+            target_directories=[str(self.target_dir)],
+        )
+        session = created.session
+        assert session is not None
+
+        with mock.patch(
+            "file_organizer.app.session_service.analysis_service.run_analysis_cycle",
+            return_value="invoice.pdf | 财务票据 | 发票",
+        ), mock.patch(
+            "file_organizer.app.session_service.analysis_service.run_analysis_cycle_for_entries",
+            return_value="invoice.pdf | 财务票据 | 发票",
+        ), mock.patch(
+            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            return_value=(
+                "已生成归入方案",
+                {
+                    "pending_plan": PendingPlan(
+                        moves=[PlanMove(source="invoice.pdf", target="Review/invoice.pdf")],
+                        unresolved_items=[],
+                        summary="已规划 1 项",
+                    ),
+                    "assistant_message": {"role": "assistant", "content": "已生成归入方案"},
+                },
+            ),
+        ):
+            service.start_scan(session.session_id)
+
+        reloaded = service.store.load(session.session_id)
+        self.assertIsNotNone(reloaded)
+        assert reloaded is not None
+        self.assertEqual(reloaded.stage, "ready_for_precheck")
+        self.assertIn("1 项", reloaded.summary)
+        self.assertEqual(reloaded.assistant_message["content"], "已生成归入方案")
+
+    def test_start_scan_runs_real_analysis_for_file_sources(self):
+        service = OrganizerSessionService(self.store, scanner=ImmediateScanner())
+        source_file = self.root / "plan.md"
+        source_file.write_text("# architecture", encoding="utf-8")
+        created = service.create_session(
+            [{"source_type": "file", "path": str(source_file)}],
+            resume_if_exists=False,
+            organize_method="categorize_into_new_structure",
+            strategy={
+                "template_id": "general_downloads",
+                "organize_method": "categorize_into_new_structure",
+            },
+            output_dir=str(self.target_dir),
+        )
+        session = created.session
+        assert session is not None
+
+        with mock.patch(
+            "file_organizer.app.session_service.analysis_service.run_analysis_cycle_for_entries",
+            return_value="plan.md | 技术设计 | 架构设计文档",
+        ), mock.patch(
+            "file_organizer.app.session_service.organize_service.build_initial_messages",
+            return_value=[{"role": "system", "content": "scan"}],
+        ), mock.patch(
+            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            return_value=(
+                "已生成方案",
+                {
+                    "pending_plan": PendingPlan(
+                        moves=[PlanMove(source="plan.md", target="Docs/plan.md")],
+                        unresolved_items=[],
+                        summary="已规划 1 项",
+                    ),
+                    "assistant_message": {"role": "assistant", "content": "已生成方案"},
+                },
+            ),
+        ):
+            service.start_scan(session.session_id)
+
+        reloaded = service.store.load(session.session_id)
+        assert reloaded is not None
+        self.assertIn("plan.md | file | 技术设计 | 架构设计文档", reloaded.scan_lines)
+        self.assertEqual(reloaded.planner_items[0]["suggested_purpose"], "技术设计")
+        self.assertEqual(reloaded.planner_items[0]["summary"], "架构设计文档")
+
     def test_get_snapshot_recovers_orphaned_scanning_session_to_interrupted(self):
+        created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
+        session = created.session
+        assert session is not None
+        session.stage = "scanning"
+        self.store.save(session)
+        session.updated_at = "2000-01-01T00:00:00+00:00"
+        (self.store.sessions_dir / f"{session.session_id}.json").write_text(
+            json.dumps(session.to_dict(), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        snapshot = self.service.get_snapshot(session.session_id)
+
+        self.assertEqual(snapshot["stage"], "interrupted")
+        self.assertEqual(snapshot["integrity_flags"]["interrupted_during"], "scanning")
+        self.assertEqual(snapshot["last_error"], "scanning_interrupted")
+
+    def test_get_snapshot_keeps_recent_scanning_session_active(self):
         created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
         session = created.session
         assert session is not None
@@ -1272,9 +1720,24 @@ class OrganizerSessionServiceTests(unittest.TestCase):
 
         snapshot = self.service.get_snapshot(session.session_id)
 
-        self.assertEqual(snapshot["stage"], "interrupted")
-        self.assertEqual(snapshot["integrity_flags"]["interrupted_during"], "scanning")
-        self.assertEqual(snapshot["last_error"], "scanning_interrupted")
+        self.assertEqual(snapshot["stage"], "scanning")
+        self.assertNotIn("interrupted_during", snapshot["integrity_flags"])
+
+    def test_get_snapshot_keeps_registered_sync_scanning_session_active(self):
+        created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
+        session = created.session
+        assert session is not None
+        session.stage = "scanning"
+        session.updated_at = "2000-01-01T00:00:00+00:00"
+        self.store.save(session)
+        self.service._mark_scan_active(session.session_id)
+        try:
+            snapshot = self.service.get_snapshot(session.session_id)
+        finally:
+            self.service._mark_scan_inactive(session.session_id)
+
+        self.assertEqual(snapshot["stage"], "scanning")
+        self.assertNotIn("interrupted_during", snapshot["integrity_flags"])
 
     def test_list_history_recovers_orphaned_locked_session(self):
         created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
@@ -1318,22 +1781,34 @@ class OrganizerSessionServiceTests(unittest.TestCase):
             "unresolved_items": ["md"],
             "summary": "needs review",
         }
+        session.last_ai_pending_plan = {
+            "directories": ["Review"],
+            "moves": [{"source": "md", "target": "Review/md", "raw": ""}],
+            "user_constraints": [],
+            "unresolved_items": ["md"],
+            "summary": "",
+        }
         self.store.save(session)
 
         result = self.service.update_item_target(
             session.session_id,
             "md",
             "Study",
+            None,
             False,
         )
 
         updated_item = next(
             item for item in result.session_snapshot["plan_snapshot"]["items"] if item["item_id"] == "md"
         )
-        self.assertEqual(updated_item["target_relpath"], "Study/md")
+        self.assertNotIn("target_relpath", updated_item)
+        self.assertEqual(self._plan_item_target_directory(result.session_snapshot, "md"), "Study")
         self.assertEqual(result.session_snapshot["plan_snapshot"]["unresolved_items"], [])
         self.assertEqual(result.session_snapshot["plan_snapshot"]["stats"]["unresolved_count"], 0)
         self.assertEqual(result.session_snapshot["messages"][-1]["visibility"], "internal")
+        self.assertIn("[用户手动调整记录]", result.session_snapshot["messages"][-1]["content"])
+        self.assertEqual(result.session_snapshot["summary"], "已分类 1 项，调整 1 项，仍剩 0 项待定")
+        self.assertEqual(result.session_snapshot["plan_snapshot"]["summary"], "已分类 1 项，调整 1 项，仍剩 0 项待定")
 
     def test_update_item_target_move_to_review_removes_unresolved_item_immediately(self):
         created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
@@ -1346,21 +1821,309 @@ class OrganizerSessionServiceTests(unittest.TestCase):
             "unresolved_items": ["md"],
             "summary": "needs confirmation",
         }
+        session.last_ai_pending_plan = {
+            "directories": ["Docs"],
+            "moves": [{"source": "md", "target": "Docs/md", "raw": ""}],
+            "user_constraints": [],
+            "unresolved_items": ["md"],
+            "summary": "",
+        }
         self.store.save(session)
 
         result = self.service.update_item_target(
             session.session_id,
             "md",
             None,
+            None,
             True,
         )
 
         updated_item = next(
-            item for item in result.session_snapshot["plan_snapshot"]["items"] if item["item_id"] == "md"
+            item for item in result.session_snapshot["plan_snapshot"]["items"] if item["source_relpath"] == "md"
         )
-        self.assertEqual(updated_item["target_relpath"], "Review/md")
+        self.assertNotIn("target_relpath", updated_item)
+        self.assertEqual(updated_item["target_slot_id"], "Review")
+        self.assertEqual(self._plan_item_target_directory(result.session_snapshot, "md"), "Review")
         self.assertEqual(updated_item["status"], "review")
         self.assertEqual(result.session_snapshot["plan_snapshot"]["unresolved_items"], [])
+        self.assertEqual(result.session_snapshot["summary"], "已分类 1 项，调整 1 项，仍剩 0 项待定")
+        self.assertEqual(result.session_snapshot["plan_snapshot"]["summary"], "已分类 1 项，调整 1 项，仍剩 0 项待定")
+
+    def test_plan_snapshot_uses_empty_target_slot_id_for_keep_in_place_move(self):
+        created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
+        session = created.session
+        assert session is not None
+        session.stage = "planning"
+        session.pending_plan = {
+            "directories": [],
+            "moves": [{"source": "md", "target": "md"}],
+            "unresolved_items": [],
+            "summary": "keep in place",
+        }
+        self.store.save(session)
+
+        snapshot = self.service.get_snapshot(session.session_id)
+        item = snapshot["plan_snapshot"]["items"][0]
+        mapping = snapshot["plan_snapshot"]["mappings"][0]
+
+        self.assertEqual(item["target_slot_id"], "")
+        self.assertEqual(item["mapping_status"], "skipped")
+        self.assertEqual(mapping["target_slot_id"], "")
+        self.assertEqual(mapping["status"], "skipped")
+
+    def test_update_item_target_accepts_target_slot_and_snapshot_exposes_structured_targets(self):
+        created = self.service.create_session(
+            str(self.target_dir),
+            resume_if_exists=False,
+            strategy={"organize_mode": "incremental", "destination_index_depth": 2},
+        )
+        session = created.session
+        assert session is not None
+        session.stage = "planning"
+        session.scan_lines = "md | file | 学习资料 | 笔记"
+        session.incremental_selection = {
+            "required": True,
+            "status": "ready",
+            "destination_index_depth": 2,
+            "root_directory_options": ["Docs", "Inbox"],
+            "target_directories": ["Docs"],
+            "target_directory_tree": [
+                {
+                    "relpath": "Docs",
+                    "name": "Docs",
+                    "children": [{"relpath": "Docs/Notes", "name": "Notes", "children": []}],
+                }
+            ],
+            "pending_items_count": 1,
+            "source_scan_completed": True,
+        }
+        session.pending_plan = {
+            "directories": ["Review"],
+            "moves": [{"source": "md", "target": "Review/md"}],
+            "unresolved_items": ["md"],
+            "summary": "needs review",
+        }
+        session.last_ai_pending_plan = {
+            "directories": ["Review"],
+            "moves": [{"source": "md", "target": "Review/md", "raw": ""}],
+            "user_constraints": [],
+            "unresolved_items": ["md"],
+            "summary": "",
+        }
+        self.store.save(session)
+
+        result = self.service.update_item_target(
+            session.session_id,
+            "md",
+            None,
+            "D002",
+            False,
+        )
+
+        updated_item = next(
+            item for item in result.session_snapshot["plan_snapshot"]["items"] if item["source_relpath"] == "md"
+        )
+        self.assertNotIn("target_relpath", updated_item)
+        self.assertEqual(updated_item["target_slot_id"], "D002")
+        self.assertEqual(self._plan_item_target_directory(result.session_snapshot, "md"), "Docs/Notes")
+        self.assertEqual(
+            [slot["relpath"] for slot in result.session_snapshot["plan_snapshot"]["target_slots"]],
+            ["Docs", "Docs/Notes"],
+        )
+        self.assertEqual(result.session_snapshot["plan_snapshot"]["mappings"][0]["target_slot_id"], "D002")
+        reloaded = self.store.load(session.session_id)
+        assert reloaded is not None
+        self.assertIsInstance(reloaded.task_state, TaskState)
+        self.assertEqual(reloaded.task_state.mappings[0].target_slot_id, "D002")
+
+    def test_update_item_target_accepts_absolute_target_slot_outside_workspace_root(self):
+        docs_dir = self.target_dir / "Docs"
+        archive_dir = self.root / "Archive"
+        docs_dir.mkdir(parents=True, exist_ok=True)
+        archive_dir.mkdir(parents=True, exist_ok=True)
+
+        created = self.service.create_session(
+            str(self.target_dir),
+            resume_if_exists=False,
+            strategy={"organize_mode": "incremental", "destination_index_depth": 1},
+            organize_method="assign_into_existing_categories",
+            target_directories=[str(docs_dir), str(archive_dir)],
+        )
+        session = created.session
+        assert session is not None
+        session.stage = "planning"
+        session.target_dir = str(docs_dir.resolve())
+        session.scan_lines = "md | file | 学习资料 | 笔记"
+        session.incremental_selection = {
+            "required": True,
+            "status": "ready",
+            "destination_index_depth": 1,
+            "root_directory_options": [str(docs_dir.resolve()), str(archive_dir.resolve())],
+            "target_directories": [str(docs_dir.resolve()), str(archive_dir.resolve())],
+            "target_directory_tree": [
+                {"relpath": str(docs_dir.resolve()), "name": "Docs", "children": []},
+                {"relpath": str(archive_dir.resolve()), "name": "Archive", "children": []},
+            ],
+            "pending_items_count": 1,
+            "source_scan_completed": True,
+        }
+        session.pending_plan = {
+            "directories": ["Review"],
+            "moves": [{"source": "md", "target": "Review/md"}],
+            "unresolved_items": ["md"],
+            "summary": "needs review",
+        }
+        self.store.save(session)
+
+        result = self.service.update_item_target(
+            session.session_id,
+            "md",
+            None,
+            "D002",
+            False,
+        )
+
+        self.assertEqual(
+            self._plan_item_target_directory(result.session_snapshot, "md").replace("\\", "/"),
+            str(archive_dir.resolve()).replace("\\", "/"),
+        )
+        updated_item = next(
+            item for item in result.session_snapshot["plan_snapshot"]["items"] if item["source_relpath"] == "md"
+        )
+        self.assertEqual(updated_item["target_slot_id"], "D002")
+
+    def test_run_planner_cycle_stores_structured_last_ai_pending_plan(self):
+        created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
+        session = created.session
+        assert session is not None
+        session.stage = "planning"
+        session.scan_lines = "md | file | 学习资料 | 笔记"
+        self.store.save(session)
+
+        updated_pending = PendingPlan(
+            directories=["Docs"],
+            moves=[PlanMove(source="md", target="Docs/md")],
+            unresolved_items=[],
+            summary="已分类 1 项",
+        )
+
+        with mock.patch(
+            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            return_value=(
+                "已改为 Docs",
+                {
+                    "pending_plan": updated_pending,
+                    "is_valid": False,
+                    "diff_summary": ["调整移动：md -> Docs/md"],
+                    "assistant_message": {"role": "assistant", "content": "已改为 Docs"},
+                },
+            ),
+        ):
+            self.service.submit_user_intent(session.session_id, "改到 Docs")
+
+        reloaded = self.store.load(session.session_id)
+        assert reloaded is not None
+        self.assertIsNotNone(reloaded.last_ai_pending_plan)
+        assert reloaded.last_ai_pending_plan is not None
+        self.assertIsInstance(reloaded.last_ai_pending_plan.pending_plan, PendingPlanPayload)
+        self.assertIsInstance(reloaded.last_ai_pending_plan.plan_snapshot, PlanSnapshotPayload)
+        self.assertIsInstance(reloaded.task_state, TaskState)
+        self.assertEqual(reloaded.task_state.mappings[0].target_slot_id, "D001")
+        self.assertEqual(
+            reloaded.last_ai_pending_plan.plan_snapshot["items"][0]["target_slot_id"],
+            "D001",
+        )
+
+    def test_get_snapshot_normalizes_legacy_last_ai_pending_plan_shape(self):
+        created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
+        session = created.session
+        assert session is not None
+        session.stage = "planning"
+        session.scan_lines = "md | file | 学习资料 | 笔记"
+        session.pending_plan = {
+            "directories": ["Docs"],
+            "moves": [{"source": "md", "target": "Docs/md"}],
+            "unresolved_items": [],
+            "summary": "已分类 1 项",
+        }
+        session.last_ai_pending_plan = {
+            "directories": ["Docs"],
+            "moves": [{"source": "md", "target": "Docs/md", "raw": ""}],
+            "user_constraints": [],
+            "unresolved_items": [],
+            "summary": "已分类 1 项",
+        }
+        self.store.save(session)
+
+        self.service.get_snapshot(session.session_id)
+
+        reloaded = self.store.load(session.session_id)
+        assert reloaded is not None
+        self.assertIsNotNone(reloaded.last_ai_pending_plan)
+        assert reloaded.last_ai_pending_plan is not None
+        self.assertEqual(reloaded.last_ai_pending_plan.schema_version, 1)
+        self.assertEqual(
+            reloaded.last_ai_pending_plan.pending_plan["moves"][0]["target"],
+            "Docs/md",
+        )
+        self.assertIn("plan_snapshot", reloaded.last_ai_pending_plan.to_dict())
+
+    def test_submit_user_intent_clears_previous_manual_sync_message_after_ai_plan(self):
+        created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
+        session = created.session
+        assert session is not None
+        session.stage = "planning"
+        session.scan_lines = "md | file | 学习资料 | 笔记"
+        session.pending_plan = {
+            "directories": ["Study"],
+            "moves": [{"source": "md", "target": "Study/md"}],
+            "unresolved_items": [],
+            "summary": "已分类 1 项，调整 1 项，仍剩 0 项待定",
+        }
+        session.messages = [
+            {"role": "system", "content": "prompt"},
+            {
+                "role": "user",
+                "content": "[用户手动调整记录]\n用户在预览区域对方案进行了如下手动调整：\n- 调整移动：md -> Study/md",
+                "visibility": "internal",
+            },
+        ]
+        session.last_ai_pending_plan = {
+            "directories": [""],
+            "moves": [{"source": "md", "target": "md", "raw": ""}],
+            "user_constraints": [],
+            "unresolved_items": [],
+            "summary": "",
+        }
+        self.store.save(session)
+
+        updated_pending = PendingPlan(
+            directories=["Docs"],
+            moves=[PlanMove(source="md", target="Docs/md")],
+            unresolved_items=[],
+            summary="",
+        )
+
+        with mock.patch(
+            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            return_value=(
+                "已改为 Docs",
+                {
+                    "pending_plan": updated_pending,
+                    "is_valid": False,
+                    "diff_summary": ["调整移动：md -> Docs/md"],
+                    "assistant_message": {"role": "assistant", "content": "已改为 Docs"},
+                },
+            ),
+        ):
+            result = self.service.submit_user_intent(session.session_id, "改到 Docs")
+
+        internal_sync_messages = [
+            message for message in result.session_snapshot["messages"]
+            if message.get("visibility") == "internal" and "[用户手动调整记录]" in message.get("content", "")
+        ]
+        self.assertEqual(internal_sync_messages, [])
+        self.assertEqual(result.session_snapshot["summary"], "已分类 1 项，调整 1 项，仍剩 0 项待定")
 
     def test_refresh_session_rebuilds_plan_and_marks_invalidated_items(self):
         created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
@@ -1381,7 +2144,8 @@ class OrganizerSessionServiceTests(unittest.TestCase):
             "items": [
                 {"item_id": "a.txt", "display_name": "a.txt", "source_relpath": "a.txt", "target_relpath": "Docs/a.txt", "status": "planned"},
                 {"item_id": "b.txt", "display_name": "b.txt", "source_relpath": "b.txt", "target_relpath": "Review/b.txt", "status": "review"},
-            ]
+            ],
+            "change_highlights": ["保留旧高亮"],
         }
         self.store.save(session)
 
@@ -1396,7 +2160,20 @@ class OrganizerSessionServiceTests(unittest.TestCase):
             [item["item_id"] for item in result.session_snapshot["plan_snapshot"]["invalidated_items"]],
             ["b.txt"],
         )
+        self.assertEqual(
+            result.session_snapshot["plan_snapshot"]["invalidated_items"][0]["mapping_status"],
+            "invalidated",
+        )
+        self.assertNotIn(
+            "target_relpath",
+            result.session_snapshot["plan_snapshot"]["invalidated_items"][0],
+        )
+        self.assertEqual(
+            result.session_snapshot["plan_snapshot"]["change_highlights"],
+            ["保留旧高亮"],
+        )
         reloaded = self.store.load(session.session_id)
+        self.assertIsInstance(reloaded.pending_plan, PendingPlanPayload)
         self.assertEqual(
             [move["source"] for move in reloaded.pending_plan["moves"]],
             ["a.txt"],
@@ -1478,12 +2255,15 @@ class OrganizerSessionServiceTests(unittest.TestCase):
             [item["status"] for item in snapshot["plan_snapshot"]["items"]],
             ["planned", "planned"],
         )
+        self.assertTrue(all("target_relpath" not in item for item in snapshot["plan_snapshot"]["items"]))
 
     def test_plan_snapshot_items_include_scan_purpose_and_summary(self):
         created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
         session = created.session
         assert session is not None
-        session.scan_lines = "md | 工具报告 | 含一次 Organizer 扫描报告\nnotes.txt | 学习笔记 | 课程随手记录"
+        (self.target_dir / "md").mkdir()
+        (self.target_dir / "notes.txt").write_text("note", encoding="utf-8")
+        session.scan_lines = "md | dir | 工具报告 | 含一次 Organizer 扫描报告\nnotes.txt | file | 学习笔记 | 课程随手记录"
         session.pending_plan = {
             "directories": ["历史归档", "学习资料"],
             "moves": [
@@ -1501,8 +2281,17 @@ class OrganizerSessionServiceTests(unittest.TestCase):
 
         self.assertEqual(md_item["suggested_purpose"], "工具报告")
         self.assertEqual(md_item["content_summary"], "含一次 Organizer 扫描报告")
+        self.assertEqual(md_item["entry_type"], "dir")
         self.assertEqual(notes_item["suggested_purpose"], "学习笔记")
         self.assertEqual(notes_item["content_summary"], "课程随手记录")
+        self.assertEqual(notes_item["entry_type"], "file")
+
+    def test_scan_entries_preserves_explicit_directory_type_for_dotted_directory(self):
+        entries = self.service._scan_entries("project.v1 | dir | 项目目录 | 多版本资料")
+
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["source_relpath"], "project.v1")
+        self.assertEqual(entries[0]["entry_type"], "dir")
 
     def test_get_snapshot_uses_planner_ids_for_plan_items_when_scan_lines_exist(self):
         created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
@@ -1544,6 +2333,38 @@ class OrganizerSessionServiceTests(unittest.TestCase):
 
         self.assertEqual(snapshot["stage"], "stale")
         self.assertEqual(snapshot["stale_reason"], "planning_schema_incompatible")
+
+    def test_get_snapshot_preserves_source_tree_entries_across_stage_changes_and_legacy_fallback(self):
+        created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
+        session = created.session
+        assert session is not None
+        (self.target_dir / "assets").mkdir()
+        (self.target_dir / "assets" / "cover.png").write_text("img", encoding="utf-8")
+        session.scan_lines = "assets | dir | 图片目录 | 原始目录\nassets/cover.png | file | 图片素材 | 封面"
+        session.planner_items = self.service._build_planner_items(session.scan_lines)
+        session.stage = "ready_for_precheck"
+        session.source_tree_entries = []
+        self.store.save(session)
+
+        ready_snapshot = self.service.get_snapshot(session.session_id)
+        expected_entries = [
+            {"source_relpath": "assets", "display_name": "assets", "entry_type": "directory"},
+            {"source_relpath": "assets/cover.png", "display_name": "cover.png", "entry_type": "file"},
+        ]
+
+        self.assertEqual(ready_snapshot["source_tree_entries"], expected_entries)
+
+        session = self.store.load(session.session_id)
+        assert session is not None
+        session.planning_schema_version = 1
+        session.stage = "planning"
+        session.source_tree_entries = []
+        self.store.save(session)
+
+        stale_snapshot = self.service.get_snapshot(session.session_id)
+
+        self.assertEqual(stale_snapshot["stage"], "stale")
+        self.assertEqual(stale_snapshot["source_tree_entries"], expected_entries)
 
     def test_refresh_session_rejects_locked_stage(self):
         created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
@@ -1631,6 +2452,9 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         self.assertEqual(summary["restore_items"][0]["source"].replace("\\", "/").split("/")[-2:], ["Docs", "a.txt"])
         self.assertEqual(summary["restore_items"][0]["target"].replace("\\", "/").split("/")[-1], "a.txt")
         self.assertEqual(summary["restore_items"][0]["display_name"], "a.txt")
+        self.assertEqual(summary["restore_items"][0]["item_id"], "F001")
+        self.assertEqual(summary["restore_items"][0]["source_ref_id"], "F001")
+        self.assertEqual(summary["restore_items"][0]["target_slot_id"], "D001")
 
     def test_cleanup_empty_dirs_returns_cleaned_count(self):
         docs_dir = self.target_dir / "Docs"

@@ -13,6 +13,9 @@ from file_organizer.shared.path_utils import canonical_target_dir
 import threading
 import time
 
+
+RECLAIMABLE_LOCK_STAGES = {"abandoned", "completed", "stale"}
+
 def _atomic_write_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = path.with_suffix(path.suffix + ".tmp")
@@ -110,13 +113,9 @@ class SessionStore:
                 _atomic_write_json(self.latest_index_path, latest_index)
 
             lock_path = self._lock_path(Path(session.target_dir))
-            if lock_path.exists():
-                try:
-                    payload = json.loads(lock_path.read_text(encoding="utf-8"))
-                except json.JSONDecodeError:
-                    payload = {}
-                if payload.get("owner_session_id") == session_id:
-                    lock_path.unlink()
+            payload = self._read_lock_payload(lock_path, delete_invalid=True)
+            if payload.get("owner_session_id") == session_id and lock_path.exists():
+                lock_path.unlink()
 
             return True
 
@@ -128,23 +127,29 @@ class SessionStore:
                 _atomic_write_json(lock_path, {"target_dir": canonical, "owner_session_id": owner_id})
                 return LockResult(acquired=True, lock_owner_session_id=owner_id, reason="acquired")
 
-            payload = json.loads(lock_path.read_text(encoding="utf-8"))
+            payload = self._read_lock_payload(lock_path, delete_invalid=True)
+            if not lock_path.exists():
+                _atomic_write_json(lock_path, {"target_dir": canonical, "owner_session_id": owner_id})
+                return LockResult(acquired=True, lock_owner_session_id=owner_id, reason="reclaimed_invalid_lock")
             current_owner = payload.get("owner_session_id")
             if current_owner == owner_id:
                 return LockResult(acquired=True, lock_owner_session_id=owner_id, reason="acquired")
             owner_session = self.load(current_owner) if current_owner else None
-            if owner_session is not None and owner_session.stage in {"abandoned", "completed"}:
+            if owner_session is not None and owner_session.stage in RECLAIMABLE_LOCK_STAGES:
                 _atomic_write_json(lock_path, {"target_dir": canonical, "owner_session_id": owner_id})
                 return LockResult(acquired=True, lock_owner_session_id=owner_id, reason="reclaimed_stale_lock")
             return LockResult(acquired=False, lock_owner_session_id=current_owner, reason="active_lock")
 
     def release_directory_lock(self, target_dir: Path, owner_id: str) -> None:
-        lock_path = self._lock_path(target_dir)
-        if not lock_path.exists():
-            return
-        payload = json.loads(lock_path.read_text(encoding="utf-8"))
-        if payload.get("owner_session_id") == owner_id:
-            lock_path.unlink()
+        with self._write_lock:
+            lock_path = self._lock_path(target_dir)
+            if not lock_path.exists():
+                return
+            payload = self._read_lock_payload(lock_path, delete_invalid=True)
+            if not lock_path.exists():
+                return
+            if payload.get("owner_session_id") == owner_id:
+                lock_path.unlink()
 
     def _read_latest_index(self) -> dict[str, str]:
         if not self.latest_index_path.exists():
@@ -157,3 +162,18 @@ class SessionStore:
     def _lock_path(self, target_dir: Path) -> Path:
         digest = hashlib.sha1(canonical_target_dir(target_dir).encode("utf-8")).hexdigest()
         return self.locks_dir / f"{digest}.lock"
+
+    @staticmethod
+    def _read_lock_payload(lock_path: Path, *, delete_invalid: bool = False) -> dict:
+        if not lock_path.exists():
+            return {}
+        try:
+            payload = json.loads(lock_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            if delete_invalid:
+                try:
+                    lock_path.unlink()
+                except FileNotFoundError:
+                    pass
+            return {}
+        return payload if isinstance(payload, dict) else {}

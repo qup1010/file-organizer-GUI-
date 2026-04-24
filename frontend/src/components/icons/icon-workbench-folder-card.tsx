@@ -1,19 +1,18 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertCircle,
   CheckCircle2,
   ChevronDown,
-  ChevronUp,
-  CircleDashed,
   FolderOpen,
   LoaderCircle,
   RefreshCw,
   X,
+  CircleDashed,
 } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { FolderIconCandidate, IconPreviewVersion } from "@/types/icon-workbench";
 import { buildImageSrc, getCurrentVersion, hasReadyVersion, resolvePreviewVersion } from "./icon-workbench-utils";
@@ -67,7 +66,6 @@ export function IconWorkbenchFolderCard({
   const currentVersion = useMemo(() => getCurrentVersion(folder), [folder]);
   const currentPreview = useMemo(() => resolvePreviewVersion(folder), [folder]);
   const hasVersions = folder.versions.length > 0;
-  const generateLabel = "生成新版本";
   const [previewLoaded, setPreviewLoaded] = useState(false);
   const [previewFailed, setPreviewFailed] = useState(false);
 
@@ -77,248 +75,113 @@ export function IconWorkbenchFolderCard({
   }, [currentPreview?.version_id]);
 
   const status = useMemo(() => {
-    if (isActiveProcessing) {
-      return {
-        label: "生成中",
-        detail: "当前版本正在刷新",
-        color: "text-primary",
-        icon: LoaderCircle,
-        animate: true,
-      };
-    }
-    if (currentVersion?.status === "error") {
-      return {
-        label: `当前版本 v${currentVersion.version_number} 异常`,
-        detail: currentVersion.error_message || folder.last_error || "请重新生成或切换到其他版本",
-        color: "text-error",
-        icon: AlertCircle,
-      };
-    }
-    if (currentVersion?.status === "ready") {
-      return {
-        label: `当前版本 v${currentVersion.version_number} 就绪`,
-        detail: folder.applied_version_id === currentVersion.version_id ? "已应用到文件夹" : "尚未应用到系统图标",
-        color: "text-primary",
-        icon: CheckCircle2,
-        animate: false,
-      };
-    }
-    if (folder.last_error) {
-      return {
-        label: "当前文件夹异常",
-        detail: folder.last_error,
-        color: "text-error",
-        icon: AlertCircle,
-      };
-    }
-    if (hasReadyVersion(folder)) {
-      const readyVersion = currentPreview;
-      return {
-        label: `已有可用版本${readyVersion ? ` v${readyVersion.version_number}` : ""}`,
-        detail: "展开后可预览、切换或应用",
-        color: "text-primary/80",
-        icon: CheckCircle2,
-        animate: false,
-      };
-    }
-    if (folder.analysis_status === "ready") {
-      return { label: "分析完成", detail: "可以继续生成首个图标版本", color: "text-primary/70", icon: CheckCircle2, animate: false };
-    }
-    return { label: "待处理", detail: "请先选择模板并开始生成", color: "text-ui-muted", icon: CircleDashed, animate: false };
-  }, [currentPreview, currentVersion, folder, isActiveProcessing]);
+    if (isActiveProcessing) return { label: "正在生成", color: "text-primary", icon: LoaderCircle, animate: true };
+    if (currentVersion?.status === "error") return { label: "错误", color: "text-error", icon: AlertCircle };
+    if (currentVersion?.status === "ready") return { label: "已就绪", color: "text-primary", icon: CheckCircle2 };
+    if (folder.last_error) return { label: "存在问题", color: "text-error", icon: AlertCircle };
+    if (hasReadyVersion(folder)) return { label: "有可用预览", color: "text-primary/70", icon: CheckCircle2 };
+    if (folder.analysis_status === "ready") return { label: "已分析", color: "text-primary/50", icon: CheckCircle2 };
+    return { label: "等待处理", color: "text-ui-muted", icon: CircleDashed };
+  }, [currentVersion, folder, isActiveProcessing]);
 
   const StatusIcon = status.icon;
 
   return (
-    <div
-      className={cn(
-        "group flex flex-col overflow-hidden rounded-[12px] border transition-all duration-200",
-        isExpanded
-          ? "border-primary/20 bg-surface-container-lowest shadow-[0_12px_32px_rgba(0,0,0,0.08)]"
-          : "border-on-surface/8 bg-surface-container-low/40 hover:border-primary/14 hover:bg-surface-container-lowest",
-      )}
-    >
-      <div className="flex cursor-pointer items-center gap-3 px-4 py-3" onClick={onToggleExpand}>
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-[10px] border border-on-surface/6 bg-surface-container-lowest">
+    <div className={cn(
+      "group flex flex-col overflow-hidden border transition-all duration-200 rounded-md",
+      isExpanded ? "border-primary/20 bg-surface" : "border-on-surface/5 bg-on-surface/[0.02] hover:border-primary/10 hover:bg-on-surface/[0.04]"
+    )}>
+      <div className="flex cursor-pointer items-center gap-3 px-3 py-2" onClick={onToggleExpand}>
+        {/* Micro-Thumbnail */}
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded bg-surface-container-low">
           {currentPreview ? (
             <div className="relative h-full w-full">
-              {!previewLoaded && !previewFailed ? (
-                <div className="absolute inset-0 z-10 flex items-center justify-center bg-surface-container-lowest">
-                  <LoaderCircle className="h-4 w-4 animate-spin text-primary/40" />
+              {!previewLoaded && !previewFailed && (
+                <div className="absolute inset-0 flex items-center justify-center bg-surface-container-low">
+                  <LoaderCircle className="h-3 w-3 animate-spin text-primary/20" />
                 </div>
-              ) : null}
-              {!previewFailed ? (
+              )}
+              {!previewFailed && (
                 <img
                   src={buildImageSrc(currentPreview, baseUrl, apiToken)}
-                  alt="preview"
-                  loading="lazy"
-                  decoding="async"
+                  alt="p"
                   onLoad={() => setPreviewLoaded(true)}
                   onError={() => setPreviewFailed(true)}
-                  className={cn(
-                    "h-full w-full object-cover transition-opacity duration-200",
-                    previewLoaded ? "opacity-100" : "opacity-0",
-                  )}
+                  className={cn("h-full w-full object-cover", previewLoaded ? "opacity-100" : "opacity-0")}
                 />
-              ) : null}
+              )}
             </div>
           ) : (
-            <FolderOpen className="h-5 w-5 text-primary/30" />
+            <FolderOpen className="h-3.5 w-3.5 text-primary/20" />
           )}
         </div>
 
-        <div className="min-w-0 flex-1">
-          <h3 className="truncate text-[15px] font-bold tracking-tight text-on-surface">{folder.folder_name}</h3>
-          <p className="truncate text-[11px] text-ui-muted">{folder.folder_path}</p>
+        {/* Info Area */}
+        <div className="min-w-0 flex-1 leading-none">
+          <div className="flex items-center gap-2">
+             <h3 className="truncate text-[13px] font-black tracking-tight text-on-surface/90">{folder.folder_name}</h3>
+             {folder.applied_version_id && <span className="shrink-0 rounded bg-primary/10 px-1 py-0.5 text-[8px] font-black uppercase text-primary">已应用</span>}
+          </div>
+          <p className="truncate text-[9px] font-medium text-ui-muted/40 mt-1 uppercase tracking-tight">{folder.folder_path}</p>
         </div>
 
-        <div className={cn("hidden min-w-[180px] flex-col items-end gap-0.5 sm:flex", status.color)}>
-          <div className="flex items-center gap-1.5">
-            <StatusIcon className={cn("h-3.5 w-3.5", status.animate ? "animate-spin" : undefined)} />
-            <span className="text-[12px] font-semibold">{status.label}</span>
-          </div>
-          <span className="max-w-[220px] truncate text-[10px] font-bold text-ui-muted">{status.detail}</span>
+        {/* Compact Status */}
+        <div className={cn("hidden items-center gap-2 px-1 sm:flex", status.color)}>
+           <span className="text-[9px] font-black uppercase tracking-widest opacity-40">{status.label}</span>
+           <StatusIcon className={cn("h-3 w-3", status.animate && "animate-spin")} />
         </div>
 
-        {!isExpanded && currentVersion?.status === "ready" ? (
-          <div className="hidden items-center gap-2 md:flex">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={(event: React.MouseEvent) => {
-                event.stopPropagation();
-                onZoom(currentVersion);
-              }}
-            >
-              预览
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={(event: React.MouseEvent) => {
-                event.stopPropagation();
-                onApplyVersion(currentVersion);
-              }}
-              disabled={isProcessing || !desktopReady}
-            >
-              应用
-            </Button>
-          </div>
-        ) : null}
-
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onRemoveTarget();
-          }}
-          className="flex h-8 w-8 items-center justify-center rounded-full text-ui-muted transition-colors hover:bg-error/8 hover:text-error"
-          title="移出本次目标"
-        >
-          <X className="h-4 w-4" />
-        </button>
-
-        <div className="flex h-8 w-8 items-center justify-center rounded-[4px] text-ui-muted transition-colors group-hover:bg-on-surface/4">
-          {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        {/* Quick Actions */}
+        <div className={cn("flex items-center gap-1", !isExpanded && "opacity-0 group-hover:opacity-100 transition-opacity")}>
+          {!isExpanded && currentVersion?.status === "ready" && (
+            <button onClick={(e) => { e.stopPropagation(); onApplyVersion(currentVersion); }} disabled={isProcessing || !desktopReady} className="h-6 items-center rounded bg-primary/10 px-2 text-[9px] font-black uppercase text-primary hover:bg-primary/20 disabled:opacity-30 hidden lg:flex">一键应用</button>
+          )}
+          <button onClick={(e) => { e.stopPropagation(); onRemoveTarget(); }} className="h-7 w-7 flex items-center justify-center rounded hover:bg-error/10 text-ui-muted/40 hover:text-error"><X className="h-3 w-3" /></button>
+          <div className={cn("h-7 w-7 flex items-center justify-center rounded transition-transform text-ui-muted/30", isExpanded && "rotate-180 text-primary")}><ChevronDown className="h-3.5 w-3.5" /></div>
         </div>
       </div>
 
-      {isExpanded ? (
-        <div className="animate-fadeIn border-t border-on-surface/6 bg-surface-container-lowest/30 p-4">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-[12px] font-bold uppercase tracking-widest text-ui-muted">
-                版本历史 ({folder.versions.length})
-              </span>
-              <div className="flex gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={(event: React.MouseEvent) => {
-                    event.stopPropagation();
-                    onRegenerate();
-                  }}
-                  disabled={isProcessing || !hasSelectedStyle || Boolean(generateBlockedReason)}
-                >
-                  <RefreshCw className="mr-2 h-3.5 w-3.5" />
-                  {generateLabel}
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={isProcessing || !desktopReady}
-                  onClick={(event: React.MouseEvent) => {
-                    event.stopPropagation();
-                    onRestore();
-                  }}
-                >
-                  恢复上次状态
-                </Button>
-              </div>
-            </div>
-
-            {!hasSelectedStyle ? (
-              <p className="text-[12px] leading-6 text-ui-muted">请先选择风格，再为这个目标文件夹生成图标版本。</p>
-            ) : generateBlockedReason ? (
-              <p className="text-[12px] leading-6 text-error/80">{generateBlockedReason}</p>
-            ) : null}
-
-            {isActiveProcessing ? (
-              <div className="flex items-center gap-2 rounded-[10px] border border-primary/12 bg-primary/6 px-3 py-2 text-[12px] font-black text-primary">
-                <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                <span>正在生成预览，完成后将刷新列表...</span>
-              </div>
-            ) : null}
-
-            {hasVersions ? (
-              <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin">
-                {folder.versions.map((version) => (
-                  <IconWorkbenchVersionThumb
-                    key={version.version_id}
-                    version={version}
-                    isSelected={version.version_id === folder.current_version_id}
-                    isApplied={version.version_id === folder.applied_version_id}
-                    baseUrl={baseUrl}
-                    apiToken={apiToken}
-                    onSelect={() => onSelectVersion(version.version_id)}
-                    onZoom={() => onZoom(version)}
-                    onApply={() => onApplyVersion(version)}
-                    onRemoveBg={() => onRemoveBg(version)}
-                    onDelete={() => onDeleteVersion(version.version_id)}
-                    isApplying={isApplyingId === version.version_id}
-                    isRemovingBg={processingBgVersionIds?.has(`${folder.folder_id}-${version.version_id}`)}
-                    isProcessing={isProcessing}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="flex h-[110px] flex-col items-center justify-center rounded-xl border border-dashed border-on-surface/10 bg-on-surface/[0.02]">
-                <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-primary/8 text-primary/40">
-                  <RefreshCw className="h-4 w-4" />
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="border-t border-on-surface/5 bg-on-surface/[0.01]">
+            <div className="p-3 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                   <span className="text-[9px] font-black uppercase tracking-widest text-ui-muted/40">版本历史</span>
+                   <span className="rounded-full bg-on-surface/5 px-1.5 py-0.5 text-[9px] font-bold text-ui-muted/60">{folder.versions.length}</span>
                 </div>
-                <p className="px-5 text-center text-[12.5px] font-medium leading-relaxed text-ui-muted opacity-80">
-                  {!hasSelectedStyle
-                    ? "先选择风格模板后，才能为这个目标文件夹生成新版本图标。"
-                    : "可以直接为这个目标文件夹生成新版本图标。"}
-                </p>
+                <div className="flex gap-1.5">
+                  <button onClick={(e) => { e.stopPropagation(); onRegenerate(); }} disabled={isProcessing || !hasSelectedStyle || !!generateBlockedReason} className="h-6 items-center rounded bg-primary px-3 text-[9px] font-black uppercase text-white hover:bg-primary-dim disabled:opacity-30 flex gap-1.5"><RefreshCw className="h-2.5 w-2.5" /> 生成预览</button>
+                  <button disabled={isProcessing || !desktopReady} onClick={(e) => { e.stopPropagation(); onRestore(); }} className="h-6 items-center rounded border border-on-surface/10 bg-surface px-3 text-[9px] font-black uppercase text-on-surface hover:bg-on-surface/5 disabled:opacity-30">恢复原有</button>
+                </div>
               </div>
-            )}
-          </div>
 
-          {folder.analysis ? (
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <div className="rounded-xl border border-on-surface/6 bg-surface-container-lowest p-3 shadow-sm">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-ui-muted">识别主题</span>
-                <p className="mt-1 font-semibold text-on-surface">{folder.analysis.visual_subject}</p>
-              </div>
-              <div className="rounded-xl border border-on-surface/6 bg-surface-container-lowest p-3 shadow-sm">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-ui-muted">类别</span>
-                <p className="mt-1 font-semibold text-on-surface">{folder.analysis.category}</p>
-              </div>
+              {hasVersions ? (
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8">
+                  {folder.versions.map((version) => (
+                    <IconWorkbenchVersionThumb key={version.version_id} version={version} isSelected={version.version_id === folder.current_version_id} isApplied={version.version_id === folder.applied_version_id} baseUrl={baseUrl} apiToken={apiToken} onSelect={() => onSelectVersion(version.version_id)} onZoom={() => onZoom(version)} onApply={() => onApplyVersion(version)} onRemoveBg={() => onRemoveBg(version)} onDelete={() => onDeleteVersion(version.version_id)} isApplying={isApplyingId === version.version_id} isRemovingBg={processingBgVersionIds?.has(`${folder.folder_id}-${version.version_id}`)} isProcessing={isProcessing} />
+                  ))}
+                </div>
+              ) : (
+                <div className="flex h-20 items-center justify-center rounded border border-dashed border-on-surface/10 text-[10px] font-bold text-ui-muted/40 uppercase tracking-widest">暂无版本记录</div>
+              )}
+
+              {folder.analysis && (
+                <div className="flex flex-wrap gap-2 pt-2 border-t border-on-surface/5">
+                  <div className="flex items-center gap-2 rounded bg-on-surface/5 px-2 py-1">
+                    <span className="text-[8px] font-black uppercase tracking-widest text-ui-muted/50">识别主体</span>
+                    <span className="text-[11px] font-bold text-on-surface/70">{folder.analysis.visual_subject}</span>
+                  </div>
+                  <div className="flex items-center gap-2 rounded bg-on-surface/5 px-2 py-1">
+                    <span className="text-[8px] font-black uppercase tracking-widest text-ui-muted/50">分类建议</span>
+                    <span className="text-[11px] font-bold text-on-surface/70">{folder.analysis.category}</span>
+                  </div>
+                </div>
+              )}
             </div>
-          ) : null}
-        </div>
-      ) : null}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

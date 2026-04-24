@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import {
   AlertCircle,
@@ -11,6 +11,7 @@ import {
   Cpu,
   Eye,
   EyeOff,
+  FolderOpen,
   Globe,
   ImageIcon,
   Key,
@@ -28,6 +29,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import {
   FieldGroup,
@@ -102,6 +104,7 @@ type SwitchPresetDialogState = {
 const APP_CONTEXT_EVENT = "file-organizer-context-change";
 const SETTINGS_CONTEXT_KEY = "settings_header_context";
 const IMAGE_SIZE_OPTIONS = ["1024x1024", "512x512", "256x256"] as const;
+const COMPACT_SETTINGS_BREAKPOINT = 960;
 
 function normalizeImageSize(value: string | null | undefined): (typeof IMAGE_SIZE_OPTIONS)[number] {
   if (value && IMAGE_SIZE_OPTIONS.includes(value as (typeof IMAGE_SIZE_OPTIONS)[number])) {
@@ -191,6 +194,17 @@ function buildFingerprint(
   });
 }
 
+function copyTextToClipboard(value: string, onSuccess: (message: string) => void, onError: (message: string) => void) {
+  if (typeof navigator === "undefined" || !navigator.clipboard) {
+    onError("当前环境不支持复制日志路径。");
+    return;
+  }
+  void navigator.clipboard.writeText(value).then(
+    () => onSuccess("日志路径已复制"),
+    () => onError("复制日志路径失败"),
+  );
+}
+
 export default function SettingsPage() {
   const api = useMemo(() => createApiClient(getApiBaseUrl(), getApiToken()), []);
   const desktopReady = isTauriDesktop();
@@ -213,6 +227,8 @@ export default function SettingsPage() {
   const [deletePresetDialog, setDeletePresetDialog] = useState<DeletePresetDialogState | null>(null);
   const [switchPresetDialog, setSwitchPresetDialog] = useState<SwitchPresetDialogState | null>(null);
   const [activeTab, setActiveTab] = useState<string>("text");
+  const [isCompactLayout, setIsCompactLayout] = useState(false);
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
 
   const categories = [
     { id: "text", label: "文本模型", icon: Layers3, description: "核心分析与规划" },
@@ -232,6 +248,7 @@ export default function SettingsPage() {
     }),
     [bgRemovalSecret, iconSecret, textSecret, visionSecret],
   );
+  const activeCategory = categories.find((item) => item.id === activeTab) ?? categories[0];
 
   const isDirty = useMemo(
     () =>
@@ -313,9 +330,38 @@ export default function SettingsPage() {
     window.dispatchEvent(new Event(APP_CONTEXT_EVENT));
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const syncLayoutMode = () => {
+      const compact = window.innerWidth < COMPACT_SETTINGS_BREAKPOINT;
+      setIsCompactLayout(compact);
+      if (!compact) {
+        setCategoryDialogOpen(false);
+      }
+    };
+
+    syncLayoutMode();
+    window.addEventListener("resize", syncLayoutMode);
+    return () => {
+      window.removeEventListener("resize", syncLayoutMode);
+    };
+  }, []);
+
   const launchTemplate = getTemplateMeta(draft?.global_config.LAUNCH_DEFAULT_TEMPLATE_ID ?? "general_downloads");
+  const launchReviewFollowsNewRoot = draft?.global_config.LAUNCH_REVIEW_FOLLOWS_NEW_ROOT !== false;
+  const launchDefaultNewDirectoryRoot = String(draft?.global_config.LAUNCH_DEFAULT_NEW_DIRECTORY_ROOT ?? "");
+  const launchDefaultReviewRoot = String(draft?.global_config.LAUNCH_DEFAULT_REVIEW_ROOT ?? "");
+  const launchDerivedReviewRoot = launchDefaultNewDirectoryRoot
+    ? `${launchDefaultNewDirectoryRoot.replace(/[\\/]$/, "")}/Review`
+    : "新目录生成位置/Review";
   const launchStrategyPreview = buildStrategySummary({
     template_id: draft?.global_config.LAUNCH_DEFAULT_TEMPLATE_ID ?? "general_downloads",
+    organize_mode: "initial",
+    task_type: "organize_full_directory",
+    destination_index_depth: 2,
     language: draft?.global_config.LAUNCH_DEFAULT_LANGUAGE ?? "zh",
     density: draft?.global_config.LAUNCH_DEFAULT_DENSITY ?? "normal",
     prefix_style: draft?.global_config.LAUNCH_DEFAULT_PREFIX_STYLE ?? "none",
@@ -382,6 +428,11 @@ export default function SettingsPage() {
     setSuccess(null);
   };
 
+  const handleSelectTab = (tabId: string) => {
+    setActiveTab(tabId);
+    setCategoryDialogOpen(false);
+  };
+
   const performActivatePreset = async (family: PresetConfigFamily, presetId: string) => {
     setLoading(true);
     setError(null);
@@ -426,7 +477,6 @@ export default function SettingsPage() {
           name: presetName.trim(),
           copy_from_active: true,
           preset: {
-            IMAGE_ANALYSIS_NAME: draft.vision.IMAGE_ANALYSIS_NAME,
             IMAGE_ANALYSIS_BASE_URL: draft.vision.IMAGE_ANALYSIS_BASE_URL,
             IMAGE_ANALYSIS_MODEL: draft.vision.IMAGE_ANALYSIS_MODEL,
           },
@@ -673,19 +723,24 @@ export default function SettingsPage() {
   const renderResult = (family: SettingsFamily) => {
     const result = testResults[family];
     const isTesting = testingFamily === family;
+    const isVision = family === "vision";
 
     if (isTesting) {
       return (
-        <div className="flex items-center gap-3 rounded-[12px] border border-primary/15 bg-primary/5 px-5 py-4">
-           <div className="relative h-8 w-8 shrink-0">
+        <div className="flex items-center gap-3 rounded-[6px] border border-primary/15 bg-primary/5 px-4 py-3">
+           <div className="relative h-6 w-6 shrink-0">
               <div className="absolute inset-0 animate-ping rounded-full bg-primary/20 opacity-75" />
               <div className="relative flex h-full w-full items-center justify-center rounded-full bg-primary/10 text-primary">
-                 <RefreshCw className="h-4 w-4 animate-spin" />
+                 <RefreshCw className="h-3.5 w-3.5 animate-spin" />
               </div>
            </div>
            <div className="min-w-0">
-              <p className="text-[13px] font-black tracking-tight text-on-surface">正在进行端到端连接测试...</p>
-              <p className="mt-0.5 text-[11px] font-bold text-primary/60 uppercase tracking-widest">Scanning Endpoint</p>
+              <p className="text-[13px] font-bold tracking-tight text-on-surface">
+                {isVision ? "正在验证图片理解能力..." : "正在进行连接测试..."}
+              </p>
+              <p className="mt-0.5 text-[10px] font-bold tracking-widest text-primary/60">
+                {isVision ? "图片能力验证" : "连接探测"}
+              </p>
            </div>
         </div>
       );
@@ -702,32 +757,38 @@ export default function SettingsPage() {
         initial={{ opacity: 0, y: 5 }}
         animate={{ opacity: 1, y: 0 }}
         className={cn(
-          "flex items-start gap-4 rounded-[12px] border px-5 py-4 transition-all",
+          "flex items-start gap-3.5 rounded-[6px] border px-4 py-3 transition-all",
           isOk
-            ? "border-success/20 bg-success[0.03] shadow-[0_4px_24px_rgba(16,185,129,0.08)]"
-            : "border-error/20 bg-error/[0.03] shadow-[0_4px_24px_rgba(196,49,75,0.08)]",
+            ? "border-success/20 bg-success/[0.03]"
+            : "border-error/20 bg-error/[0.03]",
         )}
       >
         <div className={cn(
-           "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border",
+           "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] border",
            isOk ? "border-success/20 bg-success/10 text-success-dim" : "border-error/20 bg-error/10 text-error"
         )}>
-          {isOk ? <CheckCircle2 className="h-5 w-5" /> : <AlertCircle className="h-5 w-5" />}
+          {isOk ? <CheckCircle2 className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
         </div>
-        <div className="min-w-0 flex-1 space-y-1.5">
+        <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-center justify-between gap-4">
-             <h4 className={cn("text-[14px] font-black tracking-tight", isOk ? "text-success-dim" : "text-error-dim")}>
-                {isOk ? "服务已成功对齐" : "连接遭到拦截"}
+             <h4 className={cn("text-[13px] font-bold tracking-tight", isOk ? "text-success-dim" : "text-error-dim")}>
+                {isVision ? (isOk ? "图片能力已验证" : "图片能力验证失败") : isOk ? "服务已成功对齐" : "连接遭到拦截"}
              </h4>
              {isOk && (
-                <div className="flex items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-success-dim">
-                   <div className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
-                   Stable
+                <div className="flex items-center gap-1.5 rounded-[4px] bg-success/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-success-dim">
+                   <div className="h-1 w-1 rounded-full bg-success animate-pulse" />
+                   可用
                 </div>
              )}
           </div>
-          <p className="text-[12.5px] font-medium leading-relaxed text-on-surface/60">{result.message}</p>
-          {!isOk && <p className="text-[11px] font-black uppercase tracking-widest opacity-40">Code: {result.code}</p>}
+          <p className="text-[12px] leading-relaxed text-on-surface/70">{result.message}</p>
+          {isVision && result.details ? (
+            <div className="rounded-[6px] border border-on-surface/8 bg-surface-container-low px-3 py-2 text-[11px] leading-relaxed text-on-surface/70">
+              <p>期望结果：{result.details.expected}</p>
+              <p>实际返回：{result.details.actual?.trim() ? result.details.actual : "空响应"}</p>
+            </div>
+          ) : null}
+          {!isOk && <p className="text-[10px] font-mono opacity-50">Code: {result.code}</p>}
         </div>
       </motion.div>
     );
@@ -813,67 +874,51 @@ export default function SettingsPage() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-surface">
-      {/* Top Banner / Global Actions */}
-      <section className="sticky top-0 z-30 shrink-0 border-b border-on-surface/8 bg-surface-container-lowest/90 px-6 py-3 backdrop-blur-md">
-        <div className="mx-auto flex max-w-[1360px] items-center justify-between gap-6">
-          <div className="flex min-w-0 items-center gap-4">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[6px] bg-primary/8 text-primary">
-              <SettingsIcon className="h-5.5 w-5.5" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="truncate font-headline text-[1.15rem] font-black tracking-tight text-on-surface">模型与工具设置</h1>
-              <p className="hidden truncate text-[12px] text-on-surface/50 sm:block">
-                统一管理文本模型、图片理解、图标生成和运行日志。
-              </p>
-            </div>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-3">
-            <Button variant="secondary" onClick={() => hydrate(snapshot)} disabled={!isDirty || saving}>
-              放弃修改
-            </Button>
-            <Button onClick={() => void handleSave()} loading={saving} disabled={!isDirty || saving} className="shadow-lg shadow-primary/20">
-              保存全部配置
-            </Button>
-          </div>
-        </div>
-      </section>
-
-      <div className="mx-auto flex w-full max-w-[1360px] flex-1 overflow-hidden">
+      <div className="flex w-full flex-1 overflow-hidden">
         {/* Left Sidebar Navigation */}
-        <aside className="w-[280px] shrink-0 overflow-y-auto border-r border-on-surface/8 bg-surface/30 px-4 py-8">
-          <div className="space-y-1.5">
-            {categories.map((cat) => (
-              <button
-                key={cat.id}
-                onClick={() => setActiveTab(cat.id)}
-                className={cn(
-                  "flex w-full items-center gap-3.5 rounded-[4px] border px-4 py-3 text-left transition-all duration-200",
-                  activeTab === cat.id
-                    ? "border-primary/10 bg-surface-container-lowest text-primary shadow-sm ring-1 ring-primary/5"
-                    : "border-transparent text-on-surface/60 hover:bg-on-surface/[0.03] hover:text-on-surface",
-                )}
-              >
-                <div className={cn(
-                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-[4px] transition-colors",
-                  activeTab === cat.id ? "bg-primary text-white" : "bg-on-surface/5 text-on-surface/40",
-                )}>
-                  <cat.icon className="h-4.5 w-4.5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[13.5px] font-bold leading-none">{cat.label}</p>
-                  <p className="mt-1.5 truncate text-[11px] font-medium opacity-60">{cat.description}</p>
-                </div>
-              </button>
-            ))}
+        {!isCompactLayout && (
+        <aside className="w-[260px] 2xl:w-[300px] shrink-0 overflow-y-auto border-r border-on-surface/8 bg-surface-container-lowest px-2 py-4 scrollbar-none">
+          <div className="space-y-0.5">
+            {categories.map((cat) => {
+              const active = activeTab === cat.id;
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => handleSelectTab(cat.id)}
+                  className={cn(
+                    "group relative flex w-full items-center gap-3 rounded-[6px] px-3 py-2 text-left transition-all",
+                    active
+                      ? "bg-primary/[0.06] border border-primary/20"
+                      : "bg-transparent hover:bg-on-surface/[0.035]",
+                  )}
+                >
+                  {active && (
+                    <motion.div
+                      layoutId="settings-active-pill"
+                      className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-primary"
+                    />
+                  )}
+                  <div className={cn(
+                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] transition-colors",
+                    active ? "bg-primary text-white" : "bg-transparent group-hover:bg-on-surface/[0.05] text-on-surface/40",
+                  )}>
+                    <cat.icon className="h-3.5 w-3.5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className={cn("text-[12.5px] font-black leading-none tracking-tight", active ? "text-primary" : "text-on-surface/80")}>{cat.label}</p>
+                    <p className="mt-1.5 truncate text-[10.5px] font-medium opacity-50">{cat.description}</p>
+                  </div>
+                </button>
+              );
+            })}
           </div>
 
-          <div className="mt-12 rounded-[12px] border border-on-surface/8 bg-on-surface/[0.02] p-5">
+          <div className="mt-8 rounded-xl border border-on-surface/8 bg-on-surface/[0.02] p-4">
              <div className="flex items-center gap-2 text-primary">
-                <Cpu className="h-4.5 w-4.5" />
-                <span className="text-[11px] font-black uppercase tracking-[0.2em] text-primary/70">引擎状态</span>
+                <Cpu className="h-3.5 w-3.5" />
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary/60">引擎状态</span>
              </div>
-             <div className="mt-5 space-y-4">
+             <div className="mt-4 space-y-3">
                 {[
                   { label: "文本分析", pass: snapshot.status.text_configured, icon: Layers3 },
                   { label: "多模态分析", pass: snapshot.status.vision_configured, icon: Globe },
@@ -881,52 +926,64 @@ export default function SettingsPage() {
                   { label: "背景处理", pass: snapshot.status.bg_removal_configured, icon: Scissors },
                 ].map((item) => (
                   <div key={item.label} className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                       <item.icon className="h-3.5 w-3.5 text-on-surface/30" />
-                       <span className="truncate text-[12px] font-bold text-on-surface/50">{item.label}</span>
+                    <div className="flex items-center gap-2 min-w-0">
+                       <item.icon className="h-3 w-3 text-on-surface/25" />
+                       <span className="truncate text-[11px] font-bold text-on-surface/40">{item.label}</span>
                     </div>
                     {item.pass ? (
-                       <div className="flex items-center gap-1.5 rounded-full bg-success/10 px-2 py-0.5 pr-2.5">
-                          <div className="h-1 w-1 rounded-full bg-success" />
-                          <span className="text-[10px] font-black uppercase tracking-widest text-success-dim/80">Active</span>
+                       <div className="flex items-center gap-1 rounded-full bg-success/10 px-1.5 py-0.5">
+                          <div className="h-0.5 w-0.5 rounded-full bg-success" />
+                          <span className="text-[9px] font-black uppercase tracking-widest text-success-dim/70">OK</span>
                        </div>
                     ) : (
-                       <div className="flex items-center gap-1.5 rounded-full bg-on-surface/5 px-2 py-0.5 pr-2.5">
-                          <div className="h-1 w-1 rounded-full bg-on-surface/30" />
-                          <span className="text-[10px] font-black uppercase tracking-widest text-on-surface/30">Idle</span>
+                       <div className="flex items-center gap-1 rounded-full bg-on-surface/5 px-1.5 py-0.5">
+                          <div className="h-0.5 w-0.5 rounded-full bg-on-surface/20" />
+                          <span className="text-[9px] font-black uppercase tracking-widest text-on-surface/30">NO</span>
                        </div>
                     )}
                   </div>
                 ))}
              </div>
-             <div className="mt-6 border-t border-on-surface/5 pt-4">
-                <p className="text-[11px] font-bold leading-relaxed text-on-surface/30">
-                    Active 引擎已就绪并可用。若显示为 Idle 请检查连接。
+             <div className="mt-4 border-t border-on-surface/5 pt-3">
+                <p className="text-[10px] font-bold leading-relaxed text-on-surface/25">
+                    已就绪表示当前引擎可直接使用。
                 </p>
              </div>
           </div>
         </aside>
+        )}
 
         {/* Right Content Area */}
-        <main className="flex-1 overflow-y-auto px-6 py-8 scrollbar-thin lg:px-10">
-          <div className="mx-auto max-w-[860px]">
+        <main className="flex-1 overflow-y-auto bg-surface relative scrollbar-thin">
+          <div className="mx-auto max-w-[800px] pb-24 pt-6 px-6">
+            {isCompactLayout && (
+              <div className="mb-6 flex items-center justify-between gap-3 rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-ui-muted">当前分类</p>
+                  <p className="truncate text-[14px] font-black text-on-surface">{activeCategory.label}</p>
+                </div>
+                <Button variant="secondary" size="sm" onClick={() => setCategoryDialogOpen(true)}>
+                  切换分类
+                </Button>
+              </div>
+            )}
             {error && (
               <div className="mb-6 animate-in fade-in slide-in-from-top-2 duration-300">
                 <ErrorAlert title="操作执行失败" message={error} onClose={() => setError(null)} />
               </div>
             )}
             {success && (
-              <div className="mb-6 flex items-center gap-3 rounded-[6px] border border-success/10 bg-success/5 px-5 py-4 text-[13px] font-bold text-success-dim animate-in fade-in slide-in-from-top-2 duration-300">
-                <CheckCircle2 className="h-5 w-5" />
+              <div className="mb-6 flex items-center gap-2.5 rounded-[6px] border border-success/15 bg-success/5 px-4 py-3 text-[12.5px] font-bold text-success-dim animate-in fade-in slide-in-from-top-2 duration-300">
+                <CheckCircle2 className="h-4 w-4" />
                 {success}
               </div>
             )}
 
             {!snapshot.status.text_configured && (
-              <div className="mb-6 flex items-center justify-between gap-4 rounded-[10px] border border-warning/18 bg-warning-container/18 px-5 py-4 animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="mb-6 flex items-center justify-between gap-4 rounded-[6px] border border-warning/20 bg-warning-container/15 px-4 py-3 animate-in fade-in slide-in-from-top-2 duration-300">
                 <div className="flex items-start gap-3 min-w-0">
-                  <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-warning/12 text-warning">
-                    <AlertCircle className="h-4.5 w-4.5" />
+                  <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] bg-warning/10 text-warning">
+                    <AlertCircle className="h-4 w-4" />
                   </div>
                   <div className="min-w-0">
                     <p className="text-[14px] font-black tracking-tight text-on-surface">当前还没有可用的文本模型</p>
@@ -935,7 +992,7 @@ export default function SettingsPage() {
                     </p>
                   </div>
                 </div>
-                <Button variant="secondary" size="sm" onClick={() => setActiveTab("text")}>
+                <Button variant="secondary" size="sm" onClick={() => handleSelectTab("text")}>
                   去配置文本模型
                 </Button>
               </div>
@@ -991,7 +1048,7 @@ export default function SettingsPage() {
               <SettingsSection
                 icon={Globe}
                 title="图片理解"
-                description="关闭只影响运行时是否参与整理分析，不影响预设编辑、切换和连接测试。支持 OpenAI 兼容的多模态 Chat Completions 接口。"
+                description="开启后，模型可在必要时查看图片内容；关闭时只按文件名判断。"
                 actions={
                   <div className="flex items-center gap-3">
                     <Button
@@ -1003,7 +1060,7 @@ export default function SettingsPage() {
                       测试连接
                     </Button>
                     <div className="flex items-center gap-2 rounded-[10px] border border-on-surface/8 bg-surface-container-low px-3 py-2">
-                      <span className="text-[12px] font-medium text-on-surface-variant/70">参与整理分析</span>
+                      <span className="text-[12px] font-medium text-on-surface-variant/70">启用</span>
                       <ToggleSwitch
                         checked={Boolean(draft.global_config.IMAGE_ANALYSIS_ENABLED)}
                         onClick={() => updateGlobal("IMAGE_ANALYSIS_ENABLED", !draft.global_config.IMAGE_ANALYSIS_ENABLED)}
@@ -1339,9 +1396,61 @@ export default function SettingsPage() {
                       value={draft.global_config.LAUNCH_DEFAULT_NOTE ?? ""}
                       onChange={(event) => updateGlobal("LAUNCH_DEFAULT_NOTE", event.target.value.slice(0, 200))}
                       className="min-h-28 w-full resize-none rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-4 py-3 text-[14px] leading-7 text-on-surface outline-none transition-all placeholder:text-on-surface-variant/35 focus:border-primary focus:ring-4 focus:ring-primary/5"
-                      placeholder="例如：拿不准的先放 Review，课程资料尽量按学期整理。"
+                      placeholder="例如：拿不准的先放待确认区（Review），课程资料尽量按学期整理。"
                     />
                   </FieldGroup>
+                </div>
+                <div className="rounded-[12px] border border-on-surface/8 bg-surface px-4 py-4">
+                  <div className="mb-4">
+                    <h3 className="text-[13px] font-semibold text-on-surface">默认放置规则</h3>
+                    <p className="mt-1 text-[12px] leading-5 text-on-surface-variant/65">
+                      这里只定义以后新任务启动时的默认放置位置。任务页里仍然可以按单次任务覆盖。
+                    </p>
+                  </div>
+                  <div className="grid gap-4 xl:grid-cols-2">
+                    <FieldGroup label="默认新目录生成位置" hint="留空时，新结构任务默认使用输出目录；归入已有目录任务默认使用当前任务工作区根。">
+                      <InputShell icon={FolderOpen}>
+                        <input
+                          value={launchDefaultNewDirectoryRoot}
+                          onChange={(event) => updateGlobal("LAUNCH_DEFAULT_NEW_DIRECTORY_ROOT", event.target.value)}
+                          className="w-full bg-transparent py-2 text-sm font-semibold text-on-surface outline-none"
+                          placeholder="例如：D:/archive/sorted"
+                        />
+                      </InputShell>
+                    </FieldGroup>
+                    <FieldGroup
+                      label="默认待确认区（Review）位置"
+                      hint={
+                        launchReviewFollowsNewRoot
+                          ? `当前会自动跟随新目录位置，默认使用 ${launchDerivedReviewRoot}。`
+                          : "只在关闭“跟随新目录位置”后单独生效。"
+                      }
+                    >
+                      <InputShell icon={FolderOpen}>
+                        <input
+                          value={launchDefaultReviewRoot}
+                          onChange={(event) => updateGlobal("LAUNCH_DEFAULT_REVIEW_ROOT", event.target.value)}
+                          disabled={launchReviewFollowsNewRoot}
+                          className="w-full bg-transparent py-2 text-sm font-semibold text-on-surface outline-none disabled:opacity-60"
+                          placeholder={launchReviewFollowsNewRoot ? launchDerivedReviewRoot : "例如：D:/archive/review"}
+                        />
+                      </InputShell>
+                    </FieldGroup>
+                  </div>
+                  <div className="mt-4 rounded-[12px] border border-on-surface/8 bg-surface-container-low px-4 py-3.5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <h3 className="text-[13px] font-semibold text-on-surface">待确认区默认跟随新目录位置</h3>
+                        <p className="mt-1 text-[12px] leading-5 text-on-surface-variant/65">
+                          开启后，新任务的待确认区（Review）默认会自动派生为 `新目录生成位置/Review`。只有关闭时，才会使用上面的独立路径。
+                        </p>
+                      </div>
+                      <ToggleSwitch
+                        checked={launchReviewFollowsNewRoot}
+                        onClick={() => updateGlobal("LAUNCH_REVIEW_FOLLOWS_NEW_ROOT", !launchReviewFollowsNewRoot)}
+                      />
+                    </div>
+                  </div>
                 </div>
                 <div className="rounded-[12px] border border-on-surface/8 bg-surface px-4 py-3.5">
                   <div className="flex items-start justify-between gap-4">
@@ -1361,6 +1470,43 @@ export default function SettingsPage() {
                 title="运行与日志"
                 description="只保留常用的运行和日志开关，避免把这里变成调试控制台。"
               >
+                <div className="rounded-[12px] border border-on-surface/8 bg-surface px-4 py-4">
+                  <div className="mb-4">
+                    <h3 className="text-[13px] font-semibold text-on-surface">日志输出路径</h3>
+                    <p className="mt-1 text-[12px] leading-5 text-on-surface-variant/65">
+                      运行日志始终会写入以下目录。开启“详细日志”后，还会额外输出调试明细。
+                    </p>
+                  </div>
+                  <div className="grid gap-3 xl:grid-cols-2">
+                    {[
+                      {
+                        label: "运行日志",
+                        path: snapshot?.runtime.log_paths.runtime_log || "",
+                      },
+                      {
+                        label: "调试日志",
+                        path: snapshot?.runtime.log_paths.debug_log || "",
+                      },
+                    ].map((item) => (
+                      <div key={item.label} className="rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-4 py-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-[11px] font-black uppercase tracking-[0.15em] text-ui-muted">{item.label}</span>
+                          <button
+                            type="button"
+                            onClick={() => copyTextToClipboard(item.path, setSuccess, setError)}
+                            className="inline-flex items-center gap-1 rounded-[6px] border border-on-surface/8 bg-surface px-2.5 py-1 text-[11px] font-bold text-on-surface transition-colors hover:border-primary/20 hover:text-primary"
+                          >
+                            <ClipboardCopy className="h-3 w-3" />
+                            复制
+                          </button>
+                        </div>
+                        <div className="mt-2 break-all font-mono text-[12px] leading-5 text-on-surface/70">
+                          {item.path || "尚未生成"}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
                 <div className="rounded-[12px] border border-on-surface/8 bg-surface px-4 py-3.5">
                   <div className="flex items-start justify-between gap-4">
                     <div>
@@ -1373,8 +1519,63 @@ export default function SettingsPage() {
               </SettingsSection>
             )}
           </div>
+
+          <AnimatePresence>
+            {isDirty && (
+              <motion.div
+                initial={{ y: 20, opacity: 0, x: "-50%" }}
+                animate={{ y: 0, opacity: 1, x: "-50%" }}
+                exit={{ y: 20, opacity: 0, x: "-50%" }}
+                className="fixed bottom-8 left-1/2 z-50 flex items-center gap-3 rounded-[12px] border border-primary/30 bg-surface/90 px-4 py-3 backdrop-blur-xl translate-x-[-50%]"
+              >
+                <div className="mr-4 flex flex-col">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-primary">设置已修改</span>
+                  <span className="text-[10px] font-medium text-on-surface/40">保存后生效至全局</span>
+                </div>
+                <div className="h-8 w-px bg-primary/10" />
+                <Button variant="secondary" onClick={() => hydrate(snapshot)} disabled={saving} className="h-9 px-4 text-[12.5px] font-bold">
+                  放弃修改
+                </Button>
+                <Button onClick={() => void handleSave()} loading={saving} disabled={saving} className="h-9 px-5 text-[12.5px] font-bold border border-primary/20 bg-primary active:bg-primary-dim">
+                  保存全部配置
+                </Button>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </main>
       </div>
+
+      <Dialog open={categoryDialogOpen} onOpenChange={setCategoryDialogOpen}>
+        <DialogContent className="max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>切换设置分类</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-2">
+            {categories.map((cat) => {
+              const active = activeTab === cat.id;
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => handleSelectTab(cat.id)}
+                  className={cn(
+                    "flex items-center gap-3 rounded-[8px] border px-4 py-3 text-left transition-colors",
+                    active
+                      ? "border-primary/20 bg-primary/8 text-primary"
+                      : "border-on-surface/8 bg-surface hover:border-primary/16 hover:bg-surface-container-low",
+                  )}
+                >
+                  <cat.icon className="h-4.5 w-4.5 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-black">{cat.label}</p>
+                    <p className="mt-1 text-[11px] font-medium text-ui-muted">{cat.description}</p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <ConfirmDialog
         open={Boolean(createPresetDialog)}

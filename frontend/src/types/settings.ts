@@ -1,6 +1,10 @@
+import type { LaunchStrategyConfig } from "@/types/session";
+
 export type SettingsFamily = "text" | "vision" | "icon_image" | "bg_removal";
 export type SecretState = "empty" | "stored";
 export type SecretAction = "keep" | "replace" | "clear";
+
+export type SettingsGlobalConfig = Record<string, any> & LaunchStrategyConfig;
 
 export interface PresetSummary {
   id: string;
@@ -64,7 +68,7 @@ export interface BgRemovalDraft {
 }
 
 export interface SettingsSnapshot {
-  global_config: Record<string, any>;
+  global_config: SettingsGlobalConfig;
   families: {
     text: {
       family: "text";
@@ -105,6 +109,12 @@ export interface SettingsSnapshot {
     vision_configured: boolean;
     icon_image_configured: boolean;
     bg_removal_configured: boolean;
+  };
+  runtime: {
+    log_paths: {
+      runtime_log: string;
+      debug_log: string;
+    };
   };
 }
 
@@ -150,7 +160,7 @@ export interface BgRemovalSettingsPatch {
 }
 
 export interface SettingsUpdatePayload {
-  global_config?: Record<string, any>;
+  global_config?: SettingsGlobalConfig;
   families?: Partial<{
     text: {
       preset?: TextSettingsPresetPatch;
@@ -181,4 +191,9 @@ export interface SettingsTestResult {
   family: SettingsFamily;
   code: string;
   message: string;
+  details?: {
+    verification_type: "vision_text";
+    expected: string;
+    actual?: string;
+  };
 }

@@ -1,50 +1,34 @@
 import type { ApiClient } from "@/lib/api";
-import type { CreateSessionResponse, SessionStage, SessionStrategySelection } from "@/types/session";
-
-async function ensureSessionScan(
-  api: Pick<ApiClient, "scanSession">,
-  sessionId: string | null,
-) {
-  if (!sessionId) {
-    return;
-  }
-
-  try {
-    await api.scanSession(sessionId);
-  } catch (error) {
-    if (error instanceof Error && error.message.includes("SESSION_STAGE_CONFLICT")) {
-      return;
-    }
-    throw error;
-  }
-}
+import { getSessionStageView } from "@/lib/session-view-model";
+import type {
+  CreateSessionRequest,
+  CreateSessionResponse,
+  SessionSourceSelection,
+  SessionStage,
+  SessionStrategySelection,
+} from "@/types/session";
 
 export async function createSessionAndStartScan(
-  api: Pick<ApiClient, "createSession" | "scanSession">,
-  targetDir: string,
-  resumeIfExists: boolean,
-  strategy: SessionStrategySelection,
+  api: Pick<ApiClient, "createSession">,
+  payload: CreateSessionRequest & { strategy: SessionStrategySelection },
 ): Promise<CreateSessionResponse> {
-  const response = await api.createSession(targetDir, resumeIfExists, strategy);
-  if (response.mode === "created") {
-    await ensureSessionScan(api, response.session_id);
-  }
+  const response = await api.createSession(payload);
   return response;
 }
 
 export async function startFreshSession(
-  api: Pick<ApiClient, "abandonSession" | "createSession" | "scanSession">,
+  api: Pick<ApiClient, "abandonSession" | "createSession">,
   previousSessionId: string,
-  targetDir: string,
-  strategy: SessionStrategySelection,
   previousStage: SessionStage,
+  payload: CreateSessionRequest & { strategy: SessionStrategySelection },
 ): Promise<CreateSessionResponse> {
-  if (previousStage !== "completed") {
+  if (!getSessionStageView(previousStage).isCompleted) {
     await api.abandonSession(previousSessionId);
   }
-  const response = await api.createSession(targetDir, false, strategy);
-  if (response.mode === "created") {
-    await ensureSessionScan(api, response.session_id);
-  }
+  const response = await api.createSession({ ...payload, resume_if_exists: false });
   return response;
+}
+
+export function firstSourcePath(sources: SessionSourceSelection[]): string {
+  return sources.find((item) => item.path.trim())?.path.trim() || "";
 }

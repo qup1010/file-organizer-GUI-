@@ -5,7 +5,7 @@ import pandas as pd
 import pypdf
 
 from file_organizer.analysis.archive_reader import read_archive_index
-from file_organizer.analysis.image_describer import describe_image
+from file_organizer.analysis.image_describer import describe_image, format_image_description_result
 
 DEFAULT_MAX_LEN = 300
 DEFAULT_LIST_DEPTH = 1
@@ -190,7 +190,7 @@ def read_local_file(filename, max_len=DEFAULT_MAX_LEN, allowed_base_dir: str | N
         elif ext == ".zip":
             content = read_archive_index(filename, max_entries=max_len)
         elif ext in IMAGE_EXTENSIONS:
-            content = describe_image(filename)
+            content = format_image_description_result(describe_image(filename))
         else:
             content = _read_text_with_fallback(filename)
 

@@ -4,6 +4,7 @@ __pycache__/
 FolderPainter
 logs/*
 need-oranganize-folder/
+.playwright-cli/
 # 环境与配置
 .venv/
 venv/

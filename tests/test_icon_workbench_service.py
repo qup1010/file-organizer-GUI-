@@ -165,6 +165,44 @@ class IconWorkbenchServiceTests(unittest.TestCase):
         self.assertEqual(removed["target_paths"], [str(self.beta_dir)])
         self.assertEqual([item["folder_name"] for item in removed["folders"]], ["Beta"])
 
+    def test_concurrent_update_session_targets_keeps_all_paths(self):
+        session = self.service.create_session([str(self.alpha_dir)])
+        original_load_session = self.store.load_session
+
+        def delayed_load_session(session_id):
+            loaded = original_load_session(session_id)
+            time.sleep(0.05)
+            return loaded
+
+        errors: list[Exception] = []
+        start_event = threading.Event()
+
+        def worker(path: Path):
+            start_event.wait()
+            try:
+                self.service.update_session_targets(session["session_id"], [str(path)], "append")
+            except Exception as exc:  # pragma: no cover
+                errors.append(exc)
+
+        threads = [
+            threading.Thread(target=worker, args=(self.beta_dir,)),
+            threading.Thread(target=worker, args=(self.gamma_dir,)),
+        ]
+
+        with patch.object(self.store, "load_session", side_effect=delayed_load_session):
+            for thread in threads:
+                thread.start()
+            start_event.set()
+            for thread in threads:
+                thread.join()
+
+        self.assertEqual(errors, [])
+        updated = self.service.get_session(session["session_id"])
+        self.assertEqual(
+            sorted(updated["target_paths"]),
+            sorted([str(self.alpha_dir), str(self.beta_dir), str(self.gamma_dir)]),
+        )
+
     def test_analyze_generate_and_select_version_updates_session(self):
         session = self.service.create_session([str(self.alpha_dir), str(self.beta_dir)])
         folder_id = session["folders"][0]["folder_id"]

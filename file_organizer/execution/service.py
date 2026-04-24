@@ -14,6 +14,7 @@ from file_organizer.execution.models import (
     ExecutionJournalItem,
     ExecutionPlan,
     ExecutionReport,
+    MappedExecutionPlan,
     PrecheckResult,
 )
 from file_organizer.organize.models import FinalPlan, PlanMove
@@ -121,6 +122,41 @@ def build_execution_plan(parsed_commands, base_dir: Path) -> ExecutionPlan:
     )
 
 
+def build_execution_plan_from_mapped(mapped_plan: MappedExecutionPlan) -> ExecutionPlan:
+    base_dir = Path(mapped_plan.base_dir).resolve()
+    mkdir_actions = [
+        ExecutionAction(
+            type=action.type,
+            target=Path(action.target_path).resolve(strict=False),
+            raw=action.raw,
+            item_id=action.item_id,
+            source_ref_id=action.source_ref_id,
+            target_slot_id=action.target_slot_id,
+            display_name=action.display_name,
+        )
+        for action in mapped_plan.mkdir_actions
+    ]
+    move_actions = [
+        ExecutionAction(
+            type=action.type,
+            source=Path(action.source_path).resolve(strict=False) if action.source_path is not None else None,
+            target=Path(action.target_path).resolve(strict=False),
+            raw=action.raw,
+            item_id=action.item_id,
+            source_ref_id=action.source_ref_id,
+            target_slot_id=action.target_slot_id,
+            display_name=action.display_name,
+        )
+        for action in mapped_plan.move_actions
+    ]
+    return ExecutionPlan(
+        base_dir=base_dir,
+        mkdir_actions=mkdir_actions,
+        move_actions=move_actions,
+        all_actions=[*mkdir_actions, *move_actions],
+    )
+
+
 def validate_execution_preconditions(plan: ExecutionPlan) -> PrecheckResult:
     blocking_errors: list[str] = []
     warnings: list[str] = []
@@ -174,8 +210,10 @@ def render_execution_preview(plan: ExecutionPlan, precheck: PrecheckResult) -> s
     if plan.move_actions:
         for index, action in enumerate(plan.move_actions, start=1):
             assert action.source is not None
+            display_label = str(action.display_name or action.item_id or "").strip()
+            label_prefix = f"[{display_label}] " if display_label else ""
             lines.append(
-                f'{index}. "{relative_display(action.source, plan.base_dir)}" -> '
+                f'{index}. {label_prefix}"{relative_display(action.source, plan.base_dir)}" -> '
                 f'"{relative_display(action.target, plan.base_dir)}"'
             )
     else:
@@ -254,6 +292,10 @@ def _append_journal_item(
     source_before: Path | None = None,
     target_after: Path | None = None,
     created_path: Path | None = None,
+    item_id: str | None = None,
+    source_ref_id: str | None = None,
+    target_slot_id: str | None = None,
+    display_name: str | None = None,
 ) -> None:
     journal.items.append(
         ExecutionJournalItem(
@@ -264,6 +306,10 @@ def _append_journal_item(
             source_before=str(source_before.resolve()) if source_before else None,
             target_after=str(target_after.resolve(strict=False)) if target_after else None,
             created_path=str(created_path.resolve()) if created_path else None,
+            item_id=str(item_id or "").strip() or None,
+            source_ref_id=str(source_ref_id or "").strip() or None,
+            target_slot_id=str(target_slot_id or "").strip() or None,
+            display_name=str(display_name or "").strip() or None,
         )
     )
     save_execution_journal(journal)
@@ -290,6 +336,10 @@ def execute_plan(plan: ExecutionPlan) -> ExecutionReport:
                 message=message,
                 raw=action.raw,
                 created_path=action.target if created_now else None,
+                item_id=action.item_id,
+                source_ref_id=action.source_ref_id,
+                target_slot_id=action.target_slot_id,
+                display_name=action.display_name,
             )
         except Exception as exc:  # pragma: no cover - defensive branch
             message = str(exc)
@@ -301,6 +351,10 @@ def execute_plan(plan: ExecutionPlan) -> ExecutionReport:
                 status="failed",
                 message=message,
                 raw=action.raw,
+                item_id=action.item_id,
+                source_ref_id=action.source_ref_id,
+                target_slot_id=action.target_slot_id,
+                display_name=action.display_name,
             )
 
     for action in plan.move_actions:
@@ -317,6 +371,10 @@ def execute_plan(plan: ExecutionPlan) -> ExecutionReport:
                 raw=action.raw,
                 source_before=action.source,
                 target_after=action.target,
+                item_id=action.item_id,
+                source_ref_id=action.source_ref_id,
+                target_slot_id=action.target_slot_id,
+                display_name=action.display_name,
             )
         except Exception as exc:
             message = str(exc)
@@ -330,6 +388,10 @@ def execute_plan(plan: ExecutionPlan) -> ExecutionReport:
                 raw=action.raw,
                 source_before=action.source,
                 target_after=action.target,
+                item_id=action.item_id,
+                source_ref_id=action.source_ref_id,
+                target_slot_id=action.target_slot_id,
+                display_name=action.display_name,
             )
 
     journal.status = "completed" if failure_count == 0 else "partial_failure"

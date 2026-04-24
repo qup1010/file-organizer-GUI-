@@ -1,5 +1,5 @@
 import React from "react";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -78,6 +78,7 @@ vi.mock("@/lib/runtime", () => ({
   getApiBaseUrl: () => "http://127.0.0.1:8765",
   getApiToken: () => "",
   isTauriDesktop: vi.fn(() => false),
+  inspectPathsWithTauri: vi.fn(),
   invokeTauriCommand: vi.fn(),
   openDirectoryWithTauri: vi.fn(),
   pickDirectoriesWithTauri: vi.fn(),
@@ -126,11 +127,19 @@ vi.mock("./icon-workbench-folder-list", () => ({
     onZoom,
     onApplyVersion,
     onRestore,
+    onTargetDrop,
+    onTargetDragOver,
+    onTargetDragLeave,
+    isTargetDropActive,
   }: {
     folders: any[];
     onZoom: (version: any) => void;
     onApplyVersion: (folderId: string, version: any) => void;
     onRestore: (folderId: string) => void;
+    onTargetDrop?: (event: React.DragEvent<HTMLDivElement>) => void;
+    onTargetDragOver?: (event: React.DragEvent<HTMLDivElement>) => void;
+    onTargetDragLeave?: (event: React.DragEvent<HTMLDivElement>) => void;
+    isTargetDropActive?: boolean;
   }) => {
     const folder = folders[0];
     const applied = folder?.versions.find((version: any) => version.version_id === folder.applied_version_id);
@@ -138,6 +147,14 @@ vi.mock("./icon-workbench-folder-list", () => ({
     return (
       <div>
         <div data-testid="folder-count">{folders.length}</div>
+        <div
+          data-testid="icon-target-dropzone"
+          onDrop={onTargetDrop}
+          onDragOver={onTargetDragOver}
+          onDragLeave={onTargetDragLeave}
+        >
+          dropzone:{String(isTargetDropActive)}
+        </div>
         {applied ? <button onClick={() => onZoom(applied)}>预览已应用版本</button> : null}
         {current ? <button onClick={() => onZoom(current)}>预览当前版本</button> : null}
         {current ? <button onClick={() => onApplyVersion(folder.folder_id, current)}>应用当前版本</button> : null}
@@ -241,6 +258,21 @@ function createEmptySession() {
   };
 }
 
+function createDirectoryDropData(path: string) {
+  return {
+    dataTransfer: {
+      items: [
+        {
+          kind: "file",
+          getAsFile: () => ({ path }),
+          webkitGetAsEntry: () => ({ isDirectory: true, isFile: false }),
+        },
+      ],
+      files: [{ path }],
+    },
+  };
+}
+
 describe("IconWorkbenchV2", () => {
   beforeEach(() => {
     latestStreamOptions = null;
@@ -258,6 +290,8 @@ describe("IconWorkbenchV2", () => {
       },
     });
     iconApiMock.getSession.mockResolvedValue(createSession());
+    iconApiMock.createSession.mockResolvedValue(createSession());
+    iconApiMock.updateTargets.mockResolvedValue(createSession());
     iconApiMock.selectVersion.mockResolvedValue(createSession());
     iconApiMock.reportClientAction.mockResolvedValue(createSession());
     iconApiMock.scanSession.mockResolvedValue(createSession());
@@ -319,6 +353,46 @@ describe("IconWorkbenchV2", () => {
     });
 
     expect(screen.queryByText("已恢复上次图标工作区，目标列表和展开状态已还原。")).not.toBeInTheDocument();
+  });
+
+  it("creates a new session when folders are dropped into an empty workspace", async () => {
+    render(<IconWorkbenchV2 />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("folder-count")).toHaveTextContent("0");
+    });
+
+    fireEvent.drop(screen.getByTestId("icon-target-dropzone"), createDirectoryDropData("D:/Icons/Beta"));
+
+    await waitFor(() => {
+      expect(iconApiMock.createSession).toHaveBeenCalledWith(["D:/Icons/Beta"]);
+    });
+    expect(screen.getByTestId("folder-count")).toHaveTextContent("1");
+    expect(screen.getByTestId("footer-bar")).toBeInTheDocument();
+  });
+
+  it("appends dropped folders to the current session", async () => {
+    localStorage.setItem("icons_workspace_state", JSON.stringify({
+      sessionId: "icon-session-1",
+      selectedTemplateId: "",
+      expandedFolderId: null,
+    }));
+
+    render(<IconWorkbenchV2 />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("folder-count")).toHaveTextContent("1");
+    });
+
+    fireEvent.drop(screen.getByTestId("icon-target-dropzone"), createDirectoryDropData("D:/Icons/Beta"));
+
+    await waitFor(() => {
+      expect(iconApiMock.updateTargets).toHaveBeenCalledWith("icon-session-1", {
+        target_paths: ["D:/Icons/Beta"],
+        mode: "append",
+      });
+    });
+    expect(screen.getByTestId("folder-count")).toHaveTextContent("1");
   });
 
   it("derives preview applied state from applied_version_id instead of current_version_id", async () => {

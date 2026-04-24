@@ -15,18 +15,21 @@ export function CodeBlock({ children, className }: { children: React.ReactNode; 
   };
 
   return (
-    <div className="group relative my-3 overflow-hidden rounded-[4px] border border-on-surface/8 bg-surface-container-lowest transition-colors">
-      <div className="flex items-center justify-between border-b border-on-surface/8 bg-surface-container-low px-3 py-2">
-        <span className="text-[12px] font-medium text-ui-muted">代码片段</span>
+    <div className="group relative my-3 overflow-hidden rounded-lg border border-on-surface/10 bg-surface-container-lowest transition-all ring-1 ring-black/[0.02]">
+      <div className="flex items-center justify-between border-b border-on-surface/8 bg-on-surface/[0.02] px-3 py-1">
+        <div className="flex items-center gap-2">
+           <div className="h-1.2 w-1.2 rounded-full bg-primary/40" />
+           <span className="text-[9px] font-black uppercase tracking-[0.15em] text-ui-muted opacity-60">Source</span>
+        </div>
         <button
           onClick={handleCopy}
-          className="flex items-center gap-1.5 rounded-[8px] px-2 py-1 text-[12px] font-medium text-on-surface-variant/55 transition-colors hover:bg-on-surface/5 hover:text-on-surface"
+          className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-black text-on-surface/40 transition-all hover:bg-on-surface/5 hover:text-primary active:scale-95"
         >
           {copied ? <Check className="h-3 w-3 text-success-dim" /> : <Copy className="h-3 w-3" />}
-          {copied ? "已复制" : "复制"}
+          <span className="uppercase tracking-wider">{copied ? "Done" : "Copy"}</span>
         </button>
       </div>
-      <pre className={cn("overflow-x-auto scrollbar-none p-3 font-mono text-[12px] leading-6", className)}>
+      <pre className={cn("overflow-x-auto scrollbar-none p-3 font-mono text-[11.5px] leading-relaxed text-on-surface/80", className)}>
         {children}
       </pre>
     </div>
@@ -38,17 +41,17 @@ export function MarkdownProse({ content }: { content: string }) {
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       components={{
-        p: ({ node, ...props }) => <div className="mb-1.5 last:mb-0 text-[14px] leading-7" {...props} />,
-        strong: ({ node, ...props }) => <strong className="font-bold text-on-surface" {...props} />,
-        em: ({ node, ...props }) => <em className="italic text-on-surface/80" {...props} />,
-        ul: ({ node, ...props }) => <ul className="mb-2 ml-4 list-disc space-y-1.5 text-[14px]" {...props} />,
-        ol: ({ node, ...props }) => <ol className="mb-2 ml-4 list-decimal space-y-1.5 text-[14px]" {...props} />,
+        p: ({ node, ...props }) => <div className="mb-1.5 last:mb-0 text-[13px] leading-6 text-on-surface/85" {...props} />,
+        strong: ({ node, ...props }) => <strong className="font-black text-on-surface tracking-tight" {...props} />,
+        em: ({ node, ...props }) => <em className="italic text-on-surface/60 font-medium" {...props} />,
+        ul: ({ node, ...props }) => <ul className="mb-2 ml-4 list-disc space-y-0.5 text-[13px] text-on-surface/80" {...props} />,
+        ol: ({ node, ...props }) => <ol className="mb-2 ml-4 list-decimal space-y-0.5 text-[13px] text-on-surface/80" {...props} />,
         li: ({ node, ...props }) => (
-          <li className={cn("pl-1 leading-7", String(node?.position?.start.line).length > 2 && "ml-4")} {...props} />
+          <li className={cn("pl-0.5 leading-6", String(node?.position?.start.line).length > 2 && "ml-4")} {...props} />
         ),
         a: ({ node, ...props }) => (
           <a
-            className="text-primary font-bold underline underline-offset-4 hover:text-primary-dim transition-colors inline-flex items-center gap-1 group/link"
+            className="text-primary font-black underline underline-offset-4 hover:text-primary-dim transition-all inline-flex items-center gap-1 group/link"
             target="_blank"
             rel="noopener noreferrer"
             {...props}
@@ -58,25 +61,27 @@ export function MarkdownProse({ content }: { content: string }) {
           </a>
         ),
         table: ({ node, ...props }) => (
-          <div className="my-4 overflow-x-auto rounded-[4px] border border-on-surface/8 bg-surface-container-low">
-            <table className="w-full text-left border-collapse text-[13px]" {...props} />
+          <div className="my-3 overflow-hidden rounded-lg border border-on-surface/8 bg-surface ring-1 ring-black/[0.01]">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-[12px]" {...props} />
+            </div>
           </div>
         ),
-        thead: ({ node, ...props }) => <thead className="bg-surface-container text-[12px] font-semibold text-on-surface-variant/80" {...props} />,
+        thead: ({ node, ...props }) => <thead className="bg-on-surface/[0.03] text-[10.5px] font-black uppercase tracking-widest text-ui-muted/70" {...props} />,
         th: ({ node, ...props }) => <th className="px-3 py-2 border-b border-on-surface/5" {...props} />,
-        td: ({ node, ...props }) => <td className="px-3 py-2 border-b border-on-surface/[0.03] leading-relaxed" {...props} />,
-        hr: ({ node, ...props }) => <hr className="my-5 border-t border-on-surface/5" {...props} />,
-        h1: ({ node, ...props }) => <h1 className="mb-3 mt-4 text-xl font-headline font-bold tracking-tighter text-on-surface" {...props} />,
-        h2: ({ node, ...props }) => <h2 className="mb-2.5 mt-4 text-lg font-headline font-bold tracking-tight text-on-surface/90 flex items-center gap-2" {...props} />,
+        td: ({ node, ...props }) => <td className="px-3 py-2 border-b border-on-surface/[0.02] leading-relaxed font-medium text-on-surface/70" {...props} />,
+        hr: ({ node, ...props }) => <hr className="my-4 border-t border-on-surface/8" {...props} />,
+        h1: ({ node, ...props }) => <h1 className="mb-3 mt-5 text-[18px] font-black tracking-tight text-on-surface" {...props} />,
+        h2: ({ node, ...props }) => <h2 className="mb-2 mt-5 text-[15px] font-black tracking-tight text-on-surface border-b border-on-surface/8 pb-1 flex items-center gap-2" {...props} />,
         h3: ({ node, ...props }) => (
-          <h3 className="mb-2 mt-3 flex items-center gap-2 text-[14px] font-semibold text-on-surface/70" {...props} />
+          <h3 className="mb-2 mt-4 flex items-center gap-2 text-[13.5px] font-black tracking-tight text-on-surface/80" {...props} />
         ),
         blockquote: ({ node, ...props }) => (
-          <blockquote className="my-4 rounded-r-[4px] border-l-4 border-primary/20 bg-primary/[0.03] px-4 py-3 text-on-surface/75 leading-7" {...props} />
+          <blockquote className="my-3 rounded-md border-l-4 border-primary/30 bg-primary/[0.01] px-4 py-2 text-[13px] font-medium italic text-on-surface/70 leading-6" {...props} />
         ),
         code: ({ node, inline, className, children, ...props }: any) => {
           if (inline) {
-            return <code className="rounded bg-on-surface/5 px-1.5 py-0.5 font-mono text-[0.9em] font-bold text-primary" {...props}>{children}</code>;
+            return <code className="rounded bg-primary/[0.05] px-1 py-0.5 font-mono text-[0.85em] font-black text-primary border border-primary/10 mx-0.5" {...props}>{children}</code>;
           }
           return <CodeBlock className={className}>{children}</CodeBlock>;
         },

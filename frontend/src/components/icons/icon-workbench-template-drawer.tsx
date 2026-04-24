@@ -79,7 +79,7 @@ export function IconWorkbenchTemplateDrawer({
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: "spring", damping: 26, stiffness: 220 }}
-            className="fixed right-0 top-0 z-[75] flex h-full w-full max-w-[1040px] flex-col border-l border-on-surface/8 bg-surface-container-lowest shadow-[-20px_0_60px_rgba(0,0,0,0.1)]"
+            className="fixed right-0 top-0 z-[75] flex h-full w-full max-w-[1120px] flex-col border-l-2 border-on-surface/12 bg-surface-container-lowest"
           >
             <div className="flex items-center justify-between border-b border-on-surface/6 px-5 py-4 sm:px-6">
               <div className="flex items-center gap-3">
@@ -99,8 +99,8 @@ export function IconWorkbenchTemplateDrawer({
               </button>
             </div>
 
-            <div className="grid min-h-0 flex-1 lg:grid-cols-[280px_minmax(0,1fr)]">
-              <aside className="flex min-h-0 flex-col border-b border-on-surface/6 bg-surface-container-low/46 lg:border-b-0 lg:border-r">
+            <div className="grid min-h-0 flex-1 md:grid-cols-[248px_minmax(0,1fr)] xl:grid-cols-[280px_minmax(0,1fr)]">
+              <aside className="flex min-h-0 flex-col border-b border-on-surface/6 bg-surface-container-low/46 md:border-b-0 md:border-r">
                 <div className="flex items-center justify-between border-b border-on-surface/6 px-4 py-4">
                   <div>
                     <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-ui-muted">模板索引</p>
@@ -115,7 +115,7 @@ export function IconWorkbenchTemplateDrawer({
                   </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto px-3 py-3 scrollbar-thin">
+                <div className="max-h-[38vh] flex-1 overflow-y-auto px-3 py-3 scrollbar-thin md:max-h-none">
                   <div className="flex flex-col gap-2">
                     {templates.map((template: IconTemplate) => {
                       const isSelected = template.template_id === selectedTemplate?.template_id;
@@ -185,7 +185,7 @@ export function IconWorkbenchTemplateDrawer({
                 </div>
 
                 <div className="flex-1 overflow-y-auto px-5 py-5 scrollbar-thin sm:px-6">
-                  <div className="mx-auto flex max-w-[620px] flex-col gap-5">
+                  <div className="mx-auto flex max-w-[680px] flex-col gap-5">
                     <div className="space-y-1.5">
                       <label className="pl-1 text-[12px] font-bold uppercase tracking-[0.14em] text-ui-muted">风格名称</label>
                       <input

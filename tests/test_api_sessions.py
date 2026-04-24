@@ -39,6 +39,18 @@ class SessionApiTests(unittest.TestCase):
             if last_error is not None:
                 raise last_error
 
+    @staticmethod
+    def _plan_item_target_directory(snapshot: dict, source_relpath: str) -> str:
+        plan = snapshot["plan_snapshot"]
+        item = next(entry for entry in plan["items"] if entry["source_relpath"] == source_relpath)
+        slot_id = str(item.get("target_slot_id") or "")
+        if slot_id == "Review" or item.get("status") == "review":
+            return "Review"
+        if not slot_id:
+            return ""
+        slot = next((entry for entry in plan.get("target_slots", []) if entry.get("slot_id") == slot_id), None)
+        return str(slot.get("relpath") or "") if slot else ""
+
     def test_health_endpoint_returns_ok(self):
         response = self.client.get("/api/health")
 
@@ -92,6 +104,8 @@ class SessionApiTests(unittest.TestCase):
                 "resume_if_exists": False,
                 "strategy": {
                     "template_id": "office_admin",
+                    "organize_mode": "incremental",
+                    "destination_index_depth": 3,
                     "language": "en",
                     "density": "normal",
                     "prefix_style": "none",
@@ -105,38 +119,85 @@ class SessionApiTests(unittest.TestCase):
         payload = response.json()
         self.assertEqual(payload["session_snapshot"]["strategy"]["template_id"], "office_admin")
         self.assertEqual(payload["session_snapshot"]["strategy"]["template_label"], "办公事务")
+        self.assertEqual(payload["session_snapshot"]["strategy"]["task_type"], "organize_into_existing")
+        self.assertEqual(payload["session_snapshot"]["strategy"]["task_type_label"], "归入已有目录")
+        self.assertEqual(payload["session_snapshot"]["strategy"]["organize_mode"], "incremental")
+        self.assertEqual(payload["session_snapshot"]["strategy"]["destination_index_depth"], 3)
         self.assertEqual(payload["session_snapshot"]["strategy"]["note"], "票据优先归财务目录")
 
-    def test_post_sessions_returns_resume_available_when_previous_session_exists(self):
-        created = self.client.post(
+    def test_post_sessions_accepts_task_type_without_organize_mode(self):
+        response = self.client.post(
             "/api/sessions",
             json={
                 "target_dir": str(self.target_dir),
                 "resume_if_exists": False,
                 "strategy": {
-                    "template_id": "project_workspace",
+                    "template_id": "office_admin",
+                    "task_type": "organize_into_existing",
+                    "destination_index_depth": 3,
                     "language": "en",
                     "density": "normal",
                     "prefix_style": "none",
                     "caution_level": "balanced",
-                    "note": "旧策略",
+                    "note": "票据优先归财务目录",
                 },
             },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["session_snapshot"]["strategy"]["task_type"], "organize_into_existing")
+        self.assertEqual(payload["session_snapshot"]["strategy"]["organize_mode"], "incremental")
+
+    def test_post_sessions_rejects_conflicting_task_type_and_organize_mode(self):
+        response = self.client.post(
+            "/api/sessions",
+            json={
+                "target_dir": str(self.target_dir),
+                "resume_if_exists": False,
+                "strategy": {
+                    "template_id": "office_admin",
+                    "task_type": "organize_into_existing",
+                    "organize_mode": "initial",
+                    "destination_index_depth": 3,
+                    "language": "en",
+                    "density": "normal",
+                    "prefix_style": "none",
+                    "caution_level": "balanced",
+                    "note": "票据优先归财务目录",
+                },
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error_code"], "TASK_TYPE_CONFLICT")
+
+    def test_post_sessions_returns_resume_available_when_previous_session_exists(self):
+        request_payload = {
+            "sources": [{"source_type": "directory", "path": str(self.target_dir), "directory_mode": "contents"}],
+            "resume_if_exists": False,
+            "organize_method": "categorize_into_new_structure",
+            "output_dir": str(self.target_dir),
+            "strategy": {
+                "template_id": "project_workspace",
+                "organize_method": "categorize_into_new_structure",
+                "language": "en",
+                "density": "normal",
+                "prefix_style": "none",
+                "caution_level": "balanced",
+                "note": "旧策略",
+            },
+        }
+        created = self.client.post(
+            "/api/sessions",
+            json=request_payload,
         ).json()
 
         response = self.client.post(
             "/api/sessions",
             json={
-                "target_dir": str(self.target_dir),
+                **request_payload,
                 "resume_if_exists": True,
-                "strategy": {
-                    "template_id": "study_materials",
-                    "language": "zh",
-                    "density": "normal",
-                    "prefix_style": "none",
-                    "caution_level": "conservative",
-                    "note": "新策略不应覆盖旧会话",
-                },
             },
         )
 
@@ -146,6 +207,45 @@ class SessionApiTests(unittest.TestCase):
         self.assertEqual(payload["restorable_session"]["session_id"], created["session_id"])
         self.assertEqual(payload["restorable_session"]["strategy"]["template_id"], "project_workspace")
         self.assertEqual(payload["restorable_session"]["strategy"]["note"], "旧策略")
+
+    def test_post_sessions_creates_new_session_when_previous_scope_differs(self):
+        base_payload = {
+            "sources": [{"source_type": "directory", "path": str(self.target_dir), "directory_mode": "contents"}],
+            "resume_if_exists": False,
+            "organize_method": "categorize_into_new_structure",
+            "output_dir": str(self.target_dir),
+            "strategy": {
+                "template_id": "project_workspace",
+                "organize_method": "categorize_into_new_structure",
+                "language": "en",
+                "density": "normal",
+                "prefix_style": "none",
+                "caution_level": "balanced",
+                "note": "旧策略",
+            },
+        }
+        created = self.client.post("/api/sessions", json=base_payload).json()
+
+        response = self.client.post(
+            "/api/sessions",
+            json={
+                **base_payload,
+                "resume_if_exists": True,
+                "strategy": {
+                    **base_payload["strategy"],
+                    "template_id": "study_materials",
+                    "language": "zh",
+                    "caution_level": "conservative",
+                    "note": "新策略",
+                },
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["mode"], "created")
+        self.assertNotEqual(payload["session_id"], created["session_id"])
+        self.assertEqual(self.store.load(created["session_id"]).stage, "abandoned")
 
     def test_post_sessions_allows_new_creation_when_previous_session_completed(self):
         created = self.client.post(
@@ -281,8 +381,8 @@ class SessionApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.json()["error_code"], "SESSION_STAGE_CONFLICT")
-        self.assertEqual(response.json()["session_snapshot"]["stage"], "interrupted")
-        self.assertEqual(response.json()["session_snapshot"]["integrity_flags"]["interrupted_during"], "scanning")
+        self.assertEqual(response.json()["session_snapshot"]["stage"], "scanning")
+        self.assertNotIn("interrupted_during", response.json()["session_snapshot"]["integrity_flags"])
 
     def test_update_item_uses_target_dir_and_returns_updated_snapshot(self):
         created = self.service.create_session(str(self.target_dir), resume_if_exists=False)
@@ -305,8 +405,55 @@ class SessionApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         snapshot = response.json()["session_snapshot"]
         updated_item = next(item for item in snapshot["plan_snapshot"]["items"] if item["item_id"] == "md")
-        self.assertEqual(updated_item["target_relpath"], "Study/md")
+        self.assertNotIn("target_relpath", updated_item)
+        self.assertEqual(self._plan_item_target_directory(snapshot, "md"), "Study")
         self.assertEqual(snapshot["plan_snapshot"]["unresolved_items"], [])
+
+    def test_update_item_accepts_target_slot_and_returns_structured_snapshot(self):
+        created = self.service.create_session(
+            str(self.target_dir),
+            resume_if_exists=False,
+            strategy={"organize_mode": "incremental", "destination_index_depth": 2},
+        )
+        session = created.session
+        assert session is not None
+        session.stage = "planning"
+        session.scan_lines = "md | file | 学习资料 | 笔记"
+        session.incremental_selection = {
+            "required": True,
+            "status": "ready",
+            "destination_index_depth": 2,
+            "root_directory_options": ["Docs", "Inbox"],
+            "target_directories": ["Docs"],
+            "target_directory_tree": [
+                {
+                    "relpath": "Docs",
+                    "name": "Docs",
+                    "children": [{"relpath": "Docs/Notes", "name": "Notes", "children": []}],
+                }
+            ],
+            "pending_items_count": 1,
+            "source_scan_completed": True,
+        }
+        session.pending_plan = {
+            "directories": ["Review"],
+            "moves": [{"source": "md", "target": "Review/md"}],
+            "unresolved_items": ["md"],
+            "summary": "needs review",
+        }
+        self.store.save(session)
+
+        response = self.client.post(
+            f"/api/sessions/{session.session_id}/update-item",
+            json={"item_id": "md", "target_slot": "D002", "move_to_review": False},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        snapshot = response.json()["session_snapshot"]
+        updated_item = next(item for item in snapshot["plan_snapshot"]["items"] if item["source_relpath"] == "md")
+        self.assertNotIn("target_relpath", updated_item)
+        self.assertEqual(updated_item["target_slot_id"], "D002")
+        self.assertEqual(self._plan_item_target_directory(snapshot, "md"), "Docs/Notes")
 
     def test_precheck_execute_and_rollback_endpoints_use_session_snapshot(self):
         (self.target_dir / "a.txt").write_text("hello", encoding="utf-8")
@@ -541,43 +688,48 @@ class SessionApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["assistant_message"]["content"], "已调整")
 
-    def test_unresolved_resolutions_endpoint_returns_updated_snapshot(self):
+    def test_confirm_targets_endpoint_returns_updated_snapshot(self):
         created = self.client.post(
             "/api/sessions",
             json={"target_dir": str(self.target_dir), "resume_if_exists": False},
         ).json()
 
-        with mock.patch.object(self.service, "resolve_unresolved_choices") as resolve_unresolved_choices:
-            resolve_unresolved_choices.return_value = mock.Mock(
-                assistant_message={"role": "assistant", "content": ""},
-                session_snapshot={"stage": "planning", "messages": []},
+        with mock.patch.object(self.service, "confirm_target_directories") as confirm_target_directories:
+            confirm_target_directories.return_value = mock.Mock(
+                assistant_message={"role": "assistant", "content": "已生成方案"},
+                session_snapshot={"stage": "planning"},
             )
 
             response = self.client.post(
-                f"/api/sessions/{created['session_id']}/unresolved-resolutions",
-                json={
-                    "request_id": "req_1",
-                    "resolutions": [{"item_id": "md", "selected_folder": "Review", "note": ""}],
-                },
+                f"/api/sessions/{created['session_id']}/confirm-targets",
+                json={"selected_target_dirs": ["Docs"]},
             )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["session_snapshot"]["stage"], "planning")
+        self.assertEqual(response.json()["assistant_message"]["content"], "已生成方案")
 
-    def test_unresolved_resolutions_endpoint_returns_409_for_conflict(self):
+    def test_confirm_targets_endpoint_returns_409_for_empty_selection(self):
         created = self.client.post(
             "/api/sessions",
             json={"target_dir": str(self.target_dir), "resume_if_exists": False},
         ).json()
 
-        with mock.patch.object(self.service, "resolve_unresolved_choices", side_effect=RuntimeError("UNRESOLVED_ITEM_CONFLICT")):
+        with mock.patch.object(self.service, "confirm_target_directories", side_effect=RuntimeError("INCREMENTAL_TARGETS_EMPTY")):
             response = self.client.post(
-                f"/api/sessions/{created['session_id']}/unresolved-resolutions",
-                json={"request_id": "req_1", "resolutions": []},
+                f"/api/sessions/{created['session_id']}/confirm-targets",
+                json={"selected_target_dirs": []},
             )
 
         self.assertEqual(response.status_code, 409)
-        self.assertEqual(response.json()["error_code"], "UNRESOLVED_ITEM_CONFLICT")
+        self.assertEqual(response.json()["error_code"], "INCREMENTAL_TARGETS_EMPTY")
+
+    def test_unresolved_resolutions_endpoint_is_removed(self):
+        response = self.client.post(
+            "/api/sessions/session-legacy/unresolved-resolutions",
+            json={"request_id": "req_1", "resolutions": []},
+        )
+
+        self.assertEqual(response.status_code, 404)
 
 
 if __name__ == "__main__":

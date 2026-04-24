@@ -72,34 +72,36 @@ class IconWorkbenchService:
         return self._serialize_session(session)
 
     def update_session_targets(self, session_id: str, target_paths: list[str], mode: str = "append") -> dict:
-        session = self.store.load_session(session_id)
-        normalized_mode = str(mode or "append").strip().lower()
-        normalized_paths = self._normalize_target_paths(target_paths, allow_empty=(normalized_mode == "replace"))
-        if normalized_mode not in {"append", "replace"}:
-            raise ValueError("不支持的目标更新模式。")
+        with self._get_session_lock(session_id):
+            session = self.store.load_session(session_id)
+            normalized_mode = str(mode or "append").strip().lower()
+            normalized_paths = self._normalize_target_paths(target_paths, allow_empty=(normalized_mode == "replace"))
+            if normalized_mode not in {"append", "replace"}:
+                raise ValueError("不支持的目标更新模式。")
 
-        current_paths = list(session.target_paths) if normalized_mode == "append" else []
-        next_paths = self._merge_target_paths(current_paths, normalized_paths)
-        removed_ids = self._collect_removed_folder_ids(session, next_paths)
+            current_paths = list(session.target_paths) if normalized_mode == "append" else []
+            next_paths = self._merge_target_paths(current_paths, normalized_paths)
+            removed_ids = self._collect_removed_folder_ids(session, next_paths)
 
-        session.target_paths = next_paths
-        session.folders = self._build_folders_for_targets(next_paths, session.folders)
-        session.updated_at = utc_now_iso()
-        self.store.save_session(session)
+            session.target_paths = next_paths
+            session.folders = self._build_folders_for_targets(next_paths, session.folders)
+            session.updated_at = utc_now_iso()
+            self.store.save_session(session)
         for folder_id in removed_ids:
             self.store.remove_folder_assets(session.session_id, folder_id)
         self._record_event("icon.targets.updated", session, mode=normalized_mode, removed_ids=removed_ids)
         return self._serialize_session(session)
 
     def remove_session_target(self, session_id: str, folder_id: str) -> dict:
-        session = self.store.load_session(session_id)
-        folder = self._get_folder(session, folder_id)
-        removed_path = folder.folder_path.lower()
+        with self._get_session_lock(session_id):
+            session = self.store.load_session(session_id)
+            folder = self._get_folder(session, folder_id)
+            removed_path = folder.folder_path.lower()
 
-        session.target_paths = [path for path in session.target_paths if path.lower() != removed_path]
-        session.folders = [item for item in session.folders if item.folder_id != folder_id]
-        session.updated_at = utc_now_iso()
-        self.store.save_session(session)
+            session.target_paths = [path for path in session.target_paths if path.lower() != removed_path]
+            session.folders = [item for item in session.folders if item.folder_id != folder_id]
+            session.updated_at = utc_now_iso()
+            self.store.save_session(session)
         self.store.remove_folder_assets(session.session_id, folder_id)
         self._record_event("icon.targets.updated", session, mode="remove", removed_ids=[folder_id])
         return self._serialize_session(session)
