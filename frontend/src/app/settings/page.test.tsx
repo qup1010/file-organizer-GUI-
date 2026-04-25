@@ -12,6 +12,10 @@ const getSettings = vi.fn<() => Promise<SettingsSnapshot>>();
 const createSettingsPreset = vi.fn();
 const updateSettings = vi.fn();
 const testSettings = vi.fn();
+const getTargetProfiles = vi.fn();
+const createTargetProfile = vi.fn();
+const updateTargetProfile = vi.fn();
+const deleteTargetProfile = vi.fn();
 
 vi.mock("framer-motion", () => ({
   AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -40,6 +44,10 @@ vi.mock("@/lib/api", () => ({
       activateSettingsPreset: vi.fn(),
       deleteSettingsPreset: vi.fn(),
       testSettings,
+      getTargetProfiles,
+      createTargetProfile,
+      updateTargetProfile,
+      deleteTargetProfile,
     }) satisfies Partial<ApiClient>,
 }));
 
@@ -161,7 +169,27 @@ describe("SettingsPage preset flow", () => {
     createSettingsPreset.mockReset();
     updateSettings.mockReset();
     testSettings.mockReset();
+    getTargetProfiles.mockReset();
+    createTargetProfile.mockReset();
+    updateTargetProfile.mockReset();
+    deleteTargetProfile.mockReset();
     getSettings.mockResolvedValue(createSnapshot());
+    getTargetProfiles.mockResolvedValue([]);
+    createTargetProfile.mockResolvedValue({
+      profile_id: "profile-new",
+      name: "常用目标目录",
+      directories: [],
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+    });
+    updateTargetProfile.mockResolvedValue({
+      profile_id: "profile-1",
+      name: "工作资料库",
+      directories: [{ path: "D:/archive/docs", label: "文档" }],
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+    });
+    deleteTargetProfile.mockResolvedValue({ status: "deleted", profile_id: "profile-1" });
     updateSettings.mockImplementation(async (payload) => ({
       ...createSnapshot(),
       global_config: {
@@ -289,6 +317,45 @@ describe("SettingsPage preset flow", () => {
     expect(screen.getByPlaceholderText("例如：D:/archive/sorted")).toBeInTheDocument();
     expect(screen.getByText("待确认区默认跟随新目录位置")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("新目录生成位置/Review")).toBeDisabled();
+  });
+
+  it("manages explicit target directory profiles in the launch settings tab", async () => {
+    const user = userEvent.setup();
+    getTargetProfiles.mockResolvedValue([
+      {
+        profile_id: "profile-1",
+        name: "工作资料库",
+        directories: [{ path: "D:/archive/docs", label: "文档" }],
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+    ]);
+
+    render(<SettingsPage />);
+
+    const launchTabs = await screen.findAllByRole("button", { name: /启动默认值/ });
+    await user.click(launchTabs[0]);
+
+    expect(await screen.findByText("目标目录配置")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("工作资料库")).toBeInTheDocument();
+    expect(screen.getByText("D:/archive/docs")).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("目标目录完整路径，例如 D:/archive/docs"), "D:/archive/media");
+    await user.type(screen.getByPlaceholderText("标签（可选）"), "媒体");
+    await user.click(screen.getByRole("button", { name: "添加目录" }));
+
+    await waitFor(() => {
+      expect(updateTargetProfile).toHaveBeenCalledWith(
+        "profile-1",
+        expect.objectContaining({
+          name: "工作资料库",
+          directories: [
+            { path: "D:/archive/docs", label: "文档" },
+            { path: "D:/archive/media", label: "媒体" },
+          ],
+        }),
+      );
+    });
   });
 
   it("shows vision verification result details after running the test", async () => {

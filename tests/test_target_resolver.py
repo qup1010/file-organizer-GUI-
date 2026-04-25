@@ -83,7 +83,7 @@ class TargetResolverTests(unittest.TestCase):
         resolver = self.service.target_resolver
 
         self.assertTrue(resolver.validate_incremental_target_dir("Review", selection))
-        self.assertTrue(resolver.validate_incremental_target_dir("Docs/Notes", selection))
+        self.assertFalse(resolver.validate_incremental_target_dir("Docs/Notes", selection))
         self.assertFalse(resolver.validate_incremental_target_dir("Archive/Old", selection))
         self.assertFalse(resolver.validate_incremental_target_dir("NewFolder", selection))
 

@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { getSessionStageView } from "@/lib/session-view-model";
 import { cn } from "@/lib/utils";
 import { canRunPrecheck as deriveCanRunPrecheck } from "@/lib/workspace-precheck";
-import type { IncrementalSelectionSnapshot, OrganizeMode, PlacementConfig, PlanItem, PlanSnapshot, PlanTargetSlot, SessionStage, SourceTreeEntry, TargetDirectoryNode } from "@/types/session";
+import type { IncrementalSelectionSnapshot, OrganizeMode, PlacementConfig, PlanItem, PlanSnapshot, PlanTargetSlot, SessionStage, SourceTreeEntry } from "@/types/session";
 
 export type PreviewFilter = "all" | "changed" | "unresolved" | "review" | "invalidated";
 
@@ -95,10 +95,6 @@ function itemStatusMeta(item: PlanItem, acceptedReviewItemIds: string[]) {
   return statusMeta(item.status);
 }
 
-function itemMetaLabel(item: Pick<PlanItem, "item_id" | "target_slot_id">): string {
-  return [item.item_id, item.target_slot_id || ""].filter(Boolean).join(" · ");
-}
-
 function resolveItemDirectory(item: PlanItem, targetSlotById: TargetSlotLookup, placement: PlacementConfig): string {
     if (item.status === "review" || item.target_slot_id === "Review") return "Review";
   if (item.target_slot_id) {
@@ -148,23 +144,6 @@ function sortTree(root: TreeNode) {
   };
   sortNode(root);
   return root.children;
-}
-
-function flattenTargetDirectoryTree(nodes: TargetDirectoryNode[]): string[] {
-  const result: string[] = [];
-  const walk = (items: TargetDirectoryNode[]) => {
-    items.forEach((item) => {
-      const relpath = normalizePath(item.relpath);
-      if (relpath) {
-        result.push(relpath);
-      }
-      if (Array.isArray(item.children) && item.children.length > 0) {
-        walk(item.children);
-      }
-    });
-  };
-  walk(nodes);
-  return result;
 }
 
 function buildPlanTree(items: PlanItem[], mkdirPreview: string[], resolveItemPath: (item: PlanItem) => string): TreeNode[] {
@@ -643,7 +622,6 @@ function IncrementalMappingPanel({
         {items.map((item) => {
           const status = statusMeta(item.status);
           const targetLabel = resolveTargetLabel(item);
-          const slotLabel = item.target_slot_id && item.target_slot_id !== "Review" ? item.target_slot_id : "";
           const active = selectedItemId === item.item_id;
 
           return (
@@ -673,12 +651,6 @@ function IncrementalMappingPanel({
               </div>
               
               <div className="flex items-center gap-2 shrink-0">
-                {slotLabel ? (
-                  <span className="rounded-[4px] border border-primary/10 bg-primary/[0.045] px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-primary">
-                    {slotLabel}
-                  </span>
-                ) : null}
-                
                 {item.status !== "assigned" && item.status !== "skipped" && (
                   <span className={cn("rounded-[4px] border px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest", status.tone)}>
                     {status.label}
@@ -787,9 +759,8 @@ export function PreviewPanel(props: PreviewPanelProps) {
   const resolveTargetMeta = (item: PlanItem) => {
     const directoryLabel = resolveTargetLabel(item);
     const fullTargetPath = resolveItemTargetPath(item, targetSlotById, placement);
-    const slotLabel = item.target_slot_id && item.target_slot_id !== "Review" ? item.target_slot_id : "";
     const mappingLabel = mappingStatusLabel(item.mapping_status || item.status, item, acceptedReviewItemIds);
-    return { directoryLabel, fullTargetPath, slotLabel, mappingLabel };
+    return { directoryLabel, fullTargetPath, mappingLabel };
   };
   const reviewTargetUnresolvedItems = useMemo(
     () => unresolvedItems.filter((item) => resolveTargetLabel(item) === "Review"),
@@ -829,10 +800,6 @@ export function PreviewPanel(props: PreviewPanelProps) {
     [filteredItems, mkdirPreview, placement, targetSlotById],
   );
   const currentTree = viewMode === "before" ? beforeTree : afterTree;
-  const flattenedTargetDirectories = useMemo(
-    () => flattenTargetDirectoryTree(incrementalSelection?.target_directory_tree || []),
-    [incrementalSelection?.target_directory_tree],
-  );
   const groupedByTargetSlot = useMemo(() => groupItemsByTargetSlot(allItems, targetSlotById, placement), [allItems, placement, targetSlotById]);
   const availableTargetOptions = useMemo<AvailableTargetOption[]>(() => {
     const options = new Map<string, AvailableTargetOption>();
@@ -854,12 +821,7 @@ export function PreviewPanel(props: PreviewPanelProps) {
           options.set(normalized, { key: `dir:${normalized}`, label: normalized, directory: normalized });
         }
       });
-      flattenedTargetDirectories.forEach((directory) => {
-        const normalized = normalizePath(directory);
-        if (normalized && !options.has(normalized)) {
-          options.set(normalized, { key: `dir:${normalized}`, label: normalized, directory: normalized });
-        }
-      });
+      return Array.from(options.values()).sort((a, b) => a.directory.localeCompare(b.directory, "zh-CN"));
     }
     plan.groups.forEach((group) => {
       const normalized = normalizePath(group.directory);
@@ -874,10 +836,13 @@ export function PreviewPanel(props: PreviewPanelProps) {
       }
     });
     return Array.from(options.values()).sort((a, b) => a.directory.localeCompare(b.directory, "zh-CN"));
-  }, [flattenedTargetDirectories, groupedByTargetSlot, incrementalSelection?.target_directories, organizeMode, plan.groups, plan.target_slots, targetSlotById]);
+  }, [groupedByTargetSlot, incrementalSelection?.target_directories, organizeMode, plan.groups, plan.target_slots, targetSlotById]);
   const availableDirectories = useMemo(() => availableTargetOptions.map((item) => item.directory), [availableTargetOptions]);
   const manualTargetTrimmed = manualTarget.trim();
-  const manualTargetInvalid = isAbsolutePath(manualTargetTrimmed) || /^review([\\/]|$)/i.test(manualTargetTrimmed);
+  const manualTargetInvalid =
+    isAbsolutePath(manualTargetTrimmed) ||
+    /^review([\\/]|$)/i.test(manualTargetTrimmed) ||
+    (organizeMode === "incremental" && Boolean(manualTargetTrimmed) && !availableDirectories.includes(normalizePath(manualTargetTrimmed)));
   const canRunPrecheck = deriveCanRunPrecheck(stage, plan.readiness, isPlanSyncing);
   const incrementalSummary = useMemo(() => {
     if (organizeMode !== "incremental" || !incrementalSelection) {
@@ -1407,7 +1372,11 @@ export function PreviewPanel(props: PreviewPanelProps) {
                               应用此路径
                             </button>
                           </div>
-                          <p className="mt-1.5 text-[10.5px] text-ui-muted px-0.5">填写的是相对“新目录生成位置”的路径（不支持绝对路径或 Review/...）。Review 是待确认区。</p>
+                          <p className="mt-1.5 text-[10.5px] text-ui-muted px-0.5">
+                            {organizeMode === "incremental"
+                              ? "归入已有目录时，只能填写已显式配置的目标目录；Review 请使用待确认区。"
+                              : "填写的是相对“新目录生成位置”的路径（不支持绝对路径或 Review/...）。Review 是待确认区。"}
+                          </p>
                         </div>
                       ) : null}
                     </div>
@@ -1426,11 +1395,6 @@ export function PreviewPanel(props: PreviewPanelProps) {
                         <FolderOpen className="w-3.5 h-3.5" /> 原始条目
                       </div>
                       <div className="break-all text-[13px] font-bold text-on-surface leading-snug">{editingItem.display_name}</div>
-                      {itemMetaLabel(editingItem) ? (
-                        <div className="mt-2 inline-block rounded border border-on-surface/8 bg-on-surface/[0.03] px-2 py-0.5 text-[10px] font-bold text-ui-muted">
-                          {itemMetaLabel(editingItem)}
-                        </div>
-                      ) : null}
                     </div>
                     <div>
                       <div className="text-[10px] font-bold tracking-[0.08em] uppercase text-ui-muted opacity-60 mb-1">来源路径</div>
@@ -1446,11 +1410,6 @@ export function PreviewPanel(props: PreviewPanelProps) {
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
                         <div className="break-all text-[14px] font-bold text-primary">{editingTargetMeta?.directoryLabel}</div>
-                        {editingTargetMeta?.slotLabel ? (
-                          <span className="shrink-0 rounded-full border border-primary/15 bg-primary/10 px-2.5 py-0.5 text-[10px] font-bold text-primary">
-                            {editingTargetMeta.slotLabel}
-                          </span>
-                        ) : null}
                         <span className="shrink-0 rounded-full border border-on-surface/10 bg-surface px-2 py-0.5 text-[10px] font-bold text-ui-muted">
                           {editingTargetMeta?.mappingLabel}
                         </span>

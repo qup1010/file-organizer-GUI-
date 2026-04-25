@@ -487,10 +487,9 @@ export default function HistoryPage() {
                   return (
                     <motion.div
                       key={entry.execution_id}
-                      initial={{ opacity: 0, x: -8 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: idx * 0.02, duration: 0.3 }}
-                      whileTap={{ scale: 0.985 }}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: Math.min(idx * 0.01, 0.2), duration: 0.2 }}
                       role="button"
                       tabIndex={0}
                       onClick={() => setSelectedSessionId(entry.execution_id)}
@@ -501,17 +500,15 @@ export default function HistoryPage() {
                         }
                       }}
                       className={cn(
-                        "group relative flex cursor-pointer flex-col gap-1 rounded-md px-3 py-2 transition-all text-left",
+                        "group relative flex cursor-pointer flex-col gap-1 rounded-md px-3 py-2 transition-colors text-left outline-none",
                         active
-                          ? "bg-primary/[0.08] border border-primary/20"
-                          : "bg-transparent hover:bg-on-surface/[0.035]",
+                          ? "bg-primary/[0.08] border-primary/20"
+                          : "bg-transparent border-transparent hover:bg-on-surface/[0.035]",
                       )}
+                      style={{ borderWidth: '1px', borderStyle: 'solid' }}
                     >
                       {active && (
-                        <motion.div
-                          layoutId="history-active-pill"
-                          className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-primary"
-                        />
+                        <div className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full bg-primary" />
                       )}
 
                       <div className="flex items-center justify-between gap-2">
@@ -578,9 +575,10 @@ export default function HistoryPage() {
             {selectedSessionId && selectedEntry && (isSelectedSession ? sessionDetail : journal) ? (
               <motion.div
                 key={selectedSessionId}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
                 className="flex min-h-0 flex-1 flex-col"
               >
                 <div className="sticky top-0 z-10 shrink-0 border-b border-on-surface/8 bg-surface/95 px-6 py-3.5 backdrop-blur-md lg:px-8">

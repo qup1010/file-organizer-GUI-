@@ -25,6 +25,26 @@ class OrganizerCompatibilityTests(unittest.TestCase):
         self.assertIn(scan_lines, messages[0]["content"])
         self.assertNotIn("<<<SCAN_LINES>>>", messages[0]["content"])
 
+    def test_build_initial_messages_constrains_display_markdown_and_internal_ids(self):
+        messages = organizer_service.build_initial_messages("F001 | file | 合同.pdf | 财务 | 付款协议")
+        prompt = messages[0]["content"]
+
+        self.assertIn("### 本轮调整", prompt)
+        self.assertIn("### 需要你确认", prompt)
+        self.assertIn("### 下一步", prompt)
+        self.assertIn("禁止暴露内部编号", prompt)
+        self.assertIn("F001", prompt)
+
+    def test_sanitize_assistant_display_content_hides_internal_ids(self):
+        content = organizer_service._sanitize_assistant_display_content(
+            "### 本轮调整\n- F001 使用 target_slot D001，item_id 已更新。"
+        )
+
+        self.assertNotIn("F001", content)
+        self.assertNotIn("D001", content)
+        self.assertNotIn("target_slot", content)
+        self.assertNotIn("item_id", content)
+
     def test_build_command_retry_message_lists_validation_errors(self):
         validation = {
             "missing": ["合同.pdf"],

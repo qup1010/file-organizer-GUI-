@@ -86,7 +86,7 @@ class DomainArchitectureTests(unittest.TestCase):
             "source_scan_completed": True,
         }
         pending_plan = PendingPlan(
-            moves=[PlanMove(source="invoice.pdf", target="Docs/Finance/invoice.pdf")],
+            moves=[PlanMove(source="invoice.pdf", target="Docs/invoice.pdf")],
             unresolved_items=[],
             summary="已分类 1 项，调整 1 项，仍剩 0 项待定",
         )
@@ -95,13 +95,13 @@ class DomainArchitectureTests(unittest.TestCase):
 
         self.assertEqual(task.task_id, session.session_id)
         self.assertEqual([item.ref_id for item in task.sources], ["F001"])
-        self.assertEqual([item.display_name for item in task.targets], ["Docs", "Finance"])
+        self.assertEqual([item.display_name for item in task.targets], ["Docs"])
         self.assertEqual(len(task.mappings), 1)
         self.assertEqual(task.mappings[0].source_ref_id, "F001")
         self.assertTrue(task.mappings[0].target_slot_id.startswith("D"))
         self.assertEqual(
             registry.resolve_target(task.mappings[0].target_slot_id, "invoice.pdf").relative_to(self.target_dir.resolve()).as_posix(),
-            "Docs/Finance/invoice.pdf",
+            "Docs/invoice.pdf",
         )
 
 

@@ -6,7 +6,7 @@ export function StrategySummaryChips({ strategy }: { strategy: SessionStrategySu
     <div className="flex flex-wrap gap-2">
       <span className="ui-pill border-primary/12 bg-primary/8 text-primary">{strategy.task_type_label}</span>
       {!isIncremental ? <span className="ui-pill">{strategy.template_label}</span> : null}
-      {isIncremental ? <span className="ui-pill">目标目录深度 {strategy.destination_index_depth}</span> : null}
+      {isIncremental ? <span className="ui-pill">显式目标目录</span> : null}
       {!isIncremental ? <span className="ui-pill">{strategy.language_label}</span> : null}
       {!isIncremental ? <span className="ui-pill">{strategy.density_label}</span> : null}
       {!isIncremental ? <span className="ui-pill">{strategy.prefix_style_label}</span> : null}

@@ -24,13 +24,6 @@ interface CompletionViewProps {
   onGoHome: () => void;
 }
 
-function renderItemMeta(item: {
-  item_id?: string | null;
-  target_slot_id?: string | null;
-}) {
-  return [item.item_id, item.target_slot_id].filter(Boolean).join(" · ");
-}
-
 function summarizeJournalNames(items: { display_name: string }[], limit = 3): string {
   const names = items.map((item) => item.display_name).filter(Boolean).slice(0, limit);
   if (!names.length) {

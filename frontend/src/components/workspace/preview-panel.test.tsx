@@ -606,6 +606,8 @@ describe("PreviewPanel", () => {
     expect(screen.getByText("Finance")).toBeInTheDocument();
     expect(screen.getByText("合同")).toBeInTheDocument();
     expect(screen.getAllByText("contract.pdf").length).toBeGreaterThan(0);
+    expect(screen.queryByText("D001")).not.toBeInTheDocument();
+    expect(screen.queryByText("F001")).not.toBeInTheDocument();
   });
 
   it("blocks Windows drive-relative manual target paths", () => {

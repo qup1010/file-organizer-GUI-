@@ -264,7 +264,7 @@ describe("SessionLauncher", () => {
       target: { value: "D:/archive/misc" },
     });
     fireEvent.click(screen.getByRole("button", { name: "添加" }));
-    fireEvent.click(screen.getByRole("button", { name: "读取目录并确认目标" }));
+    fireEvent.click(screen.getByRole("button", { name: "读取目录并开始规划" }));
 
     await waitFor(() => {
       expect(createLaunchSessionMock).toHaveBeenCalledWith(
@@ -314,7 +314,7 @@ describe("SessionLauncher", () => {
     fireEvent.click(screen.getByRole("button", { name: "下一步：选择整理方式" }));
     fireEvent.click(screen.getByRole("button", { name: /归入现有目录/ }));
     fireEvent.click(screen.getByRole("button", { name: "下一步：填写必要信息" }));
-    fireEvent.click(screen.getByRole("button", { name: "读取目录并确认目标" }));
+    fireEvent.click(screen.getByRole("button", { name: "读取目录并开始规划" }));
 
     expect(await screen.findByText("归入现有目录时，至少需要选择一个目录配置或手动添加目标目录。")).toBeInTheDocument();
     expect(createLaunchSessionMock).not.toHaveBeenCalled();

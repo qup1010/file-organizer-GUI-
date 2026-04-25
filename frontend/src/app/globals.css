@@ -1,9 +1,9 @@
 @import "tailwindcss";
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Outfit:wght@100..900&display=swap');
 
 @theme {
-  --font-sans: "Inter", "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
-  --font-headline: "Outfit", var(--font-sans);
+  --font-sans: "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI Variable", "Segoe UI", "PingFang SC", "Noto Sans CJK SC", system-ui, sans-serif;
+  --font-headline: var(--font-sans);
+  --font-mono: "Cascadia Mono", "Cascadia Code", "Consolas", "SFMono-Regular", "Menlo", "Monaco", monospace;
 
   --color-surface: var(--surface);
   --color-surface-container: var(--surface-container);

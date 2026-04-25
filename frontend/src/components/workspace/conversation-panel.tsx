@@ -307,7 +307,7 @@ export function ConversationPanel({
                           : "rounded-xl bg-on-surface/[0.03] border border-on-surface/8 px-4 py-3 text-[13.5px] font-medium text-on-surface"
                       )}
                     >
-                      {isAssistant ? <MarkdownProse content={message.content} /> : <span>{message.content}</span>}
+                      {isAssistant ? <MarkdownProse content={message.content} density="compact" /> : <span>{message.content}</span>}
                     </div>
                   )}
                 </div>
@@ -375,7 +375,7 @@ export function ConversationPanel({
                   <span className="text-[10px] font-black tracking-widest text-primary opacity-80">正在生成整理建议</span>
                 </div>
                 <div className="relative border-l-2 border-primary/10 pl-5 py-1">
-                  <MarkdownProse content={assistantDraft} />
+                  <MarkdownProse content={assistantDraft} density="compact" />
                   <motion.span initial={{ opacity: 0 }} animate={{ opacity: [0, 1, 0] }} transition={{ repeat: Infinity, duration: 0.8 }} className="inline-block w-1.5 h-4 bg-primary/40 ml-1 translate-y-0.5" />
                 </div>
               </div>

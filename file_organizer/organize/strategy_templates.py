@@ -316,9 +316,9 @@ def build_strategy_prompt_fragment(selection: dict | None = None) -> str:
     else:
         lines = [
             "当前固定整理策略（必须优先遵守）：",
-            "- 当前任务类型：归入已有目录。优先复用已有目录结构，不要把任务理解成重新设计分类体系。",
+            "- 当前任务类型：归入已有目录。只能使用用户显式配置的目标目录或 Review，不要重新设计分类体系。",
+            "- 父目录不会自动授权子目录；需要子目录作为去向时，用户必须把该子目录单独加入目标目录配置。",
             caution["prompt_fragment"],
-            f"- 目标目录可见深度为 {normalized['destination_index_depth']}。",
         ]
     if normalized["new_directory_root"]:
         lines.append(f"- 新目录生成位置：{normalized['new_directory_root']}")

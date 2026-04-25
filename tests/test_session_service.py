@@ -1890,13 +1890,7 @@ class OrganizerSessionServiceTests(unittest.TestCase):
             "destination_index_depth": 2,
             "root_directory_options": ["Docs", "Inbox"],
             "target_directories": ["Docs"],
-            "target_directory_tree": [
-                {
-                    "relpath": "Docs",
-                    "name": "Docs",
-                    "children": [{"relpath": "Docs/Notes", "name": "Notes", "children": []}],
-                }
-            ],
+            "target_directory_tree": [{"relpath": "Docs", "name": "Docs", "children": []}],
             "pending_items_count": 1,
             "source_scan_completed": True,
         }
@@ -1919,7 +1913,7 @@ class OrganizerSessionServiceTests(unittest.TestCase):
             session.session_id,
             "md",
             None,
-            "D002",
+            "D001",
             False,
         )
 
@@ -1927,17 +1921,17 @@ class OrganizerSessionServiceTests(unittest.TestCase):
             item for item in result.session_snapshot["plan_snapshot"]["items"] if item["source_relpath"] == "md"
         )
         self.assertNotIn("target_relpath", updated_item)
-        self.assertEqual(updated_item["target_slot_id"], "D002")
-        self.assertEqual(self._plan_item_target_directory(result.session_snapshot, "md"), "Docs/Notes")
+        self.assertEqual(updated_item["target_slot_id"], "D001")
+        self.assertEqual(self._plan_item_target_directory(result.session_snapshot, "md"), "Docs")
         self.assertEqual(
             [slot["relpath"] for slot in result.session_snapshot["plan_snapshot"]["target_slots"]],
-            ["Docs", "Docs/Notes"],
+            ["Docs"],
         )
-        self.assertEqual(result.session_snapshot["plan_snapshot"]["mappings"][0]["target_slot_id"], "D002")
+        self.assertEqual(result.session_snapshot["plan_snapshot"]["mappings"][0]["target_slot_id"], "D001")
         reloaded = self.store.load(session.session_id)
         assert reloaded is not None
         self.assertIsInstance(reloaded.task_state, TaskState)
-        self.assertEqual(reloaded.task_state.mappings[0].target_slot_id, "D002")
+        self.assertEqual(reloaded.task_state.mappings[0].target_slot_id, "D001")
 
     def test_update_item_target_accepts_absolute_target_slot_outside_workspace_root(self):
         docs_dir = self.target_dir / "Docs"

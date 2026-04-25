@@ -115,7 +115,10 @@ class ScanWorkflowService:
                 "status": "ready",
                 "root_directory_options": sorted(available_root_dirs),
                 "target_directories": selected_targets,
-                "target_directory_tree": self.helpers._explore_target_directories(Path(session.target_dir), selected_targets),
+                "target_directory_tree": [
+                    {"relpath": item, "name": Path(str(item)).name or item, "children": []}
+                    for item in selected_targets
+                ],
                 "pending_items_count": len(self.helpers._scan_entries(active_scan_lines)),
                 "source_scan_completed": True,
             }

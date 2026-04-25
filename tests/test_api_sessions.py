@@ -425,13 +425,7 @@ class SessionApiTests(unittest.TestCase):
             "destination_index_depth": 2,
             "root_directory_options": ["Docs", "Inbox"],
             "target_directories": ["Docs"],
-            "target_directory_tree": [
-                {
-                    "relpath": "Docs",
-                    "name": "Docs",
-                    "children": [{"relpath": "Docs/Notes", "name": "Notes", "children": []}],
-                }
-            ],
+            "target_directory_tree": [{"relpath": "Docs", "name": "Docs", "children": []}],
             "pending_items_count": 1,
             "source_scan_completed": True,
         }
@@ -445,15 +439,15 @@ class SessionApiTests(unittest.TestCase):
 
         response = self.client.post(
             f"/api/sessions/{session.session_id}/update-item",
-            json={"item_id": "md", "target_slot": "D002", "move_to_review": False},
+            json={"item_id": "md", "target_slot": "D001", "move_to_review": False},
         )
 
         self.assertEqual(response.status_code, 200)
         snapshot = response.json()["session_snapshot"]
         updated_item = next(item for item in snapshot["plan_snapshot"]["items"] if item["source_relpath"] == "md")
         self.assertNotIn("target_relpath", updated_item)
-        self.assertEqual(updated_item["target_slot_id"], "D002")
-        self.assertEqual(self._plan_item_target_directory(snapshot, "md"), "Docs/Notes")
+        self.assertEqual(updated_item["target_slot_id"], "D001")
+        self.assertEqual(self._plan_item_target_directory(snapshot, "md"), "Docs")
 
     def test_precheck_execute_and_rollback_endpoints_use_session_snapshot(self):
         (self.target_dir / "a.txt").write_text("hello", encoding="utf-8")

@@ -248,10 +248,11 @@ export function MinimalScanningView({
             <div className="flex-1 overflow-y-auto p-4 scrollbar-thin">
                <div className="flex flex-col gap-1.5">
                   <AnimatePresence initial={false}>
-                    {viewModel.recentCompletedItems.length > 0 ? (
-                      viewModel.recentCompletedItems.map((item) => {
+                    {viewModel.scanLogItems.length > 0 ? (
+                      viewModel.scanLogItems.map((item) => {
                         const style = getFileIcon(item.display_name, item.entry_type);
                         const Icon = style.icon;
+                        const completed = viewModel.recentCompletedItems.some((completedItem) => completedItem.item_id === item.item_id);
                         return (
                           <motion.div
                             key={item.item_id}
@@ -264,17 +265,50 @@ export function MinimalScanningView({
                             </div>
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-[12px] font-bold text-on-surface/80">{item.display_name}</p>
-                              <p className="truncate text-[10px] font-medium text-ui-muted/40 tracking-tight">已读取</p>
+                              <p className="truncate text-[10px] font-medium text-ui-muted/40 tracking-tight">{completed ? "已读取" : "等待分析结果"}</p>
                             </div>
                           </motion.div>
                         );
                       })
+                    ) : viewModel.currentItem ? (
+                      <motion.div
+                        key="current-scan-item"
+                        initial={{ opacity: 0, x: 10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        className="flex items-center gap-3 rounded-lg border border-primary/10 bg-primary/[0.03] p-2"
+                      >
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-primary/10 bg-primary/10 text-primary">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[12px] font-bold text-on-surface/80">{viewModel.currentItem}</p>
+                          <p className="truncate text-[10px] font-medium text-primary/60 tracking-tight">{viewModel.progressText || "正在读取"}</p>
+                        </div>
+                      </motion.div>
+                    ) : viewModel.totalCount > 0 ? (
+                      <div className="grid gap-1.5">
+                        {[0, 1, 2].map((index) => (
+                          <div key={index} className="flex items-center gap-3 rounded-lg border border-on-surface/5 bg-on-surface/[0.015] p-2">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-on-surface/5 bg-on-surface/3">
+                              {index === 0 ? <Loader2 className="h-4 w-4 animate-spin text-primary/60" /> : <Clock3 className="h-4 w-4 text-on-surface/25" />}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-[12px] font-bold text-on-surface/55">
+                                {index === 0 ? "正在等待首批分析结果" : `已发现项目队列 ${index + 1}`}
+                              </p>
+                              <p className="truncate text-[10px] font-medium text-ui-muted/35 tracking-tight">
+                                {index === 0 ? `已发现 ${viewModel.totalCount} 项` : "即将显示具体条目"}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     ) : (
-                      <div className="flex flex-col items-center justify-center py-20 text-center opacity-20">
-                         <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full border-2 border-dashed border-on-surface/30">
-                            <Loader2 className="h-6 w-6 animate-spin" />
+                      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-on-surface/8 bg-on-surface/[0.01] py-14 text-center opacity-50">
+                         <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-on-surface/10">
+                            <Loader2 className="h-5 w-5 animate-spin text-primary/60" />
                          </div>
-                         <p className="text-[12px] font-bold tracking-widest">等待发现项目...</p>
+                         <p className="text-[12px] font-bold tracking-widest text-ui-muted">正在读取目录...</p>
                       </div>
                     )}
                   </AnimatePresence>

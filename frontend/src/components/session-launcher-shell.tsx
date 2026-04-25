@@ -462,7 +462,7 @@ export function SessionLauncherShell() {
         { id: 2 as const, title: "决定整理方式" },
         { id: 3 as const, title: "填写必要信息" },
       ];
-  const primaryLaunchLabel = isAssignExisting ? "读取目录并确认目标" : "读取目录并生成建议";
+  const primaryLaunchLabel = isAssignExisting ? "读取目录并开始规划" : "读取目录并生成建议";
   const fastStartLabel = "按默认配置开始整理";
   const displayPath = isFullCategorize ? effectiveOutputDir || firstSourcePath(sources) : firstSourcePath(sources);
 
@@ -482,8 +482,8 @@ export function SessionLauncherShell() {
     }
     if (isAssignExisting && !effectiveNewDirectoryRoot) {
       return mode === "direct"
-        ? "当前默认整理方式是“归入现有目录”，但缺少“新增目录默认放置位置”。请先到设置补全默认放置规则。"
-        : "归入现有目录时，仍需要一个“新增目录默认放置位置”，用于必要时补充新目录，并作为待确认区（Review）的默认跟随路径。";
+        ? "当前默认整理方式是“归入现有目录”，但缺少待确认区（Review）的默认推导根。请先到设置补全默认放置规则。"
+        : "归入现有目录时，需要一个默认放置根来推导待确认区（Review），但不会用它自动创建未知目标目录。";
     }
     if (!effectiveReviewRoot) {
       return mode === "direct"
@@ -1700,7 +1700,7 @@ export function SessionLauncherShell() {
                         <div className="grid gap-3 md:grid-cols-2">
                           <div className="rounded-[8px] bg-surface-container-lowest px-3 py-3">
                             <div className="mb-1 text-[11px] font-bold text-on-surface">
-                              {isAssignExisting ? "新增目录默认放置位置" : "新目录将默认生成到"}
+                              {isAssignExisting ? "未归类条目的默认放置根" : "新目录将默认生成到"}
                             </div>
                             <div className="break-all text-[12px] font-medium text-ui-muted">{effectiveNewDirectoryRoot || "尚未确定"}</div>
                           </div>
@@ -1713,7 +1713,7 @@ export function SessionLauncherShell() {
                           <div className="mt-4 grid gap-4 xl:grid-cols-2">
                             <div className="rounded-[8px] border border-on-surface/8 bg-surface-container-lowest p-4">
                               <div className="mb-3 text-[12px] font-bold text-on-surface">
-                                {isAssignExisting ? "新增目录默认放置位置" : "新目录生成位置"}
+                                {isAssignExisting ? "未归类条目的默认放置根" : "新目录生成位置"}
                               </div>
                               <div className="flex gap-3">
                                 <input
@@ -1734,7 +1734,7 @@ export function SessionLauncherShell() {
                               </div>
                               <p className="mt-2 text-[11px] font-medium text-ui-muted">
                                 {isAssignExisting
-                                  ? "这个位置用于必要时补充新目录，也决定待确认区（Review）的默认跟随路径。留空时会先使用设置页默认值；如果设置页也为空，就按当前任务类型自动推导。"
+                                  ? "归入已有目录不会自动创建未知目标目录；这个位置只用于推导待确认区（Review）的默认跟随路径。留空时会先使用设置页默认值；如果设置页也为空，就按当前任务类型自动推导。"
                                   : "留空时会先使用设置页默认值；如果设置页也为空，就按当前任务类型自动推导。"}
                               </p>
                             </div>
@@ -2165,35 +2165,7 @@ export function SessionLauncherShell() {
                   </div>
                 </div>
               </div>
-            ) : (
-              <div className="rounded-[8px] border border-on-surface/8 bg-surface-container-lowest p-4">
-                <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.15em] text-ui-muted">目标目录深度</div>
-                <div className="grid gap-2 md:grid-cols-3">
-                  {[1, 2, 3].map((depth) => {
-                    const active = strategy.destination_index_depth === depth;
-                    return (
-                      <button
-                        key={depth}
-                        type="button"
-                        onClick={() => updateStrategy((previous) => ({ ...previous, destination_index_depth: depth as 1 | 2 | 3 }))}
-                        disabled={loading}
-                        className={[
-                          "rounded-[8px] border px-3 py-2.5 text-left transition-all disabled:opacity-50",
-                          active
-                            ? "border-primary/25 bg-primary/10"
-                            : "border-on-surface/8 bg-surface hover:border-primary/20 hover:bg-surface-container-low",
-                        ].join(" ")}
-                      >
-                        <p className={active ? "text-[12.5px] font-bold text-primary" : "text-[12.5px] font-bold text-on-surface"}>深度 {depth}</p>
-                        <p className="mt-0.5 text-[11px] leading-[1.5] text-ui-muted/80">
-                          {depth === 1 ? "只索引一层目录。" : depth === 2 ? "适合常规归档目录结构。" : "索引更深层目录，给模型更多分类参考。"}
-                        </p>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+            ) : null}
 
             <div className="rounded-[8px] border border-on-surface/8 bg-surface-container-lowest p-4">
               <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.15em] text-ui-muted">归档倾向</div>

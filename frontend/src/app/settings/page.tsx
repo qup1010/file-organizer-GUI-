@@ -1,16 +1,18 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import {
   AlertCircle,
   ArrowLeft,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   ClipboardCopy,
   Cpu,
   Eye,
   EyeOff,
+  FolderPlus,
   FolderOpen,
   Globe,
   ImageIcon,
@@ -24,7 +26,9 @@ import {
   Scissors,
   Settings as SettingsIcon,
   ShieldCheck,
+  SlidersHorizontal,
   Terminal,
+  Trash2,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -42,6 +46,7 @@ import {
 import { buildFamilySavePayload, isEditablePreset } from "@/app/settings/preset-flow";
 import { createApiClient } from "@/lib/api";
 import { getApiBaseUrl, getApiToken, invokeTauriCommand, isTauriDesktop } from "@/lib/runtime";
+import { findDropZoneForPosition, listenToTauriDragDrop } from "@/lib/tauri-drag-drop";
 import {
   buildStrategySummary,
   CAUTION_LEVEL_OPTIONS,
@@ -64,6 +69,7 @@ import type {
   TextSettingsPreset,
   VisionSettingsPreset,
 } from "@/types/settings";
+import type { TargetProfile, TargetProfileDirectory } from "@/types/session";
 
 type SecretDraft = {
   action: SecretAction;
@@ -100,6 +106,15 @@ type SwitchPresetDialogState = {
   family: PresetConfigFamily;
   presetId: string;
 };
+
+type TargetProfileDraft = {
+  name: string;
+  directories: TargetProfileDirectory[];
+  newPath: string;
+  newLabel: string;
+};
+
+type LaunchSection = "strategy" | "placement" | "targets";
 
 const APP_CONTEXT_EVENT = "file-organizer-context-change";
 const SETTINGS_CONTEXT_KEY = "settings_header_context";
@@ -205,6 +220,24 @@ function copyTextToClipboard(value: string, onSuccess: (message: string) => void
   );
 }
 
+function buildTargetProfilesFingerprint(drafts: Record<string, TargetProfileDraft>): string {
+  return JSON.stringify(
+    Object.entries(drafts)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([profileId, draft]) => ({
+        profile_id: profileId,
+        name: draft.name.trim(),
+        directories: draft.directories
+          .map((item) => ({
+            path: item.path.trim(),
+            label: item.label?.trim() || "",
+          }))
+          .filter((item) => item.path)
+          .sort((left, right) => left.path.localeCompare(right.path)),
+      })),
+  );
+}
+
 export default function SettingsPage() {
   const api = useMemo(() => createApiClient(getApiBaseUrl(), getApiToken()), []);
   const desktopReady = isTauriDesktop();
@@ -229,6 +262,19 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<string>("text");
   const [isCompactLayout, setIsCompactLayout] = useState(false);
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+  const [targetProfiles, setTargetProfiles] = useState<TargetProfile[]>([]);
+  const [targetProfilesLoading, setTargetProfilesLoading] = useState(false);
+  const [targetProfileDrafts, setTargetProfileDrafts] = useState<Record<string, TargetProfileDraft>>({});
+  const [targetProfilesBaseline, setTargetProfilesBaseline] = useState("");
+  const [newTargetProfileName, setNewTargetProfileName] = useState("常用目标目录");
+  const [selectedTargetProfileId, setSelectedTargetProfileId] = useState<string>("");
+  const [targetProfileSelectorOpen, setTargetProfileSelectorOpen] = useState(false);
+  const [creatingTargetProfile, setCreatingTargetProfile] = useState(false);
+  const [activeLaunchSection, setActiveLaunchSection] = useState<LaunchSection>("strategy");
+  const [dragTargetProfileId, setDragTargetProfileId] = useState<string | null>(null);
+  const targetProfileSelectorRef = useRef<HTMLDivElement>(null);
+  const targetDropZoneRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [pendingDeleteTargetProfileId, setPendingDeleteTargetProfileId] = useState<string | null>(null);
 
   const categories = [
     { id: "text", label: "文本模型", icon: Layers3, description: "核心分析与规划" },
@@ -237,6 +283,17 @@ export default function SettingsPage() {
     { id: "bg_removal", label: "抠图服务", icon: Scissors, description: "图标背景处理" },
     { id: "launch", label: "启动默认值", icon: SettingsIcon, description: "任务启动配置" },
     { id: "system", label: "系统与调试", icon: ShieldCheck, description: "运行状态与日志" },
+  ];
+
+  const launchSections: Array<{
+    id: LaunchSection;
+    label: string;
+    description: string;
+    icon: typeof SettingsIcon;
+  }> = [
+    { id: "strategy", label: "启动策略", description: "模板、语言、粒度", icon: SlidersHorizontal },
+    { id: "placement", label: "放置规则", description: "新目录与 Review", icon: FolderOpen },
+    { id: "targets", label: "目标目录", description: "归档目录池", icon: FolderPlus },
   ];
 
   const secretMap = useMemo(
@@ -249,8 +306,12 @@ export default function SettingsPage() {
     [bgRemovalSecret, iconSecret, textSecret, visionSecret],
   );
   const activeCategory = categories.find((item) => item.id === activeTab) ?? categories[0];
+  const selectedTargetProfile = targetProfiles.find((profile) => profile.profile_id === selectedTargetProfileId) ?? targetProfiles[0] ?? null;
+  const selectedTargetProfileDraft = selectedTargetProfile ? targetProfileDrafts[selectedTargetProfile.profile_id] : null;
+  const selectedTargetProfileName = selectedTargetProfileDraft?.name || selectedTargetProfile?.name || "选择目标目录配置";
+  const selectedTargetDirectoryCount = selectedTargetProfileDraft?.directories.length ?? selectedTargetProfile?.directories.length ?? 0;
 
-  const isDirty = useMemo(
+  const settingsDirty = useMemo(
     () =>
       buildFingerprint(draft, secretMap, {
         analysisConcurrencyInput,
@@ -258,6 +319,11 @@ export default function SettingsPage() {
       }) !== baseline,
     [analysisConcurrencyInput, baseline, draft, imageConcurrencyInput, secretMap],
   );
+  const targetProfilesDirty = useMemo(
+    () => buildTargetProfilesFingerprint(targetProfileDrafts) !== targetProfilesBaseline,
+    [targetProfileDrafts, targetProfilesBaseline],
+  );
+  const isDirty = settingsDirty || targetProfilesDirty;
 
   const hydrate = (nextSnapshot: SettingsSnapshot) => {
     const nextDraft = snapshotToDraft(nextSnapshot);
@@ -290,6 +356,38 @@ export default function SettingsPage() {
     setTestResults({});
   };
 
+  const hydrateTargetProfiles = useCallback((items: TargetProfile[]) => {
+    setTargetProfiles(items);
+    setSelectedTargetProfileId((current) => {
+      if (items.some((item) => item.profile_id === current)) {
+        return current;
+      }
+      return items[0]?.profile_id ?? "";
+    });
+    const next: Record<string, TargetProfileDraft> = {};
+    for (const profile of items) {
+      next[profile.profile_id] = {
+        name: profile.name,
+        directories: profile.directories,
+        newPath: "",
+        newLabel: "",
+      };
+    }
+    setTargetProfileDrafts(next);
+    setTargetProfilesBaseline(buildTargetProfilesFingerprint(next));
+  }, []);
+
+  const loadTargetProfiles = useCallback(async () => {
+    setTargetProfilesLoading(true);
+    try {
+      hydrateTargetProfiles(await api.getTargetProfiles());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "读取目标目录配置失败");
+    } finally {
+      setTargetProfilesLoading(false);
+    }
+  }, [api, hydrateTargetProfiles]);
+
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
@@ -315,6 +413,78 @@ export default function SettingsPage() {
       cancelled = true;
     };
   }, [api]);
+
+  useEffect(() => {
+    void loadTargetProfiles();
+  }, [loadTargetProfiles]);
+
+  useEffect(() => {
+    if (!targetProfileSelectorOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!targetProfileSelectorRef.current?.contains(event.target as Node)) {
+        setTargetProfileSelectorOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setTargetProfileSelectorOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [targetProfileSelectorOpen]);
+
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+
+    void listenToTauriDragDrop((event) => {
+      if (event.payload.type === "over") {
+        const profileId = findDropZoneForPosition(
+          event.payload.position,
+          Object.entries(targetDropZoneRefs.current).map(([key, element]) => ({ key, element })),
+        );
+        setDragTargetProfileId(profileId);
+        return;
+      }
+
+      if (event.payload.type === "leave") {
+        setDragTargetProfileId(null);
+        return;
+      }
+
+      if (event.payload.type === "drop") {
+        const profileId = findDropZoneForPosition(
+          event.payload.position,
+          Object.entries(targetDropZoneRefs.current).map(([key, element]) => ({ key, element })),
+        );
+        setDragTargetProfileId(null);
+        if (profileId) {
+          void addDirectoriesToTargetProfile(profileId, event.payload.paths);
+        }
+      }
+    }).then((nextUnlisten) => {
+      if (disposed) {
+        nextUnlisten?.();
+        return;
+      }
+      unlisten = nextUnlisten;
+    });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [targetProfileDrafts]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -426,6 +596,160 @@ export default function SettingsPage() {
       };
     });
     setSuccess(null);
+  };
+
+  const updateTargetProfileDraft = (profileId: string, updater: (current: TargetProfileDraft) => TargetProfileDraft) => {
+    setTargetProfileDrafts((current) => {
+      const draft = current[profileId];
+      if (!draft) {
+        return current;
+      }
+      return {
+        ...current,
+        [profileId]: updater(draft),
+      };
+    });
+    setSuccess(null);
+  };
+
+  const addDirectoriesToTargetProfile = (profileId: string, paths: string[]) => {
+    const draft = targetProfileDrafts[profileId];
+    if (!draft) {
+      return;
+    }
+    const cleanedPaths = paths.map((path) => path.trim()).filter(Boolean);
+    if (!cleanedPaths.length) {
+      setError("没有读取到可添加的目录路径。");
+      return;
+    }
+
+    const seen = new Set(draft.directories.map((item) => item.path.trim().toLowerCase()));
+    const additions: TargetProfileDirectory[] = [];
+    for (const path of cleanedPaths) {
+      const key = path.toLowerCase();
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      additions.push({ path });
+    }
+
+    if (!additions.length) {
+      setSuccess("这些目录已经在当前配置里");
+      return;
+    }
+
+    const directories = [...draft.directories, ...additions];
+    updateTargetProfileDraft(profileId, (current) => ({ ...current, directories, newPath: "", newLabel: "" }));
+  };
+
+  const saveTargetProfileDrafts = async () => {
+    const entries = Object.entries(targetProfileDrafts);
+    for (const [, draft] of entries) {
+      if (!draft.name.trim()) {
+        throw new Error("目标目录配置名称不能为空。");
+      }
+    }
+    setTargetProfilesLoading(true);
+    try {
+      await Promise.all(
+        entries.map(([profileId, draft]) =>
+          api.updateTargetProfile(profileId, {
+            name: draft.name.trim(),
+            directories: draft.directories
+              .map((item) => ({ path: item.path.trim(), label: item.label?.trim() || undefined }))
+              .filter((item) => item.path),
+          }),
+        ),
+      );
+      await loadTargetProfiles();
+    } finally {
+      setTargetProfilesLoading(false);
+    }
+  };
+
+  const createTargetProfile = async () => {
+    const name = newTargetProfileName.trim();
+    if (!name) {
+      setError("请先输入目标目录配置名称。");
+      return;
+    }
+    setTargetProfilesLoading(true);
+    setError(null);
+    try {
+      const profile = await api.createTargetProfile({ name, directories: [] });
+      setNewTargetProfileName("常用目标目录");
+      setSelectedTargetProfileId(profile.profile_id);
+      setCreatingTargetProfile(false);
+      setTargetProfileSelectorOpen(false);
+      await loadTargetProfiles();
+      setSuccess("目标目录配置已创建");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "创建目标目录配置失败");
+    } finally {
+      setTargetProfilesLoading(false);
+    }
+  };
+
+  const deleteTargetProfile = async (profileId: string) => {
+    setTargetProfilesLoading(true);
+    setError(null);
+    try {
+      await api.deleteTargetProfile(profileId);
+      setSelectedTargetProfileId((current) => (current === profileId ? "" : current));
+      await loadTargetProfiles();
+      setSuccess("目标目录配置已删除");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "删除目标目录配置失败");
+    } finally {
+      setTargetProfilesLoading(false);
+    }
+  };
+
+  const addDirectoryToTargetProfile = (profileId: string) => {
+    const draft = targetProfileDrafts[profileId];
+    if (!draft) {
+      return;
+    }
+    const path = draft.newPath.trim();
+    if (!path) {
+      setError("请先输入目标目录路径。");
+      return;
+    }
+    const key = path.toLowerCase();
+    const directories = [
+      ...draft.directories.filter((item) => item.path.trim().toLowerCase() !== key),
+      { path, label: draft.newLabel.trim() || undefined },
+    ];
+    updateTargetProfileDraft(profileId, (current) => ({ ...current, directories, newPath: "", newLabel: "" }));
+  };
+
+  const extractDroppedPaths = (event: React.DragEvent<HTMLElement>): string[] => {
+    const textPayload = event.dataTransfer.getData("text/plain");
+    const uriPayload = event.dataTransfer.getData("text/uri-list");
+    const files = Array.from(event.dataTransfer.files)
+      .map((file) => {
+        const path = (file as File & { path?: string }).path || (file as File & { webkitRelativePath?: string }).webkitRelativePath;
+        return path || "";
+      })
+      .filter(Boolean);
+
+    const textPaths = `${textPayload}\n${uriPayload}`
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith("#"))
+      .map((line) => (line.startsWith("file:///") ? decodeURIComponent(line.replace(/^file:\/+/, "")) : line));
+
+    return [...files, ...textPaths];
+  };
+
+  const removeDirectoryFromTargetProfile = (profileId: string, path: string) => {
+    const draft = targetProfileDrafts[profileId];
+    if (!draft) {
+      return;
+    }
+    const directories = draft.directories.filter((item) => item.path !== path);
+    updateTargetProfileDraft(profileId, (current) => ({ ...current, directories }));
   };
 
   const handleSelectTab = (tabId: string) => {
@@ -607,14 +931,29 @@ export default function SettingsPage() {
     setSaving(true);
     setError(null);
     try {
-      const nextSnapshot = await api.updateSettings(payload);
-      hydrate(nextSnapshot);
-       setSuccess("设置已保存并生效");
+      if (targetProfilesDirty && Object.values(targetProfileDrafts).some((profile) => !profile.name.trim())) {
+        throw new Error("目标目录配置名称不能为空。");
+      }
+      if (settingsDirty) {
+        const nextSnapshot = await api.updateSettings(payload);
+        hydrate(nextSnapshot);
+      }
+      if (targetProfilesDirty) {
+        await saveTargetProfileDrafts();
+      }
+      setSuccess("设置已保存并生效");
     } catch (err) {
       setError(err instanceof Error ? err.message : "保存失败");
     } finally {
       setSaving(false);
     }
+  };
+
+  const discardChanges = () => {
+    if (snapshot) {
+      hydrate(snapshot);
+    }
+    hydrateTargetProfiles(targetProfiles);
   };
 
   const resolveBgRemovalRuntimeConfig = async () => {
@@ -794,6 +1133,27 @@ export default function SettingsPage() {
     );
   };
 
+  const renderConnectionTestPanel = (family: SettingsFamily, disabled = false) => (
+    <div className="rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-[12.5px] font-black text-on-surface">连接测试</h3>
+          <p className="mt-1 text-[11.5px] font-medium text-ui-muted/65">使用当前表单内容测试，不需要先保存。</p>
+        </div>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => void handleTest(family)}
+          loading={testingFamily === family}
+          disabled={disabled}
+        >
+          {disabled ? "仅桌面端可测试" : "测试连接"}
+        </Button>
+      </div>
+      <div className="mt-3">{renderResult(family)}</div>
+    </div>
+  );
+
   const renderSecretField = (
     label: string,
     state: SecretState,
@@ -886,16 +1246,17 @@ export default function SettingsPage() {
                   key={cat.id}
                   onClick={() => handleSelectTab(cat.id)}
                   className={cn(
-                    "group relative flex w-full items-center gap-3 rounded-[6px] px-3 py-2 text-left transition-all",
+                    "group relative flex w-full items-center gap-3 rounded-[6px] px-3 py-2 text-left transition-colors outline-none",
                     active
-                      ? "bg-primary/[0.06] border border-primary/20"
-                      : "bg-transparent hover:bg-on-surface/[0.035]",
+                      ? "bg-primary/[0.06] border-primary/20"
+                      : "bg-transparent border-transparent hover:bg-on-surface/[0.035]",
                   )}
+                  style={{ borderWidth: '1px', borderStyle: 'solid' }}
                 >
                   {active && (
-                    <motion.div
-                      layoutId="settings-active-pill"
-                      className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-primary"
+                    <div
+
+                      className="absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-r-full bg-primary"
                     />
                   )}
                   <div className={cn(
@@ -954,8 +1315,14 @@ export default function SettingsPage() {
         )}
 
         {/* Right Content Area */}
-        <main className="flex-1 overflow-y-auto bg-surface relative scrollbar-thin">
-          <div className="mx-auto max-w-[800px] pb-24 pt-6 px-6">
+        <main className="flex-1 overflow-y-auto bg-surface relative scrollbar-thin outline-none">
+          <motion.div 
+            key={activeTab}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.15 }}
+            className="mx-auto max-w-[800px] pb-24 pt-6 px-6"
+          >
             {isCompactLayout && (
               <div className="mb-6 flex items-center justify-between gap-3 rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-4 py-3">
                 <div className="min-w-0">
@@ -1003,16 +1370,6 @@ export default function SettingsPage() {
                 icon={Layers3}
                 title="文本模型"
                 description="整理任务和图标工坊都会读取这里当前启用的文本预设。支持 OpenAI 兼容的 Chat Completions 接口。"
-                actions={
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => void handleTest("text")}
-                    loading={testingFamily === "text"}
-                  >
-                    测试连接
-                  </Button>
-                }
               >
                 <PresetSelector
                   label="文本预设"
@@ -1022,8 +1379,6 @@ export default function SettingsPage() {
                   onAdd={() => handleCreatePreset("text")}
                   onDelete={(preset) => void handleDeletePreset("text", preset.id, preset.name)}
                 />
-                {renderResult("text")}
-
                 {textPresetEditable ? (
                   <div className="grid gap-4 xl:grid-cols-2">
                     <FieldGroup label="模型 ID">
@@ -1037,6 +1392,7 @@ export default function SettingsPage() {
                       </InputShell>
                     </FieldGroup>
                     <div className="xl:col-span-2">{renderSecretField("API 密钥", draft.text.secret_state, textSecret, setTextSecret)}</div>
+                    <div className="xl:col-span-2">{renderConnectionTestPanel("text")}</div>
                   </div>
                 ) : (
                   renderCreatePresetHint("文本模型")
@@ -1050,22 +1406,12 @@ export default function SettingsPage() {
                 title="图片理解"
                 description="开启后，模型可在必要时查看图片内容；关闭时只按文件名判断。"
                 actions={
-                  <div className="flex items-center gap-3">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => void handleTest("vision")}
-                      loading={testingFamily === "vision"}
-                    >
-                      测试连接
-                    </Button>
-                    <div className="flex items-center gap-2 rounded-[10px] border border-on-surface/8 bg-surface-container-low px-3 py-2">
-                      <span className="text-[12px] font-medium text-on-surface-variant/70">启用</span>
-                      <ToggleSwitch
-                        checked={Boolean(draft.global_config.IMAGE_ANALYSIS_ENABLED)}
-                        onClick={() => updateGlobal("IMAGE_ANALYSIS_ENABLED", !draft.global_config.IMAGE_ANALYSIS_ENABLED)}
-                      />
-                    </div>
+                  <div className="flex items-center gap-2 rounded-[10px] border border-on-surface/8 bg-surface-container-low px-3 py-2">
+                    <span className="text-[12px] font-medium text-on-surface-variant/70">启用</span>
+                    <ToggleSwitch
+                      checked={Boolean(draft.global_config.IMAGE_ANALYSIS_ENABLED)}
+                      onClick={() => updateGlobal("IMAGE_ANALYSIS_ENABLED", !draft.global_config.IMAGE_ANALYSIS_ENABLED)}
+                    />
                   </div>
                 }
               >
@@ -1077,8 +1423,6 @@ export default function SettingsPage() {
                   onAdd={() => handleCreatePreset("vision")}
                   onDelete={(preset) => void handleDeletePreset("vision", preset.id, preset.name)}
                 />
-                {renderResult("vision")}
-
                 {visionPresetEditable ? (
                   <div className="grid gap-4 xl:grid-cols-2">
                     <FieldGroup label="模型 ID">
@@ -1092,6 +1436,7 @@ export default function SettingsPage() {
                       </InputShell>
                     </FieldGroup>
                     <div className="xl:col-span-2">{renderSecretField("图片理解密钥", draft.vision.secret_state, visionSecret, setVisionSecret)}</div>
+                    <div className="xl:col-span-2">{renderConnectionTestPanel("vision")}</div>
                   </div>
                 ) : (
                   renderCreatePresetHint("图片理解")
@@ -1104,16 +1449,6 @@ export default function SettingsPage() {
                 icon={ImageIcon}
                 title="图标生成"
                 description="这里配置图标预览生成模型。图标工坊会自动读取当前启用的文本预设，不需要单独设置文本密钥。"
-                actions={
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => void handleTest("icon_image")}
-                    loading={testingFamily === "icon_image"}
-                  >
-                    测试连接
-                  </Button>
-                }
               >
                 <PresetSelector
                   label="图标生图预设"
@@ -1123,8 +1458,6 @@ export default function SettingsPage() {
                   onAdd={() => handleCreatePreset("icon_image")}
                   onDelete={(preset) => void handleDeletePreset("icon_image", preset.id, preset.name)}
                 />
-                {renderResult("icon_image")}
-
                 {iconImagePresetEditable ? (
                   <div className="grid gap-4 xl:grid-cols-2">
                     <FieldGroup label="生图模型 ID">
@@ -1202,6 +1535,7 @@ export default function SettingsPage() {
                       </div>
                     </FieldGroup>
                     <div className="xl:col-span-2">{renderSecretField("生图接口密钥", draft.icon_image.image_model.secret_state, iconSecret, setIconSecret)}</div>
+                    <div className="xl:col-span-2">{renderConnectionTestPanel("icon_image")}</div>
                   </div>
                 ) : (
                   renderCreatePresetHint("图标生图")
@@ -1214,17 +1548,6 @@ export default function SettingsPage() {
                 icon={Scissors}
                 title="背景处理"
                 description="桌面端图标工坊会读取这里的背景处理配置。可使用内置预设，也可切换为自定义服务。"
-                actions={
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => void handleTest("bg_removal")}
-                    loading={testingFamily === "bg_removal"}
-                    disabled={!desktopReady}
-                  >
-                    {desktopReady ? "测试连接" : "仅桌面端可测试"}
-                  </Button>
-                }
               >
                 <FieldGroup label="服务模式">
                   <div className="grid gap-3 md:grid-cols-2">
@@ -1242,9 +1565,6 @@ export default function SettingsPage() {
                     />
                   </div>
                 </FieldGroup>
-                {renderResult("bg_removal")}
-
-
                 {draft.bg_removal.mode === "preset" ? (
                   <FieldGroup label="内置预设">
                     <div className="grid gap-3 xl:grid-cols-2">
@@ -1323,6 +1643,7 @@ export default function SettingsPage() {
                 )}
 
                 {renderSecretField("Hugging Face Token（可选）", draft.bg_removal.custom.secret_state, bgRemovalSecret, setBgRemovalSecret)}
+                {renderConnectionTestPanel("bg_removal", !desktopReady)}
               </SettingsSection>
             )}
 
@@ -1330,137 +1651,406 @@ export default function SettingsPage() {
               <SettingsSection
                 icon={SettingsIcon}
                 title="新任务默认值"
-                description="这些值会作为首页默认预设和启动配置的初始值。"
+                description="按启动策略、放置规则和目标目录分开配置，首页会读取这里的默认值。"
               >
                 <div className="rounded-[12px] border border-on-surface/8 bg-surface px-4 py-4">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded-full border border-primary/12 bg-primary/8 px-3 py-1 text-[12px] font-semibold text-primary">{launchTemplate.label}</span>
-                    <span className="rounded-full border border-on-surface/8 bg-surface-container-low px-3 py-1 text-[12px] font-medium text-on-surface-variant">{launchStrategyPreview.language_label}</span>
-                    <span className="rounded-full border border-on-surface/8 bg-surface-container-low px-3 py-1 text-[12px] font-medium text-on-surface-variant">{launchStrategyPreview.density_label}</span>
-                    <span className="rounded-full border border-on-surface/8 bg-surface-container-low px-3 py-1 text-[12px] font-medium text-on-surface-variant">{launchStrategyPreview.prefix_style_label}</span>
-                    <span className="rounded-full border border-on-surface/8 bg-surface-container-low px-3 py-1 text-[12px] font-medium text-on-surface-variant">{launchStrategyPreview.caution_level_label}</span>
+                  <div className="grid gap-2 md:grid-cols-3">
+                    {launchSections.map((section) => {
+                      const active = activeLaunchSection === section.id;
+                      return (
+                        <button
+                          key={section.id}
+                          type="button"
+                          onClick={() => setActiveLaunchSection(section.id)}
+                          className={cn(
+                            "flex min-h-[58px] items-center gap-3 rounded-[8px] border px-3 py-2 text-left transition-colors",
+                            active
+                              ? "border-primary/28 bg-primary/8 text-primary"
+                              : "border-on-surface/8 bg-surface-container-lowest text-on-surface hover:border-primary/18 hover:bg-surface-container-low",
+                          )}
+                        >
+                          <section.icon className="h-4 w-4 shrink-0" />
+                          <div className="min-w-0">
+                            <p className="text-[12.5px] font-black">{section.label}</p>
+                            <p className="mt-1 truncate text-[11px] font-medium text-ui-muted">{section.description}</p>
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
-                  <p className="mt-3 text-[13px] leading-6 text-on-surface-variant/70">保存后，首页“当前预设”和新任务启动流程会立即读取这些值。</p>
                 </div>
-                <FieldGroup label="默认模板">
-                  <div className="grid gap-3 xl:grid-cols-2">
-                    {STRATEGY_TEMPLATES.map((template) => (
-                      <StrategyOptionButton
-                        key={template.id}
-                        active={draft.global_config.LAUNCH_DEFAULT_TEMPLATE_ID === template.id}
-                        label={template.label}
-                        description={template.description}
-                        onClick={() => {
-                          const suggested = getSuggestedSelection(template.id);
-                          updateGlobal("LAUNCH_DEFAULT_TEMPLATE_ID", template.id);
-                          updateGlobal("LAUNCH_DEFAULT_LANGUAGE", suggested.language);
-                          updateGlobal("LAUNCH_DEFAULT_DENSITY", suggested.density);
-                          updateGlobal("LAUNCH_DEFAULT_PREFIX_STYLE", suggested.prefix_style);
-                          updateGlobal("LAUNCH_DEFAULT_CAUTION_LEVEL", suggested.caution_level);
-                        }}
+
+                {activeLaunchSection === "strategy" && (
+                  <div className="space-y-4">
+                    <div className="rounded-[12px] border border-on-surface/8 bg-surface px-4 py-4">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full border border-primary/12 bg-primary/8 px-3 py-1 text-[12px] font-semibold text-primary">{launchTemplate.label}</span>
+                        <span className="rounded-full border border-on-surface/8 bg-surface-container-low px-3 py-1 text-[12px] font-medium text-on-surface-variant">{launchStrategyPreview.language_label}</span>
+                        <span className="rounded-full border border-on-surface/8 bg-surface-container-low px-3 py-1 text-[12px] font-medium text-on-surface-variant">{launchStrategyPreview.density_label}</span>
+                        <span className="rounded-full border border-on-surface/8 bg-surface-container-low px-3 py-1 text-[12px] font-medium text-on-surface-variant">{launchStrategyPreview.prefix_style_label}</span>
+                        <span className="rounded-full border border-on-surface/8 bg-surface-container-low px-3 py-1 text-[12px] font-medium text-on-surface-variant">{launchStrategyPreview.caution_level_label}</span>
+                      </div>
+                    </div>
+                    <FieldGroup label="默认模板">
+                      <div className="grid gap-2 xl:grid-cols-2">
+                        {STRATEGY_TEMPLATES.map((template) => (
+                          <StrategyOptionButton
+                            key={template.id}
+                            active={draft.global_config.LAUNCH_DEFAULT_TEMPLATE_ID === template.id}
+                            label={template.label}
+                            description={template.description}
+                            onClick={() => {
+                              const suggested = getSuggestedSelection(template.id);
+                              updateGlobal("LAUNCH_DEFAULT_TEMPLATE_ID", template.id);
+                              updateGlobal("LAUNCH_DEFAULT_LANGUAGE", suggested.language);
+                              updateGlobal("LAUNCH_DEFAULT_DENSITY", suggested.density);
+                              updateGlobal("LAUNCH_DEFAULT_PREFIX_STYLE", suggested.prefix_style);
+                              updateGlobal("LAUNCH_DEFAULT_CAUTION_LEVEL", suggested.caution_level);
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </FieldGroup>
+                    <div className="grid gap-3 xl:grid-cols-4">
+                      {[
+                        { label: "目录语言", key: "LAUNCH_DEFAULT_LANGUAGE", options: LANGUAGE_OPTIONS },
+                        { label: "分类粒度", key: "LAUNCH_DEFAULT_DENSITY", options: DENSITY_OPTIONS },
+                        { label: "目录前缀", key: "LAUNCH_DEFAULT_PREFIX_STYLE", options: PREFIX_STYLE_OPTIONS },
+                        { label: "整理方式", key: "LAUNCH_DEFAULT_CAUTION_LEVEL", options: CAUTION_LEVEL_OPTIONS },
+                      ].map((group) => (
+                        <FieldGroup key={group.key} label={group.label}>
+                          <div className="grid gap-1.5">
+                            {group.options.map((option) => {
+                              const active = draft.global_config[group.key] === option.id;
+                              return (
+                                <button
+                                  key={option.id}
+                                  type="button"
+                                  onClick={() => updateGlobal(group.key, option.id)}
+                                  className={cn(
+                                    "rounded-[6px] border px-3 py-2 text-left transition-colors",
+                                    active
+                                      ? "border-primary/35 bg-primary/[0.06] text-primary"
+                                      : "border-on-surface/8 bg-surface-container-lowest text-on-surface hover:border-primary/20",
+                                  )}
+                                >
+                                  <span className="text-[12px] font-black">{option.label}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </FieldGroup>
+                      ))}
+                    </div>
+                    <FieldGroup label="补充说明">
+                      <textarea
+                        value={draft.global_config.LAUNCH_DEFAULT_NOTE ?? ""}
+                        onChange={(event) => updateGlobal("LAUNCH_DEFAULT_NOTE", event.target.value.slice(0, 200))}
+                        className="min-h-24 w-full resize-none rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-4 py-3 text-[13px] leading-6 text-on-surface outline-none transition-all placeholder:text-on-surface-variant/35 focus:border-primary focus:ring-4 focus:ring-primary/5"
+                        placeholder="例如：拿不准的先放待确认区（Review），课程资料尽量按学期整理。"
                       />
-                    ))}
-                  </div>
-                </FieldGroup>
-                <div className="grid gap-4 xl:grid-cols-2">
-                  <FieldGroup label="目录语言">
-                    <div className="grid gap-3">
-                      {LANGUAGE_OPTIONS.map((option) => (
-                        <StrategyOptionButton key={option.id} active={draft.global_config.LAUNCH_DEFAULT_LANGUAGE === option.id} label={option.label} description={option.description} onClick={() => updateGlobal("LAUNCH_DEFAULT_LANGUAGE", option.id)} />
-                      ))}
-                    </div>
-                  </FieldGroup>
-                  <FieldGroup label="分类粒度">
-                    <div className="grid gap-3">
-                      {DENSITY_OPTIONS.map((option) => (
-                        <StrategyOptionButton key={option.id} active={draft.global_config.LAUNCH_DEFAULT_DENSITY === option.id} label={option.label} description={option.description} onClick={() => updateGlobal("LAUNCH_DEFAULT_DENSITY", option.id)} />
-                      ))}
-                    </div>
-                  </FieldGroup>
-                  <FieldGroup label="目录前缀">
-                    <div className="grid gap-3">
-                      {PREFIX_STYLE_OPTIONS.map((option) => (
-                        <StrategyOptionButton key={option.id} active={draft.global_config.LAUNCH_DEFAULT_PREFIX_STYLE === option.id} label={option.label} description={option.description} onClick={() => updateGlobal("LAUNCH_DEFAULT_PREFIX_STYLE", option.id)} />
-                      ))}
-                    </div>
-                  </FieldGroup>
-                  <FieldGroup label="整理方式">
-                    <div className="grid gap-3">
-                      {CAUTION_LEVEL_OPTIONS.map((option) => (
-                        <StrategyOptionButton key={option.id} active={draft.global_config.LAUNCH_DEFAULT_CAUTION_LEVEL === option.id} label={option.label} description={option.description} onClick={() => updateGlobal("LAUNCH_DEFAULT_CAUTION_LEVEL", option.id)} />
-                      ))}
-                    </div>
-                  </FieldGroup>
-                  <FieldGroup label="补充说明" className="xl:col-span-2">
-                    <textarea
-                      value={draft.global_config.LAUNCH_DEFAULT_NOTE ?? ""}
-                      onChange={(event) => updateGlobal("LAUNCH_DEFAULT_NOTE", event.target.value.slice(0, 200))}
-                      className="min-h-28 w-full resize-none rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-4 py-3 text-[14px] leading-7 text-on-surface outline-none transition-all placeholder:text-on-surface-variant/35 focus:border-primary focus:ring-4 focus:ring-primary/5"
-                      placeholder="例如：拿不准的先放待确认区（Review），课程资料尽量按学期整理。"
-                    />
-                  </FieldGroup>
-                </div>
-                <div className="rounded-[12px] border border-on-surface/8 bg-surface px-4 py-4">
-                  <div className="mb-4">
-                    <h3 className="text-[13px] font-semibold text-on-surface">默认放置规则</h3>
-                    <p className="mt-1 text-[12px] leading-5 text-on-surface-variant/65">
-                      这里只定义以后新任务启动时的默认放置位置。任务页里仍然可以按单次任务覆盖。
-                    </p>
-                  </div>
-                  <div className="grid gap-4 xl:grid-cols-2">
-                    <FieldGroup label="默认新目录生成位置" hint="留空时，新结构任务默认使用输出目录；归入已有目录任务默认使用当前任务工作区根。">
-                      <InputShell icon={FolderOpen}>
-                        <input
-                          value={launchDefaultNewDirectoryRoot}
-                          onChange={(event) => updateGlobal("LAUNCH_DEFAULT_NEW_DIRECTORY_ROOT", event.target.value)}
-                          className="w-full bg-transparent py-2 text-sm font-semibold text-on-surface outline-none"
-                          placeholder="例如：D:/archive/sorted"
-                        />
-                      </InputShell>
-                    </FieldGroup>
-                    <FieldGroup
-                      label="默认待确认区（Review）位置"
-                      hint={
-                        launchReviewFollowsNewRoot
-                          ? `当前会自动跟随新目录位置，默认使用 ${launchDerivedReviewRoot}。`
-                          : "只在关闭“跟随新目录位置”后单独生效。"
-                      }
-                    >
-                      <InputShell icon={FolderOpen}>
-                        <input
-                          value={launchDefaultReviewRoot}
-                          onChange={(event) => updateGlobal("LAUNCH_DEFAULT_REVIEW_ROOT", event.target.value)}
-                          disabled={launchReviewFollowsNewRoot}
-                          className="w-full bg-transparent py-2 text-sm font-semibold text-on-surface outline-none disabled:opacity-60"
-                          placeholder={launchReviewFollowsNewRoot ? launchDerivedReviewRoot : "例如：D:/archive/review"}
-                        />
-                      </InputShell>
                     </FieldGroup>
                   </div>
-                  <div className="mt-4 rounded-[12px] border border-on-surface/8 bg-surface-container-low px-4 py-3.5">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <h3 className="text-[13px] font-semibold text-on-surface">待确认区默认跟随新目录位置</h3>
+                )}
+
+                {activeLaunchSection === "placement" && (
+                  <div className="space-y-4">
+                    <div className="rounded-[12px] border border-on-surface/8 bg-surface px-4 py-4">
+                      <div className="mb-4">
+                        <h3 className="text-[13px] font-semibold text-on-surface">默认放置规则</h3>
                         <p className="mt-1 text-[12px] leading-5 text-on-surface-variant/65">
-                          开启后，新任务的待确认区（Review）默认会自动派生为 `新目录生成位置/Review`。只有关闭时，才会使用上面的独立路径。
+                          这里只定义新任务的默认落点；任务页仍然可以按单次任务覆盖。
                         </p>
                       </div>
-                      <ToggleSwitch
-                        checked={launchReviewFollowsNewRoot}
-                        onClick={() => updateGlobal("LAUNCH_REVIEW_FOLLOWS_NEW_ROOT", !launchReviewFollowsNewRoot)}
-                      />
+                      <div className="grid gap-4 xl:grid-cols-2">
+                        <FieldGroup label="默认新目录生成位置" hint="留空时，新结构任务默认使用输出目录；归入已有目录任务默认使用当前任务工作区根。">
+                          <InputShell icon={FolderOpen}>
+                            <input
+                              value={launchDefaultNewDirectoryRoot}
+                              onChange={(event) => updateGlobal("LAUNCH_DEFAULT_NEW_DIRECTORY_ROOT", event.target.value)}
+                              className="w-full bg-transparent py-2 text-sm font-semibold text-on-surface outline-none"
+                              placeholder="例如：D:/archive/sorted"
+                            />
+                          </InputShell>
+                        </FieldGroup>
+                        <FieldGroup
+                          label="默认待确认区（Review）位置"
+                          hint={
+                            launchReviewFollowsNewRoot
+                              ? `当前会自动跟随新目录位置，默认使用 ${launchDerivedReviewRoot}。`
+                              : "只在关闭“跟随新目录位置”后单独生效。"
+                          }
+                        >
+                          <InputShell icon={FolderOpen}>
+                            <input
+                              value={launchDefaultReviewRoot}
+                              onChange={(event) => updateGlobal("LAUNCH_DEFAULT_REVIEW_ROOT", event.target.value)}
+                              disabled={launchReviewFollowsNewRoot}
+                              className="w-full bg-transparent py-2 text-sm font-semibold text-on-surface outline-none disabled:opacity-60"
+                              placeholder={launchReviewFollowsNewRoot ? launchDerivedReviewRoot : "例如：D:/archive/review"}
+                            />
+                          </InputShell>
+                        </FieldGroup>
+                      </div>
+                      <div className="mt-4 rounded-[12px] border border-on-surface/8 bg-surface-container-low px-4 py-3.5">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <h3 className="text-[13px] font-semibold text-on-surface">待确认区跟随新目录位置</h3>
+                            <p className="mt-1 text-[12px] leading-5 text-on-surface-variant/65">
+                              开启后，Review 默认派生为 `新目录生成位置/Review`。
+                            </p>
+                          </div>
+                          <ToggleSwitch
+                            checked={launchReviewFollowsNewRoot}
+                            onClick={() => updateGlobal("LAUNCH_REVIEW_FOLLOWS_NEW_ROOT", !launchReviewFollowsNewRoot)}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="rounded-[12px] border border-on-surface/8 bg-surface px-4 py-3.5">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <h3 className="text-[13px] font-semibold text-on-surface">直接使用默认值启动</h3>
+                          <p className="mt-1 text-[12px] leading-5 text-on-surface-variant/65">开启后，首页点击开始时直接进入任务。</p>
+                        </div>
+                        <ToggleSwitch checked={Boolean(draft.global_config.LAUNCH_SKIP_STRATEGY_PROMPT)} onClick={() => updateGlobal("LAUNCH_SKIP_STRATEGY_PROMPT", !draft.global_config.LAUNCH_SKIP_STRATEGY_PROMPT)} />
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div className="rounded-[12px] border border-on-surface/8 bg-surface px-4 py-3.5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <h3 className="text-[13px] font-semibold text-on-surface">直接使用默认值启动</h3>
-                      <p className="mt-1 text-[12px] leading-5 text-on-surface-variant/65">开启后，首页点击开始时会直接按默认配置进入任务，不再额外弹出策略确认。</p>
+                )}
+
+                {activeLaunchSection === "targets" && (
+                  <div className="rounded-[12px] border border-on-surface/8 bg-surface px-4 py-4">
+                    <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-[13px] font-semibold text-on-surface">目标目录配置</h3>
+                        <p className="mt-1 text-[12px] leading-5 text-on-surface-variant/65">
+                          “归入已有目录”会使用这里保存的目录。可以直接把文件夹拖到对应配置里添加。
+                        </p>
+                      </div>
+                      {targetProfilesLoading ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : null}
                     </div>
-                    <ToggleSwitch checked={Boolean(draft.global_config.LAUNCH_SKIP_STRATEGY_PROMPT)} onClick={() => updateGlobal("LAUNCH_SKIP_STRATEGY_PROMPT", !draft.global_config.LAUNCH_SKIP_STRATEGY_PROMPT)} />
+                    <div className="mb-4 space-y-3">
+                      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto]">
+                        <div ref={targetProfileSelectorRef} className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setTargetProfileSelectorOpen((current) => !current)}
+                            disabled={targetProfilesLoading || targetProfiles.length === 0}
+                            className={cn(
+                              "flex min-h-[52px] w-full items-center justify-between gap-3 rounded-[10px] border px-4 py-2.5 text-left transition-colors",
+                              targetProfileSelectorOpen
+                                ? "border-primary/35 bg-primary/[0.05]"
+                                : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
+                              (targetProfilesLoading || targetProfiles.length === 0) && "cursor-not-allowed opacity-60",
+                            )}
+                            aria-expanded={targetProfileSelectorOpen}
+                          >
+                            <div className="flex min-w-0 items-center gap-3">
+                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border border-primary/14 bg-primary/8 text-primary">
+                                <FolderOpen className="h-4 w-4" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="truncate text-[13px] font-black text-on-surface">{selectedTargetProfileName}</div>
+                                <div className="mt-0.5 text-[11px] font-medium text-ui-muted/65">
+                                  {targetProfiles.length ? `${selectedTargetDirectoryCount} 个目录 · 共 ${targetProfiles.length} 个配置` : "还没有可用配置"}
+                                </div>
+                              </div>
+                            </div>
+                            <ChevronDown className={cn("h-4 w-4 shrink-0 text-ui-muted transition-transform", targetProfileSelectorOpen && "rotate-180 text-primary")} />
+                          </button>
+
+                          <div
+                            className={cn(
+                              "absolute left-0 right-0 top-[calc(100%+6px)] z-30 overflow-hidden rounded-[10px] border border-on-surface/10 bg-surface-container-lowest shadow-xl shadow-black/20 transition-[opacity,transform,max-height]",
+                              targetProfileSelectorOpen ? "max-h-[280px] translate-y-0 opacity-100" : "pointer-events-none max-h-0 -translate-y-1 opacity-0",
+                            )}
+                          >
+                            <div className="max-h-[280px] overflow-y-auto p-1.5 scrollbar-thin">
+                              {targetProfiles.map((profile) => {
+                                const profileDraft = targetProfileDrafts[profile.profile_id];
+                                const directoryCount = profileDraft?.directories.length ?? profile.directories.length;
+                                const selected = selectedTargetProfile?.profile_id === profile.profile_id;
+                                return (
+                                  <div
+                                    key={profile.profile_id}
+                                    className={cn(
+                                      "group flex items-center justify-between gap-1 rounded-[8px] px-1 py-1 transition-colors",
+                                      selected ? "bg-primary/10" : "hover:bg-on-surface/[0.04]"
+                                    )}
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedTargetProfileId(profile.profile_id);
+                                        setTargetProfileSelectorOpen(false);
+                                      }}
+                                      className="flex-1 min-w-0 px-2 py-1.5 text-left"
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        <div className="truncate text-[12.5px] font-black">{profileDraft?.name || profile.name}</div>
+                                        {selected ? <CheckCircle2 className="h-3 w-3 shrink-0 text-primary" /> : null}
+                                      </div>
+                                      <div className="mt-0.5 text-[10.5px] font-medium text-ui-muted/65">{directoryCount} 个目录</div>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setPendingDeleteTargetProfileId(profile.profile_id);
+                                      }}
+                                      className="h-8 w-8 shrink-0 flex items-center justify-center rounded-md text-on-surface/20 hover:bg-error/10 hover:text-error transition-all"
+                                      title="删除配置"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() => setCreatingTargetProfile((current) => !current)}
+                          disabled={targetProfilesLoading}
+                          className="min-h-[52px] px-5"
+                        >
+                          <FolderPlus className="mr-2 h-4 w-4" />
+                          新建配置
+                        </Button>
+                      </div>
+
+                      <AnimatePresence initial={false}>
+                        {creatingTargetProfile && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: "auto", opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            className="overflow-hidden"
+                          >
+                            <div className="grid gap-2 rounded-[10px] border border-primary/14 bg-primary/[0.035] p-3 xl:grid-cols-[minmax(0,1fr)_auto_auto]">
+                              <InputShell icon={FolderPlus}>
+                                <input
+                                  value={newTargetProfileName}
+                                  onChange={(event) => setNewTargetProfileName(event.target.value)}
+                                  className="w-full bg-transparent py-2 text-sm font-semibold text-on-surface outline-none"
+                                  placeholder="例如：下载目录的归档"
+                                  autoFocus
+                                />
+                              </InputShell>
+                              <Button type="button" variant="secondary" onClick={() => setCreatingTargetProfile(false)} disabled={targetProfilesLoading}>
+                                取消
+                              </Button>
+                              <Button type="button" onClick={() => void createTargetProfile()} disabled={targetProfilesLoading || !newTargetProfileName.trim()}>
+                                创建并切换
+                              </Button>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                    <div className="grid gap-3">
+                      {selectedTargetProfile ? (() => {
+                        const profile = selectedTargetProfile;
+                        const profileDraft = targetProfileDrafts[profile.profile_id] ?? {
+                          name: profile.name,
+                          directories: profile.directories,
+                          newPath: "",
+                          newLabel: "",
+                        };
+                        const dragActive = dragTargetProfileId === profile.profile_id;
+                        return (
+                          <div
+                            key={profile.profile_id}
+                            ref={(element) => {
+                              targetDropZoneRefs.current[profile.profile_id] = element;
+                            }}
+                            onDragOver={(event) => {
+                              event.preventDefault();
+                              setDragTargetProfileId(profile.profile_id);
+                            }}
+                            onDragLeave={() => setDragTargetProfileId((current) => (current === profile.profile_id ? null : current))}
+                            onDrop={(event) => {
+                              event.preventDefault();
+                              setDragTargetProfileId(null);
+                              addDirectoriesToTargetProfile(profile.profile_id, extractDroppedPaths(event));
+                            }}
+                            className={cn(
+                              "rounded-[12px] border px-4 py-3 transition-colors",
+                              dragActive
+                                ? "border-primary/45 bg-primary/[0.06]"
+                                : "border-on-surface/8 bg-surface-container-lowest",
+                            )}
+                          >
+                            <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto]">
+                              <FieldGroup label="当前配置名称">
+                                <input
+                                  value={profileDraft.name}
+                                  onChange={(event) => updateTargetProfileDraft(profile.profile_id, (current) => ({ ...current, name: event.target.value }))}
+                                  className="h-10 w-full rounded-[8px] border border-on-surface/8 bg-surface px-3 text-[13px] font-semibold text-on-surface outline-none focus:border-primary/40"
+                                  placeholder="配置名称"
+                                />
+                              </FieldGroup>
+                              <div className="flex items-end gap-2">
+                                <Button type="button" variant="ghost" onClick={() => void deleteTargetProfile(profile.profile_id)} disabled={targetProfilesLoading}>
+                                  删除配置
+                                </Button>
+                              </div>
+                            </div>
+                            <div className="mt-3 rounded-[8px] border border-dashed border-on-surface/10 bg-surface px-3 py-2 text-[11px] font-semibold text-ui-muted">
+                              拖入文件夹即可加入此配置
+                            </div>
+                            <div className="mt-3 grid gap-2">
+                              {profileDraft.directories.length ? profileDraft.directories.map((directory) => (
+                                <div key={directory.path} className="flex items-center justify-between gap-3 rounded-[8px] border border-on-surface/8 bg-surface px-3 py-2">
+                                  <div className="min-w-0">
+                                    <div className="truncate text-[12.5px] font-bold text-on-surface">{directory.label || directory.path.split(/[\\/]/).pop() || directory.path}</div>
+                                    <div className="truncate font-mono text-[10.5px] text-ui-muted/60" title={directory.path}>{directory.path}</div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeDirectoryFromTargetProfile(profile.profile_id, directory.path)}
+                                    disabled={targetProfilesLoading}
+                                    className="rounded-[6px] px-2 py-1 text-[11px] font-bold text-error transition-colors hover:bg-error/10 disabled:opacity-50"
+                                  >
+                                    移除
+                                  </button>
+                                </div>
+                              )) : (
+                                <div className="rounded-[8px] border border-dashed border-on-surface/10 bg-surface px-3 py-3 text-[12px] font-medium text-ui-muted">
+                                  这个配置还没有目录。
+                                </div>
+                              )}
+                            </div>
+                            <div className="mt-3 grid gap-2 xl:grid-cols-[minmax(0,1fr)_180px_auto]">
+                              <input
+                                value={profileDraft.newPath}
+                                onChange={(event) => updateTargetProfileDraft(profile.profile_id, (current) => ({ ...current, newPath: event.target.value }))}
+                                className="h-9 rounded-[8px] border border-on-surface/8 bg-surface px-3 font-mono text-[12px] text-on-surface outline-none focus:border-primary/40"
+                                placeholder="目标目录完整路径，例如 D:/archive/docs"
+                              />
+                              <input
+                                value={profileDraft.newLabel}
+                                onChange={(event) => updateTargetProfileDraft(profile.profile_id, (current) => ({ ...current, newLabel: event.target.value }))}
+                                className="h-9 rounded-[8px] border border-on-surface/8 bg-surface px-3 text-[12px] text-on-surface outline-none focus:border-primary/40"
+                                placeholder="标签（可选）"
+                              />
+                              <Button type="button" variant="secondary" onClick={() => addDirectoryToTargetProfile(profile.profile_id)} disabled={targetProfilesLoading || !profileDraft.newPath.trim()}>
+                                添加目录
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })() : (
+                        <div className="rounded-[12px] border border-dashed border-on-surface/10 bg-surface-container-lowest px-4 py-6 text-center text-[13px] font-medium text-ui-muted">
+                          还没有目标目录配置。新建一个配置后，在启动页选择“归入现有目录”即可复用。
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
               </SettingsSection>
             )}
 
@@ -1518,7 +2108,7 @@ export default function SettingsPage() {
                 </div>
               </SettingsSection>
             )}
-          </div>
+          </motion.div>
 
           <AnimatePresence>
             {isDirty && (
@@ -1526,14 +2116,17 @@ export default function SettingsPage() {
                 initial={{ y: 20, opacity: 0, x: "-50%" }}
                 animate={{ y: 0, opacity: 1, x: "-50%" }}
                 exit={{ y: 20, opacity: 0, x: "-50%" }}
-                className="fixed bottom-8 left-1/2 z-50 flex items-center gap-3 rounded-[12px] border border-primary/30 bg-surface/90 px-4 py-3 backdrop-blur-xl translate-x-[-50%]"
+                className={cn(
+                  "fixed bottom-8 z-50 flex items-center gap-3 rounded-[12px] border border-primary/30 bg-surface/90 px-4 py-3 backdrop-blur-xl",
+                  isCompactLayout ? "left-1/2" : "left-[calc(50%+130px)] 2xl:left-[calc(50%+150px)]",
+                )}
               >
                 <div className="mr-4 flex flex-col">
                   <span className="text-[11px] font-black uppercase tracking-wider text-primary">设置已修改</span>
                   <span className="text-[10px] font-medium text-on-surface/40">保存后生效至全局</span>
                 </div>
                 <div className="h-8 w-px bg-primary/10" />
-                <Button variant="secondary" onClick={() => hydrate(snapshot)} disabled={saving} className="h-9 px-4 text-[12.5px] font-bold">
+                <Button variant="secondary" onClick={discardChanges} disabled={saving} className="h-9 px-4 text-[12.5px] font-bold">
                   放弃修改
                 </Button>
                 <Button onClick={() => void handleSave()} loading={saving} disabled={saving} className="h-9 px-5 text-[12.5px] font-bold border border-primary/20 bg-primary active:bg-primary-dim">
@@ -1660,6 +2253,22 @@ export default function SettingsPage() {
           await performActivatePreset(dialog.family, dialog.presetId);
         }}
         onCancel={() => setSwitchPresetDialog(null)}
+      />
+      <ConfirmDialog
+        open={Boolean(pendingDeleteTargetProfileId)}
+        title="删除目标配置"
+        description="确定要删除这个目标目录配置吗？删除后将无法通过此配置快速归档文件。"
+        confirmLabel="确认删除"
+        cancelLabel="取消"
+        tone="danger"
+        loading={targetProfilesLoading}
+        onConfirm={async () => {
+          if (!pendingDeleteTargetProfileId) return;
+          const id = pendingDeleteTargetProfileId;
+          setPendingDeleteTargetProfileId(null);
+          await deleteTargetProfile(id);
+        }}
+        onCancel={() => setPendingDeleteTargetProfileId(null)}
       />
     </div>
   );

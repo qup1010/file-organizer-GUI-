@@ -30,6 +30,8 @@ PLAN_DIFF_TOOL_NAME = "submit_plan_diff"
 REPAIR_FINAL_PLAN_TOOL_NAME = "repair_commit_final_plan"
 MODEL_WAIT_MESSAGE = "正在等待模型回复..."
 SYNTHETIC_PLAN_REPLY = "我已经更新了整理计划，请您查看。"
+INTERNAL_ID_RE = re.compile(r"\b[FD]\d{3,}\b")
+INTERNAL_FIELD_RE = re.compile(r"\b(?:item_id|target_slot_id|target_slot|source_ref_id)\b", flags=re.I)
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +85,7 @@ def get_scan_content() -> str:
 
 def _build_initial_request_text(user_constraints: list[str] | None = None) -> str:
     lines = [
-        "请基于上述的目录扫描结果和整理规则，为我生成整理计划。简要聊聊你为何这样计划，以及你对此目录的理解和分析。"
+        "请基于上述的目录扫描结果和整理规则，为我生成整理计划。按系统要求的 Markdown 结构简要说明判断，不要在自然语言里暴露内部编号或字段名。"
     ]
     if user_constraints:
         lines.append("本次已确认的补充偏好：")
@@ -275,6 +277,16 @@ def _build_assistant_message(content: str, tool_calls=None, blocks: list[dict] |
     if blocks:
         message["blocks"] = list(blocks)
     return message
+
+
+def _sanitize_assistant_display_content(content: str) -> str:
+    text = str(content or "")
+    text = INTERNAL_ID_RE.sub("", text)
+    text = INTERNAL_FIELD_RE.sub("内部字段", text)
+    text = re.sub(r"[ \t]{2,}", " ", text)
+    text = re.sub(r"\(\s*\)", "", text)
+    text = re.sub(r"（\s*）", "", text)
+    return text.strip()
 
 def _build_tool_result_message(tool_call_id: str | None, name: str, content: dict) -> dict:
     return {
@@ -1175,15 +1187,11 @@ def build_command_retry_message(
             for item in (planning_context or {}).get("target_slots", [])
             if isinstance(item, dict) and str(item.get("slot_id") or "").strip()
         ]
-        blocked_root_dirs = [
-            str(item).strip()
-            for item in (planning_context or {}).get("root_directory_options", [])
-            if str(item).strip() and str(item).strip() not in target_directories
-        ]
         details.append("当前任务类型为“归入已有目录”的硬性限制：")
         details.append("- 禁止目录改名")
-        details.append("- 只能放入已选目标目录子树，或新建新的顶级目标目录")
-        details.append("- 禁止移动到未选中的既有顶级目录")
+        details.append("- 只能放入显式配置的目标目录，或放入 Review")
+        details.append("- 父目录不会自动授权子目录；子目录必须单独配置后才能作为目标")
+        details.append("- 禁止新建目标目录，禁止移动到未显式配置的目录")
         details.append("- 优先使用 target_slot 指向现有 D-ID")
         if target_directories:
             details.append("已选目标目录：")
@@ -1194,9 +1202,6 @@ def build_command_retry_message(
                 f"- {str(item.get('slot_id') or '').strip()} -> {str(item.get('relpath') or item.get('display_name') or '').strip()}"
                 for item in target_slots
             )
-        if blocked_root_dirs:
-            details.append("禁止使用的既有顶级目录：")
-            details.extend(f"- {item}" for item in blocked_root_dirs)
 
     if planner_items:
         translated = {
@@ -1271,16 +1276,12 @@ def _build_repair_messages(
             for item in (planning_context or {}).get("target_slots", [])
             if isinstance(item, dict) and str(item.get("slot_id") or "").strip()
         ]
-        blocked_root_dirs = [
-            str(item).strip()
-            for item in (planning_context or {}).get("root_directory_options", [])
-            if str(item).strip() and str(item).strip() not in target_directories
-        ]
         repair_prompt.append("“归入已有目录”任务的硬性限制：")
         repair_prompt.append("- 禁止目录改名")
-        repair_prompt.append("- 可以放入已选目标目录子树，也可以新建新的顶级目标目录")
-        repair_prompt.append("- 禁止把条目移动到未选中的既有顶级目录")
-        repair_prompt.append("- 优先使用 target_slot 指向已有 D-ID；只有新建目录时再直接提交 target_dir")
+        repair_prompt.append("- 只能放入显式配置的目标目录，或放入 Review")
+        repair_prompt.append("- 父目录不会自动授权子目录；子目录必须单独配置后才能作为目标")
+        repair_prompt.append("- 禁止新建目标目录，禁止移动到未显式配置的目录")
+        repair_prompt.append("- 优先使用 target_slot 指向已有 D-ID")
         if target_directories:
             repair_prompt.append("已选目标目录：")
             repair_prompt.extend(f"- {item}" for item in target_directories)
@@ -1290,9 +1291,6 @@ def _build_repair_messages(
                 f"- {str(item.get('slot_id') or '').strip()} -> {str(item.get('relpath') or item.get('display_name') or '').strip()}"
                 for item in target_slots
             )
-        if blocked_root_dirs:
-            repair_prompt.append("禁止使用的既有顶级目录：")
-            repair_prompt.extend(f"- {item}" for item in blocked_root_dirs)
     repair_prompt.append("最近一次失败原因：")
     repair_prompt.append(
         build_command_retry_message(
@@ -1531,6 +1529,7 @@ def run_organizer_cycle(
             final_plan=final_plan,
             event_handler=event_handler,
         )
+        content = _sanitize_assistant_display_content(content)
 
         assistant_display_message = _build_assistant_message(
             content,

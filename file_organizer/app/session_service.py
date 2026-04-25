@@ -401,11 +401,7 @@ class OrganizerSessionService:
                 if self._normalize_relpath(path)
             ]
 
-        max_depth = self._normalize_destination_index_depth(session.destination_index_depth)
-
         def walk(nodes: list[dict], depth: int) -> list[TargetSlot]:
-            if depth >= max_depth:
-                return []
             nonlocal next_number
             branch: list[TargetSlot] = []
             for node in nodes:
@@ -427,7 +423,7 @@ class OrganizerSessionService:
                     is_new=False,
                 )
                 next_number += 1
-                slot.children = walk(list(node.get("children") or []), depth + 1)
+                slot.children = []
                 slots.append(slot)
                 branch.append(slot)
             return branch
@@ -1291,11 +1287,10 @@ class OrganizerSessionService:
             **current_selection,
             "status": "ready",
             "target_directories": normalized_selected,
-            "target_directory_tree": self._explore_target_directories(
-                target_dir, 
-                normalized_selected, 
-                max_depth=self._normalize_destination_index_depth(session.destination_index_depth)
-            ),
+            "target_directory_tree": [
+                {"relpath": item, "name": Path(str(item)).name or item, "children": []}
+                for item in normalized_selected
+            ],
             "pending_items_count": len(pending_entries),
             "source_scan_completed": True,
         }
@@ -2148,6 +2143,12 @@ class OrganizerSessionService:
 
             self._clear_scan_recovery_state(session)
             if self._normalize_organize_mode(session.organize_mode) == "incremental":
+                if session.selected_target_directories:
+                    session.scan_lines = self._filter_incremental_pending_scan_lines(
+                        session.scan_lines,
+                        list(session.selected_target_directories),
+                    )
+                    all_entries = self._scan_entries(session.scan_lines)
                 session.pending_plan = self._pending_plan_payload(PendingPlan())
                 session.plan_snapshot = self._plan_snapshot_payload(
                     self._plan_snapshot(PendingPlan(), {}, scan_lines=session.scan_lines, session=session)
@@ -2168,11 +2169,10 @@ class OrganizerSessionService:
                         **self._incremental_selection_snapshot(session),
                         "status": "ready",
                         "target_directories": list(session.selected_target_directories),
-                        "target_directory_tree": self._explore_target_directories(
-                            Path(session.target_dir),
-                            list(session.selected_target_directories),
-                            max_depth=self._normalize_destination_index_depth(session.destination_index_depth)
-                        ),
+                        "target_directory_tree": [
+                            {"relpath": item, "name": Path(str(item)).name or item, "children": []}
+                            for item in session.selected_target_directories
+                        ],
                         "pending_items_count": len(all_entries),
                         "source_scan_completed": True,
                     }
@@ -2272,6 +2272,12 @@ class OrganizerSessionService:
             session.planning_schema_version = CURRENT_PLANNING_SCHEMA_VERSION
             self._clear_scan_recovery_state(session)
             if self._normalize_organize_mode(session.organize_mode) == "incremental":
+                if session.selected_target_directories:
+                    session.scan_lines = self._filter_incremental_pending_scan_lines(
+                        session.scan_lines,
+                        list(session.selected_target_directories),
+                    )
+                    all_entries = self._scan_entries(session.scan_lines)
                 session.pending_plan = self._pending_plan_payload(PendingPlan())
                 session.plan_snapshot = self._plan_snapshot_payload(
                     self._plan_snapshot(PendingPlan(), {}, scan_lines=session.scan_lines, session=session)
@@ -2290,11 +2296,10 @@ class OrganizerSessionService:
                         **self._incremental_selection_snapshot(session),
                         "status": "ready",
                         "target_directories": list(session.selected_target_directories),
-                        "target_directory_tree": self._explore_target_directories(
-                            Path(session.target_dir),
-                            list(session.selected_target_directories),
-                            max_depth=self._normalize_destination_index_depth(session.destination_index_depth)
-                        ),
+                        "target_directory_tree": [
+                            {"relpath": item, "name": Path(str(item)).name or item, "children": []}
+                            for item in session.selected_target_directories
+                        ],
                         "pending_items_count": len(all_entries),
                         "source_scan_completed": True,
                     }

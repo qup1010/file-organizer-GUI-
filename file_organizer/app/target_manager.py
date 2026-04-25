@@ -71,13 +71,18 @@ class TargetManager:
             for path in target_directories
             if self.helpers._normalize_relpath(path)
         }
+        selected_root_names = {
+            Path(path).name
+            for path in selected_roots
+            if Path(path).is_absolute() and Path(path).name
+        }
         filtered_lines: list[str] = []
         for line in (scan_lines or "").splitlines():
             source_relpath = self.helpers._normalize_relpath(line.split("|", 1)[0])
             if not source_relpath:
                 continue
             root_name = source_relpath.split("/", 1)[0]
-            if root_name in selected_roots:
+            if source_relpath in selected_roots or root_name in selected_roots or root_name in selected_root_names:
                 continue
             filtered_lines.append(line)
         return "\n".join(filtered_lines)

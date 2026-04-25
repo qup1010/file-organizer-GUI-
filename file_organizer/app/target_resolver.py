@@ -120,21 +120,7 @@ class TargetResolver:
             for path in (incremental_selection.get("target_directories") or [])
             if self.helpers._normalize_relpath(path)
         }
-        existing_roots = {
-            self.helpers._normalize_relpath(path)
-            for path in (incremental_selection.get("root_directory_options") or [])
-            if self.helpers._normalize_relpath(path)
-        }
-
-        def is_within(candidate: str, roots: set[str]) -> bool:
-            for root in roots:
-                if candidate == root or candidate.startswith(f"{root}/"):
-                    return True
-            return False
-
-        if is_within(normalized, selected_roots):
-            return True
-        return False
+        return normalized in selected_roots
 
     def normalized_target(
         self,

@@ -77,13 +77,7 @@ class PlanningConversationServiceTests(unittest.TestCase):
             "destination_index_depth": 2,
             "root_directory_options": ["Docs", "Inbox"],
             "target_directories": ["Docs"],
-            "target_directory_tree": [
-                {
-                    "relpath": "Docs",
-                    "name": "Docs",
-                    "children": [{"relpath": "Docs/Notes", "name": "Notes", "children": []}],
-                }
-            ],
+            "target_directory_tree": [{"relpath": "Docs", "name": "Docs", "children": []}],
             "pending_items_count": 1,
             "source_scan_completed": True,
         }
@@ -106,12 +100,12 @@ class PlanningConversationServiceTests(unittest.TestCase):
             session.session_id,
             item_id="md",
             target_dir=None,
-            target_slot="D002",
+            target_slot="D001",
             move_to_review=False,
         )
 
-        self.assertEqual(result.session_snapshot["plan_snapshot"]["items"][0]["target_slot_id"], "D002")
+        self.assertEqual(result.session_snapshot["plan_snapshot"]["items"][0]["target_slot_id"], "D001")
         reloaded = self.store.load(session.session_id)
         assert reloaded is not None
         self.assertIsInstance(reloaded.task_state, TaskState)
-        self.assertEqual(reloaded.task_state.mappings[0].target_slot_id, "D002")
+        self.assertEqual(reloaded.task_state.mappings[0].target_slot_id, "D001")

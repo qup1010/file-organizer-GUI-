@@ -93,13 +93,12 @@ export function IconWorkbenchFolderList({
             animate={{ opacity: 1, y: 0 }}
             className="flex flex-col items-center justify-center py-20 px-6 text-center"
           >
-            {/* 视觉图形组 */}
-            <div className="relative mb-8 flex h-24 w-24 items-center justify-center">
-              <div className="absolute inset-0 rounded-[28px] border border-on-surface/5 bg-on-surface/[0.02]" />
-              <div className="relative flex h-20 w-20 items-center justify-center rounded-[20px] border border-on-surface/8 bg-surface-container-lowest">
-                <FolderOpen className="h-9 w-9 text-on-surface/10" />
-                <div className="absolute -right-1 -top-1 flex h-8 w-8 items-center justify-center rounded-xl border border-primary/20 bg-primary/8 text-primary">
-                  <Sparkles className="h-4.5 w-4.5" />
+            {/* 视觉图形组：更简约的单层风格 */}
+            <div className="relative mb-6 flex h-20 w-20 items-center justify-center">
+              <div className="relative flex h-20 w-20 items-center justify-center rounded-[22px] border border-on-surface/8 bg-surface-container-lowest shadow-sm">
+                <FolderOpen className="h-8 w-8 text-on-surface/10" />
+                <div className="absolute -right-0.5 -top-0.5 flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Sparkles className="h-3.5 w-3.5" />
                 </div>
               </div>
             </div>

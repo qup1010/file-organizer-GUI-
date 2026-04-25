@@ -27,6 +27,7 @@ export interface ScannerProgressViewModel {
   isIndeterminate: boolean;
   recentCompletedItems: RecentAnalysisItem[];
   recentObservedItems: RecentAnalysisItem[];
+  scanLogItems: RecentAnalysisItem[];
   steps: ScannerDisplayStep[];
 }
 
@@ -94,6 +95,7 @@ export function deriveScannerProgressViewModel(
   const isAborted = status === "failed" || status === "interrupted" || status === "cancelled";
   const recentObservedItems = uniqueRecentItems(scanner.recent_analysis_items || []).slice(0, 4);
   const recentCompletedItems = recentObservedItems.filter(isCompletedItem).slice(0, 4);
+  const scanLogItems = (recentCompletedItems.length > 0 ? recentCompletedItems : recentObservedItems).slice(0, 5);
 
   let eyebrow = "扫描进行中";
   let title = "正在读取目录结构";
@@ -204,6 +206,7 @@ export function deriveScannerProgressViewModel(
     isIndeterminate,
     recentCompletedItems,
     recentObservedItems,
+    scanLogItems,
     steps: progressSteps,
   };
 }

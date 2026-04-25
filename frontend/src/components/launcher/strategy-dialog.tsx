@@ -29,7 +29,6 @@ export function StrategyDialog({
   onChangePrefixStyle,
   onChangeCaution,
   onChangeOrganizeMode,
-  onChangeDestinationIndexDepth,
   onChangeNote,
 }: {
   open: boolean;
@@ -45,7 +44,6 @@ export function StrategyDialog({
   onChangePrefixStyle: (id: SessionStrategySelection["prefix_style"]) => void;
   onChangeCaution: (id: SessionStrategySelection["caution_level"]) => void;
   onChangeOrganizeMode: (mode: SessionStrategySelection["organize_mode"]) => void;
-  onChangeDestinationIndexDepth: (depth: SessionStrategySelection["destination_index_depth"]) => void;
   onChangeNote: (value: string) => void;
 }) {
   const isIncremental = strategy.organize_mode === "incremental";
@@ -85,7 +83,7 @@ export function StrategyDialog({
                   <h2 className="text-[1.1rem] font-black tracking-tight text-on-surface">补充本轮整理策略</h2>
                   <p className="max-w-2xl text-[12px] leading-relaxed text-ui-muted">
                     {isIncremental
-                      ? "确认目标目录导向规则和目标目录可见深度，随后进入扫描与规划。"
+                      ? "确认本轮将使用显式目标目录配置，随后进入扫描与规划。"
                       : "完成模板、命名和整理偏好设置，随后进入 AI 扫描分析。"}
                   </p>
                 </div>
@@ -157,14 +155,14 @@ export function StrategyDialog({
                       ) : (
                         <>
                           <span className="rounded-full border border-primary/12 bg-primary/8 px-2.5 py-0.5 text-[11px] font-bold text-primary">{summary.organize_mode_label}</span>
-                          <span className="rounded-full border border-on-surface/8 bg-surface px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant/70">目标目录深度 {summary.destination_index_depth}</span>
+                          <span className="rounded-full border border-on-surface/8 bg-surface px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant/70">显式目标目录</span>
                           <span className="rounded-full border border-on-surface/8 bg-surface px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant/70">{summary.caution_level_label}</span>
                         </>
                       )}
                     </div>
                     <p className="mt-2.5 text-[13px] leading-relaxed text-ui-muted">
                       {isIncremental
-                        ? "本模式会先让你选择目标目录，再把剩余根级条目作为待整理项进行规划。优先复用已有目录结构，但必要时仍可创建新的顶级目录。"
+                        ? "本模式只会使用你显式选择或手动添加的目标目录；拿不准的项目会进入 Review，不会自动创建未知目标目录。"
                         : currentTemplate.description}
                     </p>
 
@@ -185,9 +183,9 @@ export function StrategyDialog({
                         <div className="mt-2.5 flex flex-wrap gap-1.5">
                           {[
                             "先选择目标目录",
-                            "只处理未纳入目标池的根级条目",
-                            "优先归入已有目标目录",
-                            "必要时可新建顶级目录",
+                            "每个目录单独授权",
+                            "只归入显式目标目录",
+                            "拿不准进入 Review",
                           ].map((rule) => (
                             <span key={rule} className="rounded-[4px] border border-on-surface/8 bg-surface-container-lowest px-2 py-0.5 text-[11px] font-semibold text-on-surface">
                               {rule}
@@ -211,7 +209,7 @@ export function StrategyDialog({
                           {
                             id: "incremental" as const,
                             label: "归入已有目录",
-                            description: "先选目标目录，再整理剩余根级条目。",
+                            description: "使用显式配置的目标目录，不自动扩展子目录。",
                           },
                         ].map((option) => {
                           const active = strategy.organize_mode === option.id;
@@ -235,28 +233,6 @@ export function StrategyDialog({
                           );
                         })}
                       </div>
-                      {strategy.organize_mode === "incremental" && (
-                        <div className="mt-3 grid gap-2 md:grid-cols-3">
-                          {[1, 2, 3].map((depth) => {
-                            const active = strategy.destination_index_depth === depth;
-                            return (
-                              <button
-                                key={depth}
-                                type="button"
-                                onClick={() => onChangeDestinationIndexDepth(depth as SessionStrategySelection["destination_index_depth"])}
-                                disabled={loading}
-                                className={cn(
-                                  "rounded-[8px] border px-3 py-2 text-left transition-all disabled:opacity-50",
-                                  active ? "border-primary/25 bg-primary/10" : "border-on-surface/8 bg-surface-container-lowest hover:border-primary/20 hover:bg-surface-container-low",
-                                )}
-                              >
-                                <p className={cn("text-[12px] font-bold", active ? "text-primary" : "text-on-surface")}>目标目录深度 {depth}</p>
-                                <p className="mt-0.5 text-[11px] leading-[1.5] text-ui-muted/80">读取已有目录结构到第 {depth} 层。</p>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
                     </div>
 
                     {!isIncremental ? (
@@ -413,7 +389,7 @@ export function StrategyDialog({
                   ) : (
                     <>
                       <span className="rounded-full border border-primary/12 bg-primary/8 px-2.5 py-0.5 text-[11px] font-bold text-primary">{summary.organize_mode_label}</span>
-                      <span className="rounded-full border border-on-surface/8 bg-surface-container-lowest px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant">目标目录深度 {summary.destination_index_depth}</span>
+                      <span className="rounded-full border border-on-surface/8 bg-surface-container-lowest px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant">显式目标目录</span>
                       <span className="rounded-full border border-on-surface/8 bg-surface-container-lowest px-2.5 py-0.5 text-[11px] font-medium text-on-surface-variant">{summary.caution_level_label}</span>
                     </>
                   )}

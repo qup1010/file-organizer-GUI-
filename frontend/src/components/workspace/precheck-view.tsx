@@ -207,7 +207,7 @@ export function PrecheckView({
                                     const slot = move.target_slot_id ? targetSlotById.get(move.target_slot_id) : null;
                                     const slotLabel = move.target_slot_id === "Review"
                                         ? "待确认区"
-                                        : slot?.display_name || move.target_slot_id;
+                                        : slot?.display_name || "";
                                     const isReview = (move.target || "").split(/[\\/]/).some((part) => part.toLowerCase() === "review");
                                     
                                     return (
@@ -237,9 +237,6 @@ export function PrecheckView({
                                                         )}
                                                     </div>
                                                     <div className="mt-1 flex items-center gap-1.5 opacity-50">
-                                                        <span className="rounded-[2px] bg-on-surface/10 px-1 py-0.5 font-mono text-[8px] font-bold text-ui-muted">
-                                                            ID: {move.item_id}
-                                                        </span>
                                                         {slotLabel && (
                                                             <span className={cn(
                                                                 "rounded-[2px] px-1 py-0.5 text-[8px] font-black tracking-widest uppercase border",
