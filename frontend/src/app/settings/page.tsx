@@ -69,7 +69,7 @@ import type {
   TextSettingsPreset,
   VisionSettingsPreset,
 } from "@/types/settings";
-import type { TargetProfile, TargetProfileDirectory } from "@/types/session";
+import type { OrganizeMethod, TargetProfile, TargetProfileDirectory } from "@/types/session";
 
 type SecretDraft = {
   action: SecretAction;
@@ -292,7 +292,7 @@ export default function SettingsPage() {
     icon: typeof SettingsIcon;
   }> = [
     { id: "strategy", label: "启动策略", description: "模板、语言、粒度", icon: SlidersHorizontal },
-    { id: "placement", label: "放置规则", description: "新目录与 Review", icon: FolderOpen },
+    { id: "placement", label: "放置规则", description: "新目录与待确认区", icon: FolderOpen },
     { id: "targets", label: "目标目录", description: "归档目录池", icon: FolderPlus },
   ];
 
@@ -521,6 +521,14 @@ export default function SettingsPage() {
   }, []);
 
   const launchTemplate = getTemplateMeta(draft?.global_config.LAUNCH_DEFAULT_TEMPLATE_ID ?? "general_downloads");
+  const launchDefaultOrganizeMethod = (
+    draft?.global_config.LAUNCH_DEFAULT_ORGANIZE_METHOD === "assign_into_existing_categories"
+      ? "assign_into_existing_categories"
+      : "categorize_into_new_structure"
+  ) satisfies OrganizeMethod;
+  const launchDefaultTargetProfileId = String(draft?.global_config.LAUNCH_DEFAULT_TARGET_PROFILE_ID ?? "");
+  const launchDefaultTargetProfile = targetProfiles.find((profile) => profile.profile_id === launchDefaultTargetProfileId) ?? null;
+  const launchDefaultOrganizeMode = launchDefaultOrganizeMethod === "assign_into_existing_categories" ? "incremental" : "initial";
   const launchReviewFollowsNewRoot = draft?.global_config.LAUNCH_REVIEW_FOLLOWS_NEW_ROOT !== false;
   const launchDefaultNewDirectoryRoot = String(draft?.global_config.LAUNCH_DEFAULT_NEW_DIRECTORY_ROOT ?? "");
   const launchDefaultReviewRoot = String(draft?.global_config.LAUNCH_DEFAULT_REVIEW_ROOT ?? "");
@@ -529,8 +537,10 @@ export default function SettingsPage() {
     : "新目录生成位置/Review";
   const launchStrategyPreview = buildStrategySummary({
     template_id: draft?.global_config.LAUNCH_DEFAULT_TEMPLATE_ID ?? "general_downloads",
-    organize_mode: "initial",
-    task_type: "organize_full_directory",
+    organize_mode: launchDefaultOrganizeMode,
+    task_type: launchDefaultOrganizeMethod === "assign_into_existing_categories" ? "organize_into_existing" : "organize_full_directory",
+    organize_method: launchDefaultOrganizeMethod,
+    target_profile_id: launchDefaultTargetProfileId || undefined,
     destination_index_depth: 2,
     language: draft?.global_config.LAUNCH_DEFAULT_LANGUAGE ?? "zh",
     density: draft?.global_config.LAUNCH_DEFAULT_DENSITY ?? "normal",
@@ -697,6 +707,9 @@ export default function SettingsPage() {
     try {
       await api.deleteTargetProfile(profileId);
       setSelectedTargetProfileId((current) => (current === profileId ? "" : current));
+      if (draft?.global_config.LAUNCH_DEFAULT_TARGET_PROFILE_ID === profileId) {
+        updateGlobal("LAUNCH_DEFAULT_TARGET_PROFILE_ID", "");
+      }
       await loadTargetProfiles();
       setSuccess("目标目录配置已删除");
     } catch (err) {
@@ -1506,7 +1519,7 @@ export default function SettingsPage() {
                           }}
                           onBlur={commitAnalysisConcurrencyInput}
                           className="w-full bg-transparent py-2 text-sm font-semibold text-on-surface outline-none"
-                          placeholder="1"
+                          placeholder="2"
                           inputMode="numeric"
                         />
                       </InputShell>
@@ -1530,7 +1543,7 @@ export default function SettingsPage() {
                     </FieldGroup>
                     <FieldGroup label="保存方式" className="xl:col-span-2">
                       <div className="grid gap-3 md:grid-cols-2">
-                        <StrategyOptionButton active={draft.icon_image.save_mode === "centralized"} label="集中保存" onClick={() => updateDraft("icon_image", (current) => ({ ...current, save_mode: "centralized" }))} description="图标资源集中写入统一目录，便于管理版本与回看。" />
+                        <StrategyOptionButton active={draft.icon_image.save_mode === "centralized"} label="集中保存" onClick={() => updateDraft("icon_image", (current) => ({ ...current, save_mode: "centralized" }))} description="应用后的 .ico 写入 %APPDATA%/FileOrganizer/managed_icons；预览 PNG 仍保存在项目 output/icon_workbench/previews。" />
                         <StrategyOptionButton active={draft.icon_image.save_mode === "in_folder"} label="就地保存" onClick={() => updateDraft("icon_image", (current) => ({ ...current, save_mode: "in_folder" }))} description="处理后资源靠近目标文件夹，适合边做边核对。" />
                       </div>
                     </FieldGroup>
@@ -1685,12 +1698,29 @@ export default function SettingsPage() {
                     <div className="rounded-[12px] border border-on-surface/8 bg-surface px-4 py-4">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="rounded-full border border-primary/12 bg-primary/8 px-3 py-1 text-[12px] font-semibold text-primary">{launchTemplate.label}</span>
+                        <span className="rounded-full border border-primary/12 bg-primary/8 px-3 py-1 text-[12px] font-semibold text-primary">{launchStrategyPreview.organize_mode_label}</span>
                         <span className="rounded-full border border-on-surface/8 bg-surface-container-low px-3 py-1 text-[12px] font-medium text-on-surface-variant">{launchStrategyPreview.language_label}</span>
                         <span className="rounded-full border border-on-surface/8 bg-surface-container-low px-3 py-1 text-[12px] font-medium text-on-surface-variant">{launchStrategyPreview.density_label}</span>
                         <span className="rounded-full border border-on-surface/8 bg-surface-container-low px-3 py-1 text-[12px] font-medium text-on-surface-variant">{launchStrategyPreview.prefix_style_label}</span>
                         <span className="rounded-full border border-on-surface/8 bg-surface-container-low px-3 py-1 text-[12px] font-medium text-on-surface-variant">{launchStrategyPreview.caution_level_label}</span>
                       </div>
                     </div>
+                    <FieldGroup label="默认整理方式">
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <StrategyOptionButton
+                          active={launchDefaultOrganizeMethod === "categorize_into_new_structure"}
+                          label="生成新的分类结构"
+                          description="默认让 AI 为这批内容生成一套新目录，再写入新目录生成位置。"
+                          onClick={() => updateGlobal("LAUNCH_DEFAULT_ORGANIZE_METHOD", "categorize_into_new_structure")}
+                        />
+                        <StrategyOptionButton
+                          active={launchDefaultOrganizeMethod === "assign_into_existing_categories"}
+                          label="归入已有目录"
+                          description="默认把内容归入已保存的目标目录配置；拿不准的项目进入待确认区（不会自动归入目标目录）。"
+                          onClick={() => updateGlobal("LAUNCH_DEFAULT_ORGANIZE_METHOD", "assign_into_existing_categories")}
+                        />
+                      </div>
+                    </FieldGroup>
                     <FieldGroup label="默认模板">
                       <div className="grid gap-2 xl:grid-cols-2">
                         {STRATEGY_TEMPLATES.map((template) => (
@@ -1716,7 +1746,7 @@ export default function SettingsPage() {
                         { label: "目录语言", key: "LAUNCH_DEFAULT_LANGUAGE", options: LANGUAGE_OPTIONS },
                         { label: "分类粒度", key: "LAUNCH_DEFAULT_DENSITY", options: DENSITY_OPTIONS },
                         { label: "目录前缀", key: "LAUNCH_DEFAULT_PREFIX_STYLE", options: PREFIX_STYLE_OPTIONS },
-                        { label: "整理方式", key: "LAUNCH_DEFAULT_CAUTION_LEVEL", options: CAUTION_LEVEL_OPTIONS },
+                        { label: "归档倾向", key: "LAUNCH_DEFAULT_CAUTION_LEVEL", options: CAUTION_LEVEL_OPTIONS },
                       ].map((group) => (
                         <FieldGroup key={group.key} label={group.label}>
                           <div className="grid gap-1.5">
@@ -1747,7 +1777,7 @@ export default function SettingsPage() {
                         value={draft.global_config.LAUNCH_DEFAULT_NOTE ?? ""}
                         onChange={(event) => updateGlobal("LAUNCH_DEFAULT_NOTE", event.target.value.slice(0, 200))}
                         className="min-h-24 w-full resize-none rounded-[10px] border border-on-surface/8 bg-surface-container-lowest px-4 py-3 text-[13px] leading-6 text-on-surface outline-none transition-all placeholder:text-on-surface-variant/35 focus:border-primary focus:ring-4 focus:ring-primary/5"
-                        placeholder="例如：拿不准的先放待确认区（Review），课程资料尽量按学期整理。"
+                        placeholder="例如：拿不准的先放待确认区，课程资料尽量按学期整理。"
                       />
                     </FieldGroup>
                   </div>
@@ -1774,7 +1804,7 @@ export default function SettingsPage() {
                           </InputShell>
                         </FieldGroup>
                         <FieldGroup
-                          label="默认待确认区（Review）位置"
+                          label="默认待确认区位置"
                           hint={
                             launchReviewFollowsNewRoot
                               ? `当前会自动跟随新目录位置，默认使用 ${launchDerivedReviewRoot}。`
@@ -1797,7 +1827,7 @@ export default function SettingsPage() {
                           <div>
                             <h3 className="text-[13px] font-semibold text-on-surface">待确认区跟随新目录位置</h3>
                             <p className="mt-1 text-[12px] leading-5 text-on-surface-variant/65">
-                              开启后，Review 默认派生为 `新目录生成位置/Review`。
+                              开启后，待确认区默认派生为 `新目录生成位置/Review`。它只作为暂存落点，不会再自动拆分子目录。
                             </p>
                           </div>
                           <ToggleSwitch
@@ -1831,6 +1861,34 @@ export default function SettingsPage() {
                       {targetProfilesLoading ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : null}
                     </div>
                     <div className="mb-4 space-y-3">
+                      <div className="rounded-[10px] border border-primary/12 bg-primary/[0.035] px-4 py-3">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <h3 className="text-[12.5px] font-black text-on-surface">默认目标目录配置</h3>
+                            <p className="mt-1 text-[11.5px] font-medium leading-5 text-ui-muted/70">
+                              当“默认整理方式”为“归入已有目录”时，首页会优先选中这组目录。
+                            </p>
+                          </div>
+                          <select
+                            value={launchDefaultTargetProfileId}
+                            onChange={(event) => updateGlobal("LAUNCH_DEFAULT_TARGET_PROFILE_ID", event.target.value)}
+                            disabled={targetProfilesLoading || targetProfiles.length === 0}
+                            className="h-9 min-w-[220px] rounded-[8px] border border-on-surface/8 bg-surface px-3 text-[12px] font-semibold text-on-surface outline-none transition-colors focus:border-primary/40 disabled:opacity-60"
+                          >
+                            <option value="">不指定默认配置</option>
+                            {targetProfiles.map((profile) => (
+                              <option key={profile.profile_id} value={profile.profile_id}>
+                                {profile.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        {launchDefaultTargetProfile ? (
+                          <p className="mt-2 text-[11px] font-medium text-primary/70">
+                            当前默认：{launchDefaultTargetProfile.name} · {launchDefaultTargetProfile.directories.length} 个目录
+                          </p>
+                        ) : null}
+                      </div>
                       <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto]">
                         <div ref={targetProfileSelectorRef} className="relative">
                           <button

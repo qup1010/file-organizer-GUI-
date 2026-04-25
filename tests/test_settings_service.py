@@ -63,7 +63,7 @@ class SettingsServiceTests(unittest.TestCase):
         self.assertEqual(saved["icon_image_presets"]["default"]["image_model"]["api_key"], "image-secret")
         self.assertNotIn("OPENAI_API_KEY", saved["icon_image_presets"]["default"])
         self.assertEqual(runtime_icon["text_model"]["api_key"], "text-secret")
-        self.assertEqual(runtime_icon["analysis_concurrency_limit"], 1)
+        self.assertEqual(runtime_icon["analysis_concurrency_limit"], 2)
         self.assertEqual(runtime_icon["image_concurrency_limit"], 1)
 
     def test_public_snapshot_never_exposes_plaintext_secrets(self):
@@ -73,6 +73,10 @@ class SettingsServiceTests(unittest.TestCase):
         )
         service.update_settings(
             {
+                "global_config": {
+                    "LAUNCH_DEFAULT_ORGANIZE_METHOD": "assign_into_existing_categories",
+                    "LAUNCH_DEFAULT_TARGET_PROFILE_ID": "profile-work",
+                },
                 "families": {
                     "text": {
                         "preset": {
@@ -109,6 +113,8 @@ class SettingsServiceTests(unittest.TestCase):
         self.assertNotIn("text-secret", serialized)
         self.assertNotIn("vision-secret", serialized)
         self.assertNotIn("image-secret", serialized)
+        self.assertEqual(snapshot["global_config"]["LAUNCH_DEFAULT_ORGANIZE_METHOD"], "assign_into_existing_categories")
+        self.assertEqual(snapshot["global_config"]["LAUNCH_DEFAULT_TARGET_PROFILE_ID"], "profile-work")
         self.assertEqual(snapshot["families"]["text"]["active_preset"]["secret_state"], "stored")
         self.assertEqual(snapshot["families"]["vision"]["active_preset"]["secret_state"], "stored")
         self.assertEqual(snapshot["families"]["icon_image"]["active_preset"]["image_model"]["secret_state"], "stored")

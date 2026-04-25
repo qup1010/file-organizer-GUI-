@@ -482,13 +482,13 @@ export function SessionLauncherShell() {
     }
     if (isAssignExisting && !effectiveNewDirectoryRoot) {
       return mode === "direct"
-        ? "当前默认整理方式是“归入现有目录”，但缺少待确认区（Review）的默认推导根。请先到设置补全默认放置规则。"
-        : "归入现有目录时，需要一个默认放置根来推导待确认区（Review），但不会用它自动创建未知目标目录。";
+        ? "当前默认整理方式是“归入现有目录”，但缺少待确认区的默认推导根。请先到设置补全默认放置规则。"
+        : "归入现有目录时，需要一个默认放置根来推导待确认区（不会自动归入目标目录），但不会用它自动创建未知目标目录。";
     }
     if (!effectiveReviewRoot) {
       return mode === "direct"
-        ? "当前默认配置没有可用的待确认区（Review）位置。请先到设置补全默认放置规则。"
-        : "当前任务没有可用的待确认区（Review）位置。";
+        ? "当前默认配置没有可用的待确认区位置。请先到设置补全默认放置规则。"
+        : "当前任务没有可用的待确认区位置。";
     }
     return null;
   }, [
@@ -574,6 +574,16 @@ export function SessionLauncherShell() {
       cancelled = true;
     };
   }, [apiBaseUrl]);
+
+  useEffect(() => {
+    const defaultProfileId = String(launchConfig?.LAUNCH_DEFAULT_TARGET_PROFILE_ID || "").trim();
+    if (!defaultProfileId || selectedTargetProfileId) {
+      return;
+    }
+    if (targetProfiles.some((profile) => profile.profile_id === defaultProfileId)) {
+      setSelectedTargetProfileId(defaultProfileId);
+    }
+  }, [launchConfig?.LAUNCH_DEFAULT_TARGET_PROFILE_ID, selectedTargetProfileId, targetProfiles]);
 
   function updateStrategy(updater: (previous: SessionStrategySelection) => SessionStrategySelection) {
     setStrategy((previous) => updater(previous));
@@ -661,7 +671,7 @@ export function SessionLauncherShell() {
         void resolveNativeDroppedSources(payload.paths).then((droppedSources) => {
           if (cancelled) return;
           if (!droppedSources.length) {
-            setError("当前环境暂时无法从拖拽内容里读取本地绝对路径。你可以改用“添加文件夹本身”“添加文件”或手动输入路径。");
+            setError("当前环境暂时无法从拖拽内容里读取本地绝对路径。你可以改用“把文件夹当作一个项目移动”“添加文件”或手动输入路径。");
             return;
           }
           addSources(droppedSources);
@@ -752,7 +762,7 @@ export function SessionLauncherShell() {
     setSourceFeedback(null);
 
     if (!isTauriDesktop()) {
-      setError("当前环境还不能直接读取文件夹内容。请在桌面端使用“导入文件夹下所有项”。");
+      setError("当前环境还不能直接读取文件夹内容。请在桌面端使用“整理文件夹里的内容”。");
       return;
     }
 
@@ -1110,6 +1120,7 @@ export function SessionLauncherShell() {
       const response = await createLaunchSession(api, launchRequest);
       if (response.mode === "resume_available" && response.restorable_session?.session_id) {
         setLaunchTransitionOpen(false);
+        setLoading(false);
         setResumePrompt({
           sessionId: response.restorable_session.session_id,
           snapshot: response.restorable_session,
@@ -1127,7 +1138,7 @@ export function SessionLauncherShell() {
         setError(err instanceof Error ? err.message : "创建会话或启动扫描失败，请再试一次。");
       }
     } finally {
-      if (!resumePrompt) setLoading(false);
+      setLoading(false);
     }
   }
 
@@ -1161,12 +1172,20 @@ export function SessionLauncherShell() {
       handleReadOnlyView();
       return;
     }
-    router.push(`/workspace?session_id=${resumePrompt.sessionId}&dir=${encodeURIComponent(resumePrompt.launch.display_path || firstSourcePath(resumePrompt.launch.sources))}`);
+    const dir = resumePrompt.launch.display_path || firstSourcePath(resumePrompt.launch.sources);
+    setResumePrompt(null);
+    setLaunchTransitionOpen(false);
+    setLoading(false);
+    router.push(`/workspace?session_id=${resumePrompt.sessionId}&dir=${encodeURIComponent(dir)}`);
   }
 
   function handleReadOnlyView() {
     if (!resumePrompt) return;
-    router.push(`/workspace?session_id=${resumePrompt.sessionId}&dir=${encodeURIComponent(resumePrompt.launch.display_path || firstSourcePath(resumePrompt.launch.sources))}&readonly=1`);
+    const dir = resumePrompt.launch.display_path || firstSourcePath(resumePrompt.launch.sources);
+    setResumePrompt(null);
+    setLaunchTransitionOpen(false);
+    setLoading(false);
+    router.push(`/workspace?session_id=${resumePrompt.sessionId}&dir=${encodeURIComponent(dir)}&readonly=1`);
   }
 
   function handleCancelResume() {
@@ -1180,7 +1199,7 @@ export function SessionLauncherShell() {
     setIsDropActive(false);
     const droppedSources = extractDroppedSources(event.dataTransfer);
     if (!droppedSources.length) {
-        setError("当前环境暂时无法从拖拽内容里读取本地绝对路径。你可以改用“添加文件夹本身”“添加文件”或手动输入路径。");
+        setError("当前环境暂时无法从拖拽内容里读取本地绝对路径。你可以改用“把文件夹当作一个项目移动”“添加文件”或手动输入路径。");
       return;
     }
       addSources(droppedSources);
@@ -1427,18 +1446,21 @@ export function SessionLauncherShell() {
                                 disabled={loading} 
                                 className="h-11 rounded-[8px] px-8 text-[14px] font-black border border-primary/20 bg-primary active:scale-95 transition-all"
                               >
-                                导入文件夹下所有项 <Layers3 className="ml-2 h-4 w-4" />
+                                整理文件夹里的内容 <Layers3 className="ml-2 h-4 w-4" />
                               </Button>
                             ) : null}
                             
                             <div className="flex flex-wrap justify-center gap-3">
                               <Button variant="secondary" onClick={() => void handleChooseDirectories()} disabled={loading} className="h-9 rounded-[6px] border border-on-surface/8 bg-surface px-5 text-[12px] font-bold text-on-surface/70 hover:bg-on-surface/[0.04] hover:text-on-surface active:scale-95 transition-all">
-                                添加文件夹本身
+                                把文件夹当作一个项目移动
                               </Button>
                               <Button variant="secondary" onClick={() => void handleChooseFiles()} disabled={loading} className="h-9 rounded-[6px] border border-on-surface/8 bg-surface px-5 text-[12px] font-bold text-on-surface/70 hover:bg-on-surface/[0.04] hover:text-on-surface active:scale-95 transition-all">
                                 添加文件
                               </Button>
                             </div>
+                            <p className="max-w-lg text-[11px] font-medium leading-5 text-ui-muted/55">
+                              不确定选哪个时，通常选择“整理文件夹里的内容”；只有想保持整个文件夹不拆开时，才把文件夹当作一个项目移动。
+                            </p>
                           </div>
                         
                         
@@ -1566,11 +1588,11 @@ export function SessionLauncherShell() {
                                   onClick={() => void handleImportDirectoryEntries()}
                                   className="rounded-[8px] bg-primary/8 px-3 py-1.5 text-[12px] font-black text-primary hover:bg-primary/12"
                                 >
-                                  导入文件夹下所有项
+                                  整理文件夹里的内容
                                 </button>
                               ) : null}
                               <div className="flex flex-wrap items-center justify-center gap-2 text-[12px] font-bold text-on-surface/55">
-                                <button type="button" onClick={() => void handleChooseDirectories()} className="rounded-[6px] px-2.5 py-1 text-on-surface/65 hover:bg-on-surface/[0.04] hover:text-on-surface">添加文件夹本身</button>
+                                <button type="button" onClick={() => void handleChooseDirectories()} className="rounded-[6px] px-2.5 py-1 text-on-surface/65 hover:bg-on-surface/[0.04] hover:text-on-surface">把文件夹当作一个项目移动</button>
                                 <span className="opacity-20">/</span>
                                 <button type="button" onClick={() => void handleChooseFiles()} className="rounded-[6px] px-2.5 py-1 text-on-surface/65 hover:bg-on-surface/[0.04] hover:text-on-surface">添加文件</button>
                               </div>
@@ -1646,7 +1668,7 @@ export function SessionLauncherShell() {
                           {
                             method: "assign_into_existing_categories" as const,
                             title: "归入现有目录",
-                            description: "把这批内容归入你已经选定的现有目录池；拿不准的项目会进入待确认区，不会自动投递到未知新目录。",
+                            description: "把这批内容归入你已经选定的现有目录池；拿不准的项目会进入待确认区（不会自动归入目标目录）。",
                           },
                           {
                             method: "categorize_into_new_structure" as const,
@@ -1705,7 +1727,7 @@ export function SessionLauncherShell() {
                             <div className="break-all text-[12px] font-medium text-ui-muted">{effectiveNewDirectoryRoot || "尚未确定"}</div>
                           </div>
                           <div className="rounded-[8px] bg-surface-container-lowest px-3 py-3">
-                            <div className="mb-1 text-[11px] font-bold text-on-surface">待确认区将默认保存到</div>
+                            <div className="mb-1 text-[11px] font-bold text-on-surface">待确认区（不会自动归入目标目录）</div>
                             <div className="break-all text-[12px] font-medium text-ui-muted">{effectiveReviewRoot || "尚未确定"}</div>
                           </div>
                         </div>
@@ -1734,13 +1756,13 @@ export function SessionLauncherShell() {
                               </div>
                               <p className="mt-2 text-[11px] font-medium text-ui-muted">
                                 {isAssignExisting
-                                  ? "归入已有目录不会自动创建未知目标目录；这个位置只用于推导待确认区（Review）的默认跟随路径。留空时会先使用设置页默认值；如果设置页也为空，就按当前任务类型自动推导。"
+                                  ? "归入已有目录不会自动创建未知目标目录；这个位置只用于推导待确认区（不会自动归入目标目录）的默认跟随路径。留空时会先使用设置页默认值；如果设置页也为空，就按当前任务类型自动推导。"
                                   : "留空时会先使用设置页默认值；如果设置页也为空，就按当前任务类型自动推导。"}
                               </p>
                             </div>
                             <div className="rounded-[8px] border border-on-surface/8 bg-surface-container-lowest p-4">
                               <div className="mb-3 flex items-center justify-between gap-3">
-                                <div className="text-[12px] font-bold text-on-surface">待确认区（Review）位置</div>
+                                <div className="text-[12px] font-bold text-on-surface">待确认区位置</div>
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -1781,7 +1803,7 @@ export function SessionLauncherShell() {
                                 </button>
                               </div>
                               <p className="mt-2 text-[11px] font-medium text-ui-muted">
-                                默认情况下，待确认区（Review）会跟随新目录根路径，自动使用 `{derivedReviewRoot || "新目录位置/Review"}`。
+                                默认情况下，待确认区会跟随新目录根路径，自动使用 `{derivedReviewRoot || "新目录位置/Review"}`；这里不会继续生成子目录。
                               </p>
                             </div>
                           </div>
@@ -2199,7 +2221,7 @@ export function SessionLauncherShell() {
                 value={strategy.note}
                 disabled={loading}
                 onChange={(event) => updateStrategy((previous) => ({ ...previous, note: event.target.value.slice(0, 200) }))}
-                placeholder={isAssignExisting ? "例如：拿不准的先放待确认区（Review）；优先归入现有项目目录。" : "例如：课程资料按学期整理；图片素材按用途分层。"}
+                placeholder={isAssignExisting ? "例如：拿不准的先放待确认区；优先归入现有项目目录。" : "例如：课程资料按学期整理；图片素材按用途分层。"}
                 className="min-h-[96px] w-full resize-none rounded-[10px] border border-on-surface/8 bg-surface px-4 py-3 text-[13px] leading-relaxed text-on-surface outline-none transition-all placeholder:text-on-surface-variant/35 focus:border-primary/30"
               />
             </div>

@@ -7,7 +7,7 @@ import { motion } from "framer-motion";
 
 // ... (existing imports)
 import Link from "next/link";
-import { LayoutGrid, History, ChevronRight, Settings, Palette, Sun, Moon, Monitor } from "lucide-react";
+import { LayoutGrid, History, Settings, Palette, Sun, Moon, Monitor, CheckCircle2 } from "lucide-react";
 import { WindowControls } from "./ui/window-controls";
 import { GlobalTaskIndicator } from "./global-task-indicator";
 import { useTheme } from "@/lib/theme";
@@ -174,6 +174,25 @@ function ThemeToggle() {
   );
 }
 
+function ModuleStatusBadge({ detail }: { detail: string }) {
+  const isSuccess = detail.includes("通过") || detail.toLowerCase().includes("success");
+
+  return (
+    <span
+      className={cn(
+        "inline-flex h-5 max-w-[160px] shrink-0 items-center gap-1.5 rounded-[5px] px-2 text-[10.5px] font-black leading-none",
+        isSuccess
+          ? "bg-emerald-500/8 text-emerald-700 ring-1 ring-emerald-500/15 dark:text-emerald-300"
+          : "bg-on-surface/[0.04] text-on-surface/45 ring-1 ring-on-surface/[0.05]",
+      )}
+      title={detail}
+    >
+      {isSuccess ? <CheckCircle2 className="h-3 w-3" /> : <span className="h-1.5 w-1.5 rounded-full bg-current opacity-50" />}
+      <span className="truncate">{detail}</span>
+    </span>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -238,61 +257,53 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="premium-bg" aria-hidden="true" />
       <header 
         data-tauri-drag-region
-        className="z-50 grid h-[40px] shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center border-b border-on-surface/5 bg-surface-container-lowest px-2 backdrop-blur sm:px-3"
+        className="z-50 grid h-[48px] shrink-0 grid-cols-[minmax(180px,1fr)_auto_auto] items-center border-b border-on-surface/6 bg-surface-container-lowest px-2 backdrop-blur sm:grid-cols-[minmax(220px,1fr)_auto_minmax(118px,1fr)] sm:px-3 xl:grid-cols-[minmax(320px,1fr)_auto_minmax(180px,1fr)]"
       >
-        <div className="flex shrink-0 items-center gap-2 pr-3 select-none">
-           <div className="flex h-5.5 w-5.5 items-center justify-center rounded-[6px] bg-primary/10 ring-1 ring-primary/20">
+        <div data-tauri-drag-region className="flex min-w-0 items-center gap-3 pr-3 select-none">
+          <div className="flex shrink-0 items-center gap-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-[7px] bg-primary/10 ring-1 ring-primary/20">
               <img src="/app-icon.png" alt="FilePilot" className="h-[14px] w-[14px] object-contain" />
-           </div>
+            </div>
            
-           <div className="flex items-center tracking-[-0.03em] pointer-events-none">
-              <span className="text-[13px] font-black text-on-surface">File</span>
-              <span className="text-[13px] font-black text-primary ml-0.5">Pilot</span>
-           </div>
-           
-           <div className="ml-3 h-3.5 w-[1.5px] bg-on-surface/10 rounded-full" />
+            <div className="flex items-center tracking-[-0.03em] pointer-events-none">
+              <span className="text-[13.5px] font-black text-on-surface">File</span>
+              <span className="ml-0.5 text-[13.5px] font-black text-primary">Pilot</span>
+            </div>
+
+            <div className="ml-1 h-4 w-px rounded-full bg-on-surface/12" />
+          </div>
+
+          <div className="flex min-w-0 items-center gap-2 overflow-hidden pointer-events-none">
+            <p className="max-w-[180px] truncate text-[14px] font-black tracking-[-0.025em] text-on-surface/88 sm:max-w-[260px] xl:max-w-[360px]">
+              {moduleCopy.title}
+            </p>
+            <ModuleStatusBadge detail={moduleCopy.detail} />
+          </div>
         </div>
 
-        <div className="flex min-w-0 flex-1 items-center gap-2 border-none px-1 overflow-hidden pointer-events-none">
-          <p className="truncate text-ui-h2 text-on-surface/85">
-            {moduleCopy.title}
-          </p>
-          <span className="text-ui-meta leading-none opacity-20 select-none mt-0.5">/</span>
-          <p className="truncate text-ui-meta font-bold">
-            {moduleCopy.detail}
-          </p>
-        </div>
+        <nav className="flex items-center justify-center rounded-[10px] bg-on-surface/[0.035] p-1">
+          {navItems.map((item) => {
+            const isActive = isNavActive(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "relative inline-flex h-7.5 items-center gap-2 rounded-[7px] px-3 text-[11.5px] font-black tracking-tight transition-all duration-200",
+                  isActive
+                    ? "bg-surface-container-lowest text-primary shadow-[0_1px_3px_rgba(0,0,0,0.06)]"
+                    : "text-on-surface/40 hover:bg-on-surface/[0.045] hover:text-on-surface/80",
+                )}
+              >
+                <item.icon className={cn("h-3.5 w-3.5 transition-colors", isActive ? "text-primary" : "text-current")} />
+                <span className="hidden lg:inline">{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
 
-        <div className="flex items-center justify-end gap-1 sm:gap-2">
-          <nav className="flex items-center rounded-lg bg-on-surface/[0.03] p-1 ring-1 ring-black/[0.02]">
-            {navItems.map((item) => {
-              const isActive = isNavActive(item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={cn(
-                    "relative inline-flex items-center gap-2 rounded-[6px] px-3 py-1.5 text-[11.5px] font-black tracking-tight transition-all duration-300",
-                    isActive
-                      ? "bg-surface-container-lowest text-on-surface ring-1 ring-black/[0.03]"
-                      : "text-on-surface/40 hover:bg-on-surface/5 hover:text-on-surface border border-transparent hover:border-on-surface/8",
-                  )}
-                >
-                  <item.icon className={cn("h-3.5 w-3.5", isActive ? "text-primary" : "text-current")} />
-                  <span className="hidden lg:inline">{item.label}</span>
-                  {isActive && (
-                    <motion.div
-                      layoutId="nav-active-glow"
-                      className="absolute inset-0 rounded-[6px] bg-primary/[0.03] ring-1 ring-primary/10"
-                      initial={false}
-                      transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                    />
-                  )}
-                </Link>
-              );
-            })}
-          </nav>
-
+        <div data-tauri-drag-region className="flex items-center justify-end gap-1 sm:gap-2">
+          <div className="h-5 w-px rounded-full bg-on-surface/10" />
           <ThemeToggle />
           <WindowControls />
         </div>

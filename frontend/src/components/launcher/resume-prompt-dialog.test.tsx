@@ -97,4 +97,24 @@ describe("ResumePromptDialog", () => {
     expect(screen.getByRole("button", { name: "继续整理" })).toBeInTheDocument();
     expect(baseProps.onReadOnlyView).toHaveBeenCalledTimes(1);
   });
+
+  it("uses recovery wording for stale sessions", () => {
+    render(
+      <ResumePromptDialog
+        {...baseProps}
+        isCompletedResume={false}
+        resumePrompt={{
+          ...baseProps.resumePrompt,
+          snapshot: {
+            ...baseProps.resumePrompt.snapshot,
+            stage: "stale",
+          } as any,
+        }}
+      />,
+    );
+
+    expect(screen.getByText("发现需要复核的整理记录")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "打开复核" })).toBeInTheDocument();
+    expect(screen.getByText(/旧记录仍可在历史中查看/)).toBeInTheDocument();
+  });
 });

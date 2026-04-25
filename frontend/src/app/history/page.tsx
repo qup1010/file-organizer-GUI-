@@ -437,10 +437,10 @@ export default function HistoryPage() {
                     key={item.id}
                     onClick={() => setFilter(item.id)}
                     className={cn(
-                      "flex items-center gap-2 rounded-md border px-2.5 py-1.5 transition-all",
+                      "flex items-center gap-2 rounded-md px-2.5 py-1.5 transition-all outline-none",
                       filter === item.id
-                        ? "border-primary/30 bg-primary/10"
-                        : "border-on-surface/5 bg-on-surface/[0.02] hover:bg-on-surface/[0.05] hover:border-on-surface/10"
+                        ? "bg-primary/10"
+                        : "bg-on-surface/[0.03] hover:bg-on-surface/[0.06]"
                     )}
                   >
                     <div className={cn("text-[12px] font-black tabular-nums leading-none", item.color)}>

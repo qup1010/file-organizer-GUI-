@@ -64,7 +64,7 @@ export function MarkdownProse({ content, density = "default" }: { content: strin
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       components={{
-        p: ({ node, ...props }) => <div className={cn("mb-1.5 last:mb-0 text-[13px] text-on-surface/85", compact ? "leading-5" : "leading-6")} {...props} />,
+        p: ({ node, ...props }) => <div className={cn("mb-1 last:mb-0 text-[13px] text-on-surface/85", compact ? "leading-5" : "leading-6")} {...props} />,
         strong: ({ node, ...props }) => <strong className="font-black text-on-surface tracking-tight" {...props} />,
         em: ({ node, ...props }) => <em className="italic text-on-surface/60 font-medium" {...props} />,
         ul: ({ node, ...props }) => <ul className={cn("mb-2 ml-4 list-disc text-[13px] text-on-surface/80", compact ? "space-y-0" : "space-y-0.5")} {...props} />,
@@ -94,10 +94,10 @@ export function MarkdownProse({ content, density = "default" }: { content: strin
         th: ({ node, ...props }) => <th className="px-3 py-2 border-b border-on-surface/5" {...props} />,
         td: ({ node, ...props }) => <td className="px-3 py-2 border-b border-on-surface/[0.02] leading-relaxed font-medium text-on-surface/70" {...props} />,
         hr: ({ node, ...props }) => <hr className="my-4 border-t border-on-surface/8" {...props} />,
-        h1: ({ node, ...props }) => <h1 className="mb-3 mt-5 text-[18px] font-black tracking-tight text-on-surface" {...props} />,
-        h2: ({ node, ...props }) => <h2 className="mb-2 mt-5 text-[15px] font-black tracking-tight text-on-surface border-b border-on-surface/8 pb-1 flex items-center gap-2" {...props} />,
+        h1: ({ node, ...props }) => <h1 className="mb-2 mt-3 text-[18px] font-black tracking-tight text-on-surface" {...props} />,
+        h2: ({ node, ...props }) => <h2 className="mb-1.5 mt-2.5 text-[15px] font-black tracking-tight text-on-surface border-b border-on-surface/8 pb-1 flex items-center gap-2" {...props} />,
         h3: ({ node, ...props }) => (
-          <h3 className="mb-2 mt-4 flex items-center gap-2 text-[13.5px] font-black tracking-tight text-on-surface/80" {...props} />
+          <h3 className="mb-1 mt-2 flex items-center gap-2 text-[13.5px] font-black tracking-tight text-on-surface/80" {...props} />
         ),
         blockquote: ({ node, ...props }) => (
           <blockquote className="my-3 rounded-md border-l-4 border-primary/30 bg-primary/[0.01] px-4 py-2 text-[13px] font-medium italic text-on-surface/70 leading-6" {...props} />

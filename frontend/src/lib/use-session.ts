@@ -70,9 +70,26 @@ function collectSnapshotMessages(snapshot?: SessionSnapshot | null): AssistantMe
     return [];
   }
   const messages = [...(snapshot.messages || [])];
-  if (snapshot.assistant_message && !messages.some((message) => message.id === snapshot.assistant_message?.id)) {
-    messages.push(snapshot.assistant_message);
+  const assistantMessage = snapshot.assistant_message;
+  if (!assistantMessage) {
+    return messages;
   }
+
+  const sameIdIndex = messages.findIndex((message) => message.id === assistantMessage.id);
+  if (sameIdIndex >= 0) {
+    messages[sameIdIndex] = assistantMessage;
+    return messages;
+  }
+
+  const sameAssistantContentIndex = messages.findIndex((message) =>
+    String(message.role || "").trim() === "assistant"
+    && String(message.content || "") === String(assistantMessage.content || "")
+  );
+  if (sameAssistantContentIndex >= 0) {
+    messages[sameAssistantContentIndex] = assistantMessage;
+    return messages;
+  }
+  messages.push(assistantMessage);
   return messages;
 }
 

@@ -40,20 +40,20 @@ class IconWorkbenchConfig:
     text_model: ModelConfig = field(default_factory=ModelConfig)
     image_model: ModelConfig = field(default_factory=ModelConfig)
     image_size: str = "1024x1024"
-    analysis_concurrency_limit: int = 1
+    analysis_concurrency_limit: int = 2
     image_concurrency_limit: int = 1
     save_mode: str = "centralized"  # "in_folder" | "centralized"
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any] | None) -> "IconWorkbenchConfig":
         data = payload or {}
-        legacy_limit = data.get("concurrency_limit", 1)
+        legacy_limit = data.get("concurrency_limit")
         analysis_limit = data.get("analysis_concurrency_limit", legacy_limit)
         image_limit = data.get("image_concurrency_limit", legacy_limit)
         try:
             parsed_analysis_limit = int(analysis_limit)
         except (TypeError, ValueError):
-            parsed_analysis_limit = 1
+            parsed_analysis_limit = 2
         try:
             parsed_image_limit = int(image_limit)
         except (TypeError, ValueError):

@@ -99,7 +99,7 @@ export function PrecheckView({
             status: (move.target || "").split(/[\\/]/).some((part) => part.toLowerCase() === "review") ? "review" : "pending",
         })),
         directoryEntries: summary.mkdir_preview || [],
-        emptyLabel: filter === "review" ? "没有需要留在待确认区（Review）的文件。" : "当前没有可展示的目标目录结构。",
+        emptyLabel: filter === "review" ? "没有需要留在待确认区的文件。" : "当前没有可展示的目标目录结构。",
     };
 
     return (

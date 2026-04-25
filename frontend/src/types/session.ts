@@ -87,6 +87,8 @@ export interface SessionStrategySummary extends SessionStrategySelection {
 }
 
 export interface LaunchStrategyConfig {
+  LAUNCH_DEFAULT_ORGANIZE_METHOD?: OrganizeMethod;
+  LAUNCH_DEFAULT_TARGET_PROFILE_ID?: string;
   LAUNCH_DEFAULT_TEMPLATE_ID?: StrategyTemplateId;
   LAUNCH_DEFAULT_LANGUAGE?: StrategyLanguage;
   LAUNCH_DEFAULT_DENSITY?: StrategyDensity;

@@ -41,10 +41,6 @@ vi.mock("./launcher/launch-transition-overlay", () => ({
   LaunchTransitionOverlay: () => null,
 }));
 
-vi.mock("./launcher/resume-prompt-dialog", () => ({
-  ResumePromptDialog: () => null,
-}));
-
 vi.mock("@/lib/runtime", () => ({
   getApiBaseUrl: () => "http://127.0.0.1:8765",
   getApiToken: () => "",
@@ -95,6 +91,47 @@ function addSource(path: string, sourceType: "directory" | "file" = "directory")
     target: { value: path },
   });
   fireEvent.click(screen.getByRole("button", { name: "添加" }));
+}
+
+function createSnapshot(stage: string = "planning", sessionId = "session-old") {
+  return {
+    session_id: sessionId,
+    target_dir: "D:/sorted",
+    placement: undefined,
+    stage,
+    summary: "",
+    strategy: {
+      template_id: "general_downloads",
+      template_label: "通用下载",
+      task_type: "organize_full_directory",
+      task_type_label: "整理整个目录",
+      organize_mode: "initial",
+      organize_mode_label: "生成新结构",
+      organize_method: "categorize_into_new_structure",
+      language: "zh",
+      language_label: "中文",
+      density: "normal",
+      density_label: "标准",
+      prefix_style: "none",
+      prefix_style_label: "无前缀",
+      caution_level: "balanced",
+      caution_level_label: "平衡",
+      destination_index_depth: 2,
+      note: "",
+    },
+    assistant_message: null,
+    scanner_progress: {},
+    planner_progress: {},
+    plan_snapshot: {},
+    precheck_summary: null,
+    execution_report: null,
+    rollback_report: null,
+    last_journal_id: null,
+    integrity_flags: {},
+    available_actions: [],
+    messages: [],
+    updated_at: "2026-04-25T00:00:00Z",
+  } as any;
 }
 
 describe("SessionLauncher", () => {
@@ -397,6 +434,164 @@ describe("SessionLauncher", () => {
     expect(screen.getByText("D:/sorted-default/Review")).toBeInTheDocument();
   });
 
+  it("shows a resume prompt when createSession returns resume_available", async () => {
+    createLaunchSessionMock.mockResolvedValueOnce({
+      mode: "resume_available",
+      session_id: null,
+      restorable_session: createSnapshot("planning", "session-old"),
+      session_snapshot: createSnapshot("planning", "session-old"),
+    });
+
+    render(<SessionLauncher />);
+
+    await screen.findByText("本次整理对象");
+    addSource("D:/incoming");
+    fireEvent.click(screen.getByRole("button", { name: "下一步：选择整理方式" }));
+    fireEvent.click(screen.getByRole("button", { name: "下一步：填写必要信息" }));
+    fireEvent.click(screen.getByRole("button", { name: "读取目录并生成建议" }));
+
+    expect(await screen.findByText("发现可继续的整理任务")).toBeInTheDocument();
+    expect(screen.getByText(/还有一条未完成的任务/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "继续整理" })).toBeEnabled();
+  });
+
+  it("continues an unfinished resumable session without auto_scan", async () => {
+    createLaunchSessionMock.mockResolvedValueOnce({
+      mode: "resume_available",
+      session_id: null,
+      restorable_session: createSnapshot("planning", "session-old"),
+      session_snapshot: createSnapshot("planning", "session-old"),
+    });
+
+    render(<SessionLauncher />);
+
+    await screen.findByText("本次整理对象");
+    addSource("D:/incoming");
+    fireEvent.click(screen.getByRole("button", { name: "下一步：选择整理方式" }));
+    fireEvent.click(screen.getByRole("button", { name: "下一步：填写必要信息" }));
+    fireEvent.click(screen.getByRole("button", { name: "读取目录并生成建议" }));
+    fireEvent.click(await screen.findByRole("button", { name: "继续整理" }));
+
+    expect(pushMock).toHaveBeenCalledWith("/workspace?session_id=session-old&dir=D%3A%2Fincoming");
+  });
+
+  it("starts fresh from a completed resumable session through startFreshSession", async () => {
+    createLaunchSessionMock.mockResolvedValueOnce({
+      mode: "resume_available",
+      session_id: null,
+      restorable_session: createSnapshot("completed", "session-done"),
+      session_snapshot: createSnapshot("completed", "session-done"),
+    });
+    startFreshSessionMock.mockResolvedValueOnce({
+      mode: "created",
+      session_id: "session-fresh",
+      restorable_session: null,
+      session_snapshot: null,
+    });
+
+    render(<SessionLauncher />);
+
+    await screen.findByText("本次整理对象");
+    addSource("D:/incoming");
+    fireEvent.click(screen.getByRole("button", { name: "下一步：选择整理方式" }));
+    fireEvent.click(screen.getByRole("button", { name: "下一步：填写必要信息" }));
+    fireEvent.click(screen.getByRole("button", { name: "读取目录并生成建议" }));
+
+    expect(await screen.findByText("发现之前的整理记录")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "重新开始" }));
+
+    await waitFor(() => {
+      expect(startFreshSessionMock).toHaveBeenCalledWith(
+        expect.anything(),
+        "session-done",
+        "completed",
+        expect.objectContaining({
+          resume_if_exists: true,
+          display_path: "D:/incoming",
+        }),
+      );
+      expect(pushMock).toHaveBeenCalledWith("/workspace?session_id=session-fresh&dir=D%3A%2Fincoming&auto_scan=1");
+    });
+  });
+
+  it("opens an unfinished resumable session in readonly mode", async () => {
+    createLaunchSessionMock.mockResolvedValueOnce({
+      mode: "resume_available",
+      session_id: null,
+      restorable_session: createSnapshot("planning", "session-old"),
+      session_snapshot: createSnapshot("planning", "session-old"),
+    });
+
+    render(<SessionLauncher />);
+
+    await screen.findByText("本次整理对象");
+    addSource("D:/incoming");
+    fireEvent.click(screen.getByRole("button", { name: "下一步：选择整理方式" }));
+    fireEvent.click(screen.getByRole("button", { name: "下一步：填写必要信息" }));
+    fireEvent.click(screen.getByRole("button", { name: "读取目录并生成建议" }));
+    fireEvent.click(await screen.findByRole("button", { name: "只读打开" }));
+
+    expect(pushMock).toHaveBeenCalledWith("/workspace?session_id=session-old&dir=D%3A%2Fincoming&readonly=1");
+  });
+
+  it("uses the first mixed source path when opening a resumable session readonly", async () => {
+    createLaunchSessionMock.mockResolvedValueOnce({
+      mode: "resume_available",
+      session_id: null,
+      restorable_session: createSnapshot("planning", "session-old"),
+      session_snapshot: createSnapshot("planning", "session-old"),
+    });
+
+    render(<SessionLauncher />);
+
+    await screen.findByText("本次整理对象");
+    addSource("D:/incoming/readme.txt", "file");
+    addSource("D:/incoming/project", "directory");
+    fireEvent.click(screen.getByRole("button", { name: "下一步：选择整理方式" }));
+    fireEvent.click(screen.getByRole("button", { name: /归入现有目录/ }));
+    fireEvent.click(screen.getByRole("button", { name: "下一步：填写必要信息" }));
+    openManualTargetInput();
+    fireEvent.change(screen.getByPlaceholderText("手动输入目标目录完整绝对路径"), {
+      target: { value: "D:/archive/docs" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "添加" }));
+    fireEvent.click(screen.getByRole("button", { name: "读取目录并开始规划" }));
+    fireEvent.click(await screen.findByRole("button", { name: "只读打开" }));
+
+    expect(pushMock).toHaveBeenCalledWith("/workspace?session_id=session-old&dir=D%3A%2Fincoming%2Freadme.txt&readonly=1");
+  });
+
+  it("uses firstSourcePath for mixed-source assign-existing workspace route params", async () => {
+    render(<SessionLauncher />);
+
+    await screen.findByText("本次整理对象");
+    addSource("D:/incoming/readme.txt", "file");
+    addSource("D:/incoming/project", "directory");
+    fireEvent.click(screen.getByRole("button", { name: "下一步：选择整理方式" }));
+    fireEvent.click(screen.getByRole("button", { name: /归入现有目录/ }));
+    fireEvent.click(screen.getByRole("button", { name: "下一步：填写必要信息" }));
+    openManualTargetInput();
+    fireEvent.change(screen.getByPlaceholderText("手动输入目标目录完整绝对路径"), {
+      target: { value: "D:/archive/docs" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "添加" }));
+    fireEvent.click(screen.getByRole("button", { name: "读取目录并开始规划" }));
+
+    await waitFor(() => {
+      expect(createLaunchSessionMock).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          display_path: "D:/incoming/readme.txt",
+          sources: [
+            { source_type: "file", path: "D:/incoming/readme.txt" },
+            { source_type: "directory", path: "D:/incoming/project", directory_mode: "atomic" },
+          ],
+        }),
+      );
+      expect(pushMock).toHaveBeenCalledWith("/workspace?session_id=session-1&dir=D%3A%2Fincoming%2Freadme.txt&auto_scan=1");
+    });
+  });
+
   it("does not advance to step two when there are no sources", async () => {
     render(<SessionLauncher />);
 
@@ -419,7 +614,7 @@ describe("SessionLauncher", () => {
     render(<SessionLauncher />);
 
     await screen.findByText("本次整理对象");
-    fireEvent.click(screen.getByRole("button", { name: "导入文件夹下所有项" }));
+    fireEvent.click(screen.getByRole("button", { name: "整理文件夹里的内容" }));
 
     expect(await screen.findByText("已导入“D:/Downloads”下的 6 个顶层项目。")).toBeInTheDocument();
     expect(screen.queryByText("D:/Downloads/archive.zip")).not.toBeInTheDocument();

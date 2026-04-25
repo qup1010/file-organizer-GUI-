@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PreviewPanel } from "./preview-panel";
@@ -199,14 +199,14 @@ describe("PreviewPanel", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "全部留在待确认区，稍后查看" }));
+    fireEvent.click(screen.getByRole("button", { name: "全部保留在待确认区" }));
 
     expect(screen.queryByText("待处理队列")).not.toBeInTheDocument();
     expect(screen.getByText("已保留")).toBeInTheDocument();
     expect(screen.queryAllByText("待核对").length).toBe(0);
   });
 
-  it("starts precheck immediately after accepting the last review-only queue item", async () => {
+  it("keeps the last review-only queue item without starting precheck automatically", () => {
     const onRunPrecheck = vi.fn();
 
     render(
@@ -247,11 +247,10 @@ describe("PreviewPanel", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "全部留在待确认区，并开始检查" }));
+    fireEvent.click(screen.getByRole("button", { name: "全部保留在待确认区" }));
 
-    await waitFor(() => {
-      expect(onRunPrecheck).toHaveBeenCalledTimes(1);
-    });
+    expect(onRunPrecheck).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "检查移动风险" })).toBeEnabled();
   });
 
   it("allows direct precheck from planning stage once readiness is satisfied", () => {
@@ -293,7 +292,7 @@ describe("PreviewPanel", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "全部留在待确认区，并开始检查" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "全部保留在待确认区" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "检查移动风险" })).toBeEnabled();
   });
 

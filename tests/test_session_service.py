@@ -1139,6 +1139,7 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         self.assertEqual(result.assistant_message["content"], "已更新计划")
         self.assertEqual(result.session_snapshot["plan_snapshot"]["summary"], "已分类 1 项，调整 1 项，仍剩 0 项待定")
         self.assertEqual(result.session_snapshot["messages"][-1]["content"], "已更新计划")
+        self.assertEqual(result.session_snapshot["messages"][-1]["id"], result.assistant_message["id"])
         self.assertTrue(all(message["role"] != "tool" for message in result.session_snapshot["messages"]))
 
     def test_submit_user_intent_emits_planner_progress_snapshots(self):
@@ -1314,6 +1315,7 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         assert stored is not None
         self.assertEqual(result.assistant_message["content"], "已更新计划")
         self.assertEqual(result.assistant_message["tool_calls"][0]["function"]["name"], "submit_plan_diff")
+        self.assertEqual(stored.messages[-2]["id"], result.assistant_message["id"])
         self.assertEqual(stored.messages[-2]["tool_calls"][0]["id"], "call_1")
         self.assertEqual(stored.messages[-1]["role"], "tool")
         self.assertEqual(stored.messages[-1]["tool_call_id"], "call_1")

@@ -162,7 +162,7 @@ export function StrategyDialog({
                     </div>
                     <p className="mt-2.5 text-[13px] leading-relaxed text-ui-muted">
                       {isIncremental
-                        ? "本模式只会使用你显式选择或手动添加的目标目录；拿不准的项目会进入 Review，不会自动创建未知目标目录。"
+                        ? "本模式只会使用你显式选择或手动添加的目标目录；拿不准的项目会进入待确认区，不会自动创建未知目标目录。"
                         : currentTemplate.description}
                     </p>
 
@@ -185,7 +185,7 @@ export function StrategyDialog({
                             "先选择目标目录",
                             "每个目录单独授权",
                             "只归入显式目标目录",
-                            "拿不准进入 Review",
+                            "拿不准进入待确认区",
                           ].map((rule) => (
                             <span key={rule} className="rounded-[4px] border border-on-surface/8 bg-surface-container-lowest px-2 py-0.5 text-[11px] font-semibold text-on-surface">
                               {rule}
@@ -359,7 +359,7 @@ export function StrategyDialog({
                       value={strategy.note}
                       disabled={loading}
                       onChange={(event) => onChangeNote(event.target.value.slice(0, 200))}
-                      placeholder="例如：项目文件尽量放在一起；拿不准的先放待确认区（Review）。"
+                      placeholder="例如：项目文件尽量放在一起；拿不准的先放待确认区。"
                       className="min-h-[70px] w-full resize-none rounded-[10px] border border-on-surface/8 bg-surface-container-low px-4 py-3 text-[13px] leading-relaxed text-on-surface outline-none transition-all placeholder:text-on-surface-variant/35 focus:border-primary/30"
                     />
                     <div className="mt-3 flex items-start gap-3 rounded-[8px] border border-primary/10 bg-primary/4 p-2.5">
@@ -367,7 +367,7 @@ export function StrategyDialog({
                         <Sparkles className="h-3.5 w-3.5" />
                       </div>
                       <p className="text-[11px] leading-tight text-primary/80">
-                        只补充会影响结果的偏好，例如“拿不准的先放待确认区（Review）”“课程资料按学期整理”。
+                        只补充会影响结果的偏好，例如“拿不准的先放待确认区”“课程资料按学期整理”。
                       </p>
                     </div>
                   </div>

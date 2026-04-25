@@ -31,6 +31,24 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+function MessageAvatar({ role, hidden = false }: { role: "assistant" | "user"; hidden?: boolean }) {
+  const isAssistant = role === "assistant";
+  return (
+    <div
+      className={cn(
+        "mt-[1px] flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] transition-opacity",
+        isAssistant
+          ? "border border-primary/10 bg-primary/[0.045] text-primary"
+          : "border border-on-surface/8 bg-surface-container-low text-on-surface/45",
+        hidden && "opacity-0",
+      )}
+      aria-hidden={hidden}
+    >
+      {isAssistant ? <Bot className="h-3.5 w-3.5" /> : <User className="h-3.5 w-3.5" />}
+    </div>
+  );
+}
+
 export interface ConversationNotice {
   tone: "info" | "warning" | "danger";
   title: string;
@@ -276,35 +294,27 @@ export function ConversationPanel({
                 initial={{ opacity: 0, x: isAssistant ? -8 : 8 }}
                 animate={{ opacity: 1, x: 0 }}
                 className={cn(
-                  "relative flex gap-4 w-full", 
-                  isAssistant ? "flex-row" : "flex-row-reverse",
-                  isGrouped ? "mt-1" : isFirstVisibleMessage ? "mt-0" : "mt-4",
+                  "relative grid w-full gap-3",
+                  isAssistant ? "grid-cols-[28px_minmax(0,1fr)]" : "grid-cols-[minmax(0,1fr)_28px]",
+                  isGrouped ? "mt-1" : isFirstVisibleMessage ? "mt-0" : "mt-2.5",
                 )}
               >
-                {isAssistant && (
-                  <div className={cn(
-                    "absolute left-[15px] w-[1px] bg-on-surface/10 transition-all pointer-events-none",
-                    !isGrouped ? "top-10" : "top-0",
-                    messages[idx + 1]?.role === "assistant" ? "bottom-[-2.5rem]" : "bottom-0"
-                  )} />
-                )}
-                <div className={cn(
-                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-opacity z-10 mt-1",
-                  isAssistant 
-                    ? "bg-on-surface/[0.04] border border-on-surface/12 text-primary" 
-                    : "bg-primary text-white",
-                  isGrouped ? "opacity-0" : "opacity-100"
-                )}>
-                  {isAssistant ? <Bot className="w-4 h-4" /> : <User className="w-4 h-4" />}
+                <div className={cn(isAssistant ? "col-start-1 row-start-1" : "col-start-2 row-start-1")}>
+                  <MessageAvatar role={isAssistant ? "assistant" : "user"} hidden={Boolean(isGrouped)} />
                 </div>
-                <div className={cn("flex flex-col gap-2 min-w-0 max-w-[88%]", isAssistant ? "" : "items-end")}>
+                <div
+                  className={cn(
+                    "row-start-1 flex min-w-0 max-w-[88%] flex-col gap-2",
+                    isAssistant ? "col-start-2 items-start justify-self-start" : "col-start-1 items-end justify-self-end",
+                  )}
+                >
                   {message.content && (
                     <div
                       className={cn(
                         "transition-all leading-relaxed",
                         isAssistant
-                          ? "text-on-surface pt-1 px-1"
-                          : "rounded-xl bg-on-surface/[0.03] border border-on-surface/8 px-4 py-3 text-[13.5px] font-medium text-on-surface"
+                          ? "px-1 pt-[1px] text-on-surface"
+                          : "rounded-lg bg-on-surface/[0.03] px-3.5 py-2.5 text-[13px] text-on-surface/80"
                       )}
                     >
                       {isAssistant ? <MarkdownProse content={message.content} density="compact" /> : <span>{message.content}</span>}
@@ -320,12 +330,10 @@ export function ConversationPanel({
               key="assistant-planning-bubble"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex gap-4 mt-6"
+              className="mt-6 grid grid-cols-[28px_minmax(0,1fr)] gap-3"
             >
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-on-surface/12 bg-on-surface/[0.04] text-primary mt-1">
-                <Bot className="w-4 h-4" />
-              </div>
-              <div className="flex-1 pt-1.5 min-w-0">
+              <MessageAvatar role="assistant" />
+              <div className="min-w-0 pt-1">
                 <div className="flex items-center gap-2.5">
                   <div className="flex gap-1.5 shrink-0">
                     {[0, 0.2, 0.4].map((delay) => (
@@ -360,12 +368,10 @@ export function ConversationPanel({
               key="assistant-streaming-bubble"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex gap-4 mt-6"
+              className="mt-6 grid grid-cols-[28px_minmax(0,1fr)] gap-3"
             >
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-on-surface/12 bg-on-surface/[0.04] text-primary mt-1">
-                <Bot className="w-4 h-4" />
-              </div>
-              <div className="flex-1 pt-1.5 text-on-surface">
+              <MessageAvatar role="assistant" />
+              <div className="pt-1 text-on-surface">
                 <div className="mb-3 flex items-center gap-2.5">
                   <div className="flex gap-1.5">
                     {[0, 0.2, 0.4].map((delay) => (

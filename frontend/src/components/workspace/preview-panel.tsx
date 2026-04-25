@@ -898,13 +898,6 @@ export function PreviewPanel(props: PreviewPanelProps) {
   };
 
   const isAcceptedReviewItem = (item: PlanItem) => item.status === "review" && acceptedReviewItemIds.includes(item.item_id);
-  const canAcceptReviewsAndRunPrecheck =
-    !readOnly &&
-    canRunPrecheck &&
-    invalidatedItems.length === 0 &&
-    unresolvedItems.length === 0 &&
-    activeReviewItems.length > 0;
-
   const acceptAllReviewItems = async () => {
     const reviewCandidateIds = [
       ...reviewItemsPendingAcceptance.map((item) => item.item_id),
@@ -918,9 +911,6 @@ export function PreviewPanel(props: PreviewPanelProps) {
     }
     setAcceptedReviewItemIds((current) => Array.from(new Set([...current, ...reviewCandidateIds])));
     setQueueCollapsed(true);
-    if (canAcceptReviewsAndRunPrecheck) {
-      await Promise.resolve(onRunPrecheck());
-    }
   };
 
   const focusQueue = () => {
@@ -1234,15 +1224,20 @@ export function PreviewPanel(props: PreviewPanelProps) {
                   onToggle={() => setQueueCollapsed((current) => !current)}
                   actions={
                     !readOnly && activeReviewItems.length > 0 ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void acceptAllReviewItems();
-                        }}
-                        className="inline-flex h-8 shrink-0 items-center gap-1 rounded-[8px] border border-primary/12 bg-primary/[0.05] px-2.5 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/[0.08]"
-                      >
-                        {canAcceptReviewsAndRunPrecheck ? "全部留在待确认区，并开始检查" : "全部留在待确认区，稍后查看"}
-                      </button>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void acceptAllReviewItems();
+                          }}
+                          className="inline-flex h-8 items-center gap-1 rounded-[8px] border border-primary/12 bg-primary/[0.05] px-2.5 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/[0.08]"
+                        >
+                          全部保留在待确认区
+                        </button>
+                        {canRunPrecheck && invalidatedItems.length === 0 && unresolvedItems.length === 0 ? (
+                          <span className="text-[10px] font-medium text-ui-muted/60">保留后可单独点击“安全检查”。</span>
+                        ) : null}
+                      </div>
                     ) : undefined
                   }
                 >
@@ -1374,8 +1369,8 @@ export function PreviewPanel(props: PreviewPanelProps) {
                           </div>
                           <p className="mt-1.5 text-[10.5px] text-ui-muted px-0.5">
                             {organizeMode === "incremental"
-                              ? "归入已有目录时，只能填写已显式配置的目标目录；Review 请使用待确认区。"
-                              : "填写的是相对“新目录生成位置”的路径（不支持绝对路径或 Review/...）。Review 是待确认区。"}
+                              ? "归入已有目录时，只能填写已显式配置的目标目录；拿不准的项目请点“待确认区”。"
+                              : "填写的是相对“新目录生成位置”的路径（不支持绝对路径或待确认区路径）。待确认区只作为暂存落点，不会自动归入目标目录。"}
                           </p>
                         </div>
                       ) : null}

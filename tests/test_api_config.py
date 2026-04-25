@@ -56,7 +56,7 @@ class ApiConfigTests(unittest.TestCase):
                         "name": "默认图标生图",
                         "image_model": {"base_url": "", "model": "", "secret_state": "empty"},
                         "image_size": "1024x1024",
-                        "analysis_concurrency_limit": 1,
+                        "analysis_concurrency_limit": 2,
                         "image_concurrency_limit": 1,
                         "save_mode": "centralized",
                         "text_model": {

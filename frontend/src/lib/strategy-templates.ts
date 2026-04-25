@@ -153,17 +153,25 @@ function isValidCautionLevel(value: unknown): value is StrategyCautionLevel {
   return CAUTION_LEVEL_OPTIONS.some((option) => option.id === value);
 }
 
+function isValidOrganizeMethod(value: unknown): value is OrganizeMethod {
+  return value === "categorize_into_new_structure" || value === "assign_into_existing_categories";
+}
+
 export function getLaunchStrategyFromConfig(config?: LaunchStrategyConfig | null): SessionStrategySelection {
   const templateId = isValidTemplateId(config?.LAUNCH_DEFAULT_TEMPLATE_ID)
     ? config.LAUNCH_DEFAULT_TEMPLATE_ID
     : DEFAULT_STRATEGY_SELECTION.template_id;
   const suggested = getSuggestedSelection(templateId);
+  const organizeMethod = isValidOrganizeMethod(config?.LAUNCH_DEFAULT_ORGANIZE_METHOD)
+    ? config.LAUNCH_DEFAULT_ORGANIZE_METHOD
+    : DEFAULT_STRATEGY_SELECTION.organize_method;
+  const organizeMode = organizeMethod === "assign_into_existing_categories" ? "incremental" : "initial";
 
   return {
     template_id: templateId,
-    organize_mode: "initial",
-    task_type: "organize_full_directory",
-    organize_method: "categorize_into_new_structure",
+    organize_mode: organizeMode,
+    task_type: taskTypeForOrganizeMode(organizeMode),
+    organize_method: organizeMethod,
     destination_index_depth: 2,
     language: isValidLanguage(config?.LAUNCH_DEFAULT_LANGUAGE)
       ? config.LAUNCH_DEFAULT_LANGUAGE
@@ -177,6 +185,9 @@ export function getLaunchStrategyFromConfig(config?: LaunchStrategyConfig | null
     caution_level: isValidCautionLevel(config?.LAUNCH_DEFAULT_CAUTION_LEVEL)
       ? config.LAUNCH_DEFAULT_CAUTION_LEVEL
       : suggested.caution_level,
+    target_profile_id: typeof config?.LAUNCH_DEFAULT_TARGET_PROFILE_ID === "string"
+      ? config.LAUNCH_DEFAULT_TARGET_PROFILE_ID
+      : undefined,
     note: typeof config?.LAUNCH_DEFAULT_NOTE === "string" ? config.LAUNCH_DEFAULT_NOTE : "",
   };
 }

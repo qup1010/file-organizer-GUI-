@@ -328,6 +328,37 @@ describe("useSession assistant draft", () => {
     });
   });
 
+  it("deduplicates assistant_message when the stored history already contains the same reply with a different id", async () => {
+    getSession.mockResolvedValue({
+      session_id: "session-1",
+      session_snapshot: createSnapshot({
+        messages: [
+          {
+            id: "assistant-history",
+            role: "assistant",
+            content: "1+1 等于 2。",
+          },
+        ],
+        assistant_message: {
+          id: "assistant-current",
+          role: "assistant",
+          content: "1+1 等于 2。",
+        },
+      }),
+    });
+
+    const { result } = renderHook(() => useSession("session-1"));
+
+    await waitFor(() => {
+      expect(result.current.chatMessages).toEqual([
+        expect.objectContaining({
+          id: "assistant-current",
+          content: "1+1 等于 2。",
+        }),
+      ]);
+    });
+  });
+
   it("does not show the local fallback for unrelated plan updates", async () => {
     const { result } = renderHook(() => useSession("session-1"));
 

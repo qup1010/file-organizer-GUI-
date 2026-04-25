@@ -28,6 +28,9 @@ export function ResumePromptDialog({
 }) {
   if (!resumePrompt) return null;
 
+  const isStaleResume = resumePrompt.snapshot.stage === "stale";
+  const primaryLabel = isCompletedResume ? "查看整理结果" : isStaleResume ? "打开复核" : "继续整理";
+
   return (
     <AnimatePresence>
       {open && (
@@ -44,11 +47,13 @@ export function ResumePromptDialog({
               </div>
               <div className="space-y-1">
                 <h2 className="text-xl font-black font-headline text-on-surface tracking-tight">
-                  {isCompletedResume ? "发现之前的整理记录" : "发现可继续的整理任务"}
+                  {isCompletedResume ? "发现之前的整理记录" : isStaleResume ? "发现需要复核的整理记录" : "发现可继续的整理任务"}
                 </h2>
                 <p className="text-ui-body font-medium text-ui-muted">
                   {isCompletedResume
                     ? "你可以先查看之前的结果，也可以按这次的设置重新开始"
+                    : isStaleResume
+                      ? "上一次方案已过期，你可以打开复核，也可以按当前设置重新开始"
                     : "你可以接着处理，也可以按当前设置重新开始"}
                 </p>
               </div>
@@ -56,7 +61,7 @@ export function ResumePromptDialog({
 
             <p className="mb-5 text-sm leading-relaxed text-on-surface-variant">
               检测到这次来源和设置（<strong>{targetDir.split(/[\\/]/).pop()}</strong>）
-              {isCompletedResume ? "之前已经整理过一次" : "还有一条未完成的任务"}（当前状态：
+              {isCompletedResume ? "之前已经整理过一次" : isStaleResume ? "有一条需要复核的记录" : "还有一条未完成的任务"}（当前状态：
               <em>{getFriendlyStage(resumePrompt.snapshot.stage)}</em>）。
             </p>
 
@@ -71,11 +76,13 @@ export function ResumePromptDialog({
                 onClick={onConfirmResume}
                 className="w-full py-4 text-sm"
               >
-                {isCompletedResume ? "查看整理结果" : "继续整理"}
+                {primaryLabel}
               </Button>
               <div className="rounded-[10px] border border-on-surface/8 bg-surface px-5 py-4 text-ui-section font-medium leading-relaxed text-ui-muted">
                 {isCompletedResume
                   ? "重新开始会按当前来源和设置重新读取目录。"
+                  : isStaleResume
+                    ? "重新开始会按当前来源和设置生成一条新任务，旧记录仍可在历史中查看。"
                   : "重新开始会结束上一次未完成的状态，并按当前来源和设置重新读取目录。"}
               </div>
               <div className={isCompletedResume ? "grid grid-cols-2 gap-3" : "grid grid-cols-3 gap-3"}>

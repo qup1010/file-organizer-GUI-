@@ -232,26 +232,26 @@ function FolderNode({
                       <span className="truncate flex-1 font-mono text-[11.5px] tracking-tight text-on-surface/70 group-hover/item:text-on-surface">{item.display_name}</span>
 
                       {!readOnly && onEdit && onMoveToReview && (
-                        <div className="opacity-0 group-hover/item:opacity-100 flex items-center gap-1 transition-all mr-1">
+                        <div className="flex items-center gap-1 transition-all duration-300 opacity-0 pointer-events-none group-hover/item:opacity-100 group-hover/item:pointer-events-auto mr-1">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               onEdit(item.item_id, node.path || "");
                             }}
-                            className="p-1 rounded bg-on-surface/5 text-on-surface/40 hover:bg-primary/10 hover:text-primary transition-all"
+                            className="p-1.5 rounded-md bg-on-surface/5 text-on-surface/30 hover:bg-primary/10 hover:text-primary transition-colors"
                             title="修改文件名"
                           >
-                            <Edit2 className="w-2.5 h-2.5" />
+                            <Edit2 className="w-3 h-3" />
                           </button>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               onMoveToReview(item.item_id);
                             }}
-                            className="p-1 rounded bg-on-surface/5 text-on-surface/40 hover:bg-warning/10 hover:text-warning transition-all"
+                            className="p-1.5 rounded-md bg-on-surface/5 text-on-surface/30 hover:bg-warning/10 hover:text-warning transition-colors"
                             title="移动至待核对"
                           >
-                            <ArrowRight className="w-2.5 h-2.5" />
+                            <ArrowRight className="w-3 h-3" />
                           </button>
                         </div>
                       )}

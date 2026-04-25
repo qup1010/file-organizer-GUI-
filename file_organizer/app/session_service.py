@@ -1539,6 +1539,14 @@ class OrganizerSessionService:
             assistant_context_message.setdefault("role", "assistant")
             assistant_context_message.setdefault("content", display_text or "")
             context_messages = [assistant_context_message]
+        for context_message in context_messages:
+            if (
+                str(context_message.get("role") or "").strip() == "assistant"
+                and str(context_message.get("content") or "") == str(assistant_message.get("content") or "")
+                and context_message.get("tool_calls") == assistant_message.get("tool_calls")
+            ):
+                context_message["id"] = assistant_message["id"]
+                break
         self._ensure_message_ids(context_messages)
         return assistant_message, context_messages
 

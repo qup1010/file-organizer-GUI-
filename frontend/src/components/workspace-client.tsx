@@ -259,7 +259,7 @@ export default function WorkspaceClient() {
       return canRunPrecheck ? "方案已就绪，建议先做一次移动前安全检查。" : "方案还在更新，完成后即可检查。";
     }
     if (stageView.isReadyToExecute) {
-      return `安全检查通过，待移动 ${precheck?.move_preview.length ?? 0} 项${reviewMoveCount > 0 ? `，其中 ${reviewMoveCount} 项会留在待确认区（Review）` : ""}。`;
+      return `安全检查通过，待移动 ${precheck?.move_preview.length ?? 0} 项${reviewMoveCount > 0 ? `，其中 ${reviewMoveCount} 项会留在待确认区` : ""}。`;
     }
     if (stageView.isExecuting) {
       return "正在移动文件，请稍后...";
@@ -479,7 +479,7 @@ export default function WorkspaceClient() {
         title: isReadOnly ? "这是之前的整理结果" : "整理完成",
         description: isReadOnly
           ? "左侧保留了当时的记录，输入已关闭；右侧可以继续查看这次整理结果。"
-          : "左侧保留本轮记录供回看，输入已关闭；请在右侧查看结果、失败项和待确认区（Review）。",
+          : "左侧保留本轮记录供回看，输入已关闭；请在右侧查看结果、失败项和待确认区。",
       };
     }
 
@@ -664,6 +664,7 @@ export default function WorkspaceClient() {
                   loading={journalLoading || !journal}
                   targetDir={snapshot?.target_dir || ""}
                   organizeMethod={snapshot?.strategy?.organize_method}
+                  cleanupCandidateCount={snapshot?.execution_report?.cleanup_candidate_count ?? 0}
                   isBusy={isBusy}
                   readOnly={isReadOnly}
                   onOpenExplorer={(path) => void openExplorer(path || snapshot?.target_dir || "")}
@@ -1002,8 +1003,8 @@ export default function WorkspaceClient() {
                 ref={dividerRef}
                 onMouseDown={handleStartResizing}
                 className={cn(
-                  "absolute top-0 bottom-0 w-2.5 z-40 transition-colors cursor-col-resize flex items-center justify-center select-none group",
-                  isResizingState ? "bg-transparent" : "hover:bg-primary/[0.018]",
+                  "absolute top-0 bottom-0 w-2.5 z-40 transition-all duration-300 cursor-col-resize flex items-center justify-center select-none group",
+                  isResizingState ? "bg-primary/[0.02]" : "hover:bg-primary/[0.04]",
                 )}
                 style={{ left: dividerLeft !== null ? `${dividerLeft - 1.25}px` : `calc(${leftWidth}% - 1.25px)` }}
               >
@@ -1066,7 +1067,7 @@ export default function WorkspaceClient() {
       <ConfirmDialog
         open={executeConfirmOpen}
         title="确认开始移动文件？"
-        description={`执行后会真实移动本地文件。本次将处理 ${precheck?.move_preview.length ?? 0} 项${reviewMoveCount > 0 ? `，其中 ${reviewMoveCount} 项会留在待确认区（Review）` : ""}${precheckItemsSummary ? `。涉及条目：${precheckItemsSummary}` : ""}。`}
+        description={`执行后会真实移动本地文件。本次将处理 ${precheck?.move_preview.length ?? 0} 项${reviewMoveCount > 0 ? `，其中 ${reviewMoveCount} 项会留在待确认区` : ""}${precheckItemsSummary ? `。涉及条目：${precheckItemsSummary}` : ""}。`}
         confirmLabel="开始移动"
         cancelLabel="再看看"
         tone="primary"

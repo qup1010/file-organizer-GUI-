@@ -16,6 +16,7 @@ interface CompletionViewProps {
   loading: boolean;
   targetDir: string;
   organizeMethod?: OrganizeMethod;
+  cleanupCandidateCount?: number;
   isBusy: boolean;
   readOnly?: boolean;
   onOpenExplorer: (path?: string) => void;
@@ -42,6 +43,7 @@ export function CompletionView({
   loading,
   targetDir,
   organizeMethod,
+  cleanupCandidateCount = 0,
   isBusy,
   readOnly = false,
   onOpenExplorer,
@@ -52,6 +54,7 @@ export function CompletionView({
   const router = useRouter();
   const [filter, setFilter] = useState<DirectoryTreeFilter>("all");
   const [rollbackConfirmOpen, setRollbackConfirmOpen] = useState(false);
+  const [cleanupConfirmOpen, setCleanupConfirmOpen] = useState(false);
 
   if (loading) {
     return (
@@ -133,7 +136,7 @@ export function CompletionView({
 
   const afterTree = {
     title: "整理后目录树",
-    subtitle: "执行后的目标目录结构。成功、失败和待确认区（Review）会在树中标出。",
+    subtitle: "执行后的目标目录结构。成功、失败和待确认区（不会自动归入目标目录）会在树中标出。",
     leafEntries: moveItems
       .filter((item): item is typeof item & { target: string } => Boolean(item.target))
       .map<DirectoryTreeLeafEntry>((item) => ({
@@ -360,12 +363,13 @@ export function CompletionView({
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={onCleanupDirs}
-                disabled={isBusy}
+                onClick={() => setCleanupConfirmOpen(true)}
+                disabled={isBusy || cleanupCandidateCount <= 0}
                 className="flex h-8.5 items-center justify-center gap-2 rounded-lg border border-on-surface/10 bg-surface px-3.5 text-[11.5px] font-black text-on-surface/50 transition-all hover:bg-on-surface/5 active:scale-95 disabled:opacity-50"
+                title={cleanupCandidateCount > 0 ? `将检查并清理 ${cleanupCandidateCount} 个空目录候选` : "当前没有可清理的空目录候选"}
               >
                 <CheckCircle2 className="h-3.5 w-3.5 opacity-50" />
-                清理空目录
+                清理空目录{cleanupCandidateCount > 0 ? ` (${cleanupCandidateCount})` : ""}
               </button>
               <button
                 type="button"
@@ -382,9 +386,24 @@ export function CompletionView({
       </div>
 
       <ConfirmDialog
+        open={cleanupConfirmOpen}
+        title="确认清理空目录？"
+        description={`将检查并清理本次整理后留下的 ${cleanupCandidateCount} 个空目录候选。只会删除仍为空的目录；如果目录里已有新内容，会自动跳过。`}
+        confirmLabel="开始清理"
+        cancelLabel="先不清理"
+        tone="primary"
+        loading={isBusy}
+        onConfirm={async () => {
+          await onCleanupDirs();
+          setCleanupConfirmOpen(false);
+        }}
+        onCancel={() => setCleanupConfirmOpen(false)}
+      />
+
+      <ConfirmDialog
         open={rollbackConfirmOpen}
         title="确认回退这次整理？"
-        description={`这会尝试把本次整理移动过的 ${moveItems.length} 项内容放回原位置${reviewItems.length > 0 ? `，其中 ${reviewItems.length} 项当前位于待确认区（Review）` : ""}${moveItemsSummary ? `。涉及条目：${moveItemsSummary}` : ""}。已存在冲突或被占用的文件，回退时仍可能失败。`}
+        description={`这会尝试把本次整理移动过的 ${moveItems.length} 项内容放回原位置${reviewItems.length > 0 ? `，其中 ${reviewItems.length} 项当前位于待确认区` : ""}${moveItemsSummary ? `。涉及条目：${moveItemsSummary}` : ""}。已存在冲突或被占用的文件，回退时仍可能失败。`}
         confirmLabel="开始回退"
         cancelLabel="先不回退"
         tone="danger"

@@ -30,6 +30,8 @@ VISION_SECRET_KEY = "IMAGE_ANALYSIS_API_KEY"
 GLOBAL_ALLOWED_KEYS = {
     "IMAGE_ANALYSIS_ENABLED",
     "DEBUG_MODE",
+    "LAUNCH_DEFAULT_ORGANIZE_METHOD",
+    "LAUNCH_DEFAULT_TARGET_PROFILE_ID",
     "LAUNCH_DEFAULT_TEMPLATE_ID",
     "LAUNCH_DEFAULT_LANGUAGE",
     "LAUNCH_DEFAULT_DENSITY",
@@ -45,6 +47,8 @@ GLOBAL_ALLOWED_KEYS = {
 DEFAULT_GLOBAL_CONFIG = {
     "IMAGE_ANALYSIS_ENABLED": False,
     "DEBUG_MODE": False,
+    "LAUNCH_DEFAULT_ORGANIZE_METHOD": "categorize_into_new_structure",
+    "LAUNCH_DEFAULT_TARGET_PROFILE_ID": "",
     "LAUNCH_DEFAULT_TEMPLATE_ID": "general_downloads",
     "LAUNCH_DEFAULT_LANGUAGE": "zh",
     "LAUNCH_DEFAULT_DENSITY": "normal",
@@ -80,7 +84,7 @@ DEFAULT_ICON_IMAGE_PRESET = {
         "api_key": "",
     },
     "image_size": "1024x1024",
-    "analysis_concurrency_limit": 1,
+    "analysis_concurrency_limit": 2,
     "image_concurrency_limit": 1,
     "save_mode": "centralized",
 }
@@ -200,15 +204,19 @@ class SettingsService:
     def _sanitize_icon_image_preset(self, payload: dict[str, Any] | None) -> dict[str, Any]:
         data = dict(payload or {})
         image_model = dict(data.get("image_model") or {})
-        legacy_limit = data.get("concurrency_limit", DEFAULT_ICON_IMAGE_PRESET["image_concurrency_limit"])
+        legacy_limit = data.get("concurrency_limit")
         try:
-            analysis_concurrency_limit = int(data.get("analysis_concurrency_limit", legacy_limit) or 1)
+            analysis_concurrency_limit = int(
+                data.get("analysis_concurrency_limit", legacy_limit) or DEFAULT_ICON_IMAGE_PRESET["analysis_concurrency_limit"]
+            )
         except (TypeError, ValueError):
-            analysis_concurrency_limit = 1
+            analysis_concurrency_limit = DEFAULT_ICON_IMAGE_PRESET["analysis_concurrency_limit"]
         try:
-            image_concurrency_limit = int(data.get("image_concurrency_limit", legacy_limit) or 1)
+            image_concurrency_limit = int(
+                data.get("image_concurrency_limit", legacy_limit) or DEFAULT_ICON_IMAGE_PRESET["image_concurrency_limit"]
+            )
         except (TypeError, ValueError):
-            image_concurrency_limit = 1
+            image_concurrency_limit = DEFAULT_ICON_IMAGE_PRESET["image_concurrency_limit"]
         return {
             "name": str(data.get("name") or DEFAULT_ICON_IMAGE_PRESET["name"]).strip() or DEFAULT_ICON_IMAGE_PRESET["name"],
             "image_model": {
@@ -324,6 +332,15 @@ class SettingsService:
         self._active_vision_preset_id = str(data.get("active_vision_preset_id") or EMPTY_PRESET_ID)
         self._active_icon_image_preset_id = str(data.get("active_icon_image_preset_id") or EMPTY_PRESET_ID)
 
+    def _migrate_default_icon_analysis_limit(self) -> bool:
+        default_preset = self._icon_image_presets.get(DEFAULT_PRESET_ID)
+        if not default_preset:
+            return False
+        if int(default_preset.get("analysis_concurrency_limit", 0) or 0) != 1:
+            return False
+        default_preset["analysis_concurrency_limit"] = DEFAULT_ICON_IMAGE_PRESET["analysis_concurrency_limit"]
+        return True
+
     def _load_old_root_schema(self, data: dict[str, Any]) -> None:
         if "global_config" in data or "text_presets" in data or "vision_presets" in data:
             self._global_config = self._sanitize_global(data.get("global_config"))
@@ -365,6 +382,8 @@ class SettingsService:
                     or "image_concurrency_limit" not in dict(preset or {})
                     for preset in raw_icon_presets.values()
                 ):
+                    needs_save = True
+                if self._migrate_default_icon_analysis_limit():
                     needs_save = True
             else:
                 self._load_old_root_schema(data)
@@ -453,7 +472,10 @@ class SettingsService:
                 "secret_state": _secret_state(str(image_model.get("api_key", "") or "")),
             },
             "image_size": str(preset.get("image_size") or DEFAULT_ICON_IMAGE_PRESET["image_size"]),
-            "analysis_concurrency_limit": int(preset.get("analysis_concurrency_limit", DEFAULT_ICON_IMAGE_PRESET["analysis_concurrency_limit"]) or 1),
+            "analysis_concurrency_limit": int(
+                preset.get("analysis_concurrency_limit", DEFAULT_ICON_IMAGE_PRESET["analysis_concurrency_limit"])
+                or DEFAULT_ICON_IMAGE_PRESET["analysis_concurrency_limit"]
+            ),
             "image_concurrency_limit": int(preset.get("image_concurrency_limit", DEFAULT_ICON_IMAGE_PRESET["image_concurrency_limit"]) or 1),
             "save_mode": "in_folder" if str(preset.get("save_mode", "")).strip().lower() == "in_folder" else "centralized",
         }

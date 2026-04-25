@@ -195,7 +195,7 @@ class IconWorkbenchConfigStore:
             text_model=self._global_text_model(),
             image_model=ModelConfig(),
             image_size="1024x1024",
-            analysis_concurrency_limit=1,
+            analysis_concurrency_limit=2,
             image_concurrency_limit=1,
             save_mode="centralized",
         )
