@@ -222,9 +222,6 @@ def _get_request_token(request: Request) -> str:
     header_token = request.headers.get("x-file-pilot-token", "").strip()
     if header_token:
         return header_token
-    legacy_header_token = request.headers.get("x-file-organizer-token", "").strip()
-    if legacy_header_token:
-        return legacy_header_token
 
     authorization = request.headers.get("authorization", "")
     if authorization.lower().startswith("bearer "):
@@ -235,12 +232,8 @@ def _get_request_token(request: Request) -> str:
     return request.query_params.get("access_token", "").strip()
 
 
-def _get_env_with_legacy(name: str, legacy_name: str) -> str:
-    return os.getenv(name, "").strip() or os.getenv(legacy_name, "").strip()
-
-
 def _request_once(request: Request) -> bool:
-    return request.headers.get("x-file-pilot-once") == "1" or request.headers.get("x-file-organizer-once") == "1"
+    return request.headers.get("x-file-pilot-once") == "1"
 
 
 def _resolve_test_secret(
@@ -471,7 +464,7 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
         if path == "/api/health" or not path.startswith("/api/"):
             return await call_next(request)
 
-        expected_token = _get_env_with_legacy("FILE_PILOT_API_TOKEN", "FILE_ORGANIZER_API_TOKEN")
+        expected_token = os.getenv("FILE_PILOT_API_TOKEN", "").strip()
         if expected_token and _get_request_token(request) != expected_token:
             return JSONResponse(status_code=401, content={"detail": "UNAUTHORIZED"})
 
@@ -479,7 +472,7 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
 
     @app.get("/api/health")
     def health():
-        return {"status": "ok", "instance_id": _get_env_with_legacy("FILE_PILOT_INSTANCE_ID", "FILE_ORGANIZER_INSTANCE_ID")}
+        return {"status": "ok", "instance_id": os.getenv("FILE_PILOT_INSTANCE_ID", "").strip()}
 
     @app.get("/_filepilot/vision-images/{token}")
     def get_registered_vision_image(token: str):

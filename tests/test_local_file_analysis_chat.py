@@ -62,7 +62,8 @@ class ScannerServiceTests(unittest.TestCase):
     def test_organizer_prompt_describes_directory_semantics_and_user_preference_priority(self):
         prompt = organizer_service.build_prompt("合同.pdf | 财务/合同 | 付款协议")
 
-        self.assertIn("优先考虑的目录语义：项目资料、财务票据、学习资料、安装程序、截图记录、媒体素材、历史归档、待确认", prompt)
+        self.assertIn("优先考虑的目录语义：项目资料、财务票据、学习资料、安装程序、截图记录、媒体素材、历史归档", prompt)
+        self.assertNotIn("优先考虑的目录语义：项目资料、财务票据、学习资料、安装程序、截图记录、媒体素材、历史归档、待确认", prompt)
         self.assertIn("目录语言：优先使用简洁、自然、统一的中文目录名", prompt)
         self.assertIn("整理保守度：平衡", prompt)
         self.assertIn("允许为清晰结构创建适量目录，但不要过度细分", prompt)

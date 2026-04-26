@@ -30,13 +30,13 @@ export function notifyWorkspaceWhenAway(title: string, body: string, tag: string
   if (typeof window === "undefined") {
     return;
   }
-  if (isWorkspaceForeground()) {
-    return;
-  }
   if (isTauriDesktop()) {
-    void invokeTauriCommand<void>("show_desktop_notification", { title, body }).catch((error) => {
+    void invokeTauriCommand<boolean>("show_desktop_notification_when_away", { title, body }).catch((error) => {
       console.warn("Failed to show desktop notification", error);
     });
+    return;
+  }
+  if (isWorkspaceForeground()) {
     return;
   }
   if (!("Notification" in window) || Notification.permission !== "granted") {

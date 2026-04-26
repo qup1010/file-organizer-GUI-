@@ -1,4 +1,6 @@
+import json
 import unittest
+from pathlib import Path
 
 from file_pilot.organize import service as organizer_service
 from file_pilot.organize.prompts import build_prompt
@@ -61,6 +63,31 @@ class OrganizerServiceTests(unittest.TestCase):
         self.assertIn("整理保守度：保守", prompt)
         self.assertIn("票据优先归财务目录", prompt)
 
+    def test_build_prompt_keeps_review_internal_and_avoids_full_repetition(self):
+        prompt = build_prompt("F001 | file | 合同.pdf | 财务合同 | 付款协议")
+
+        self.assertIn("只在 `unresolved_adds` 中登记", prompt)
+        self.assertIn("系统会自动映射到待确认区", prompt)
+        self.assertIn("不要把 `Review` 作为用户可见名称", prompt)
+        self.assertIn("不要重复上一轮完整说明", prompt)
+        self.assertIn("如果界面已显示可检查，请点击‘检查移动风险’", prompt)
+        self.assertNotIn("当前整理草案已满足预检条件", prompt)
+
+    def test_build_prompt_incremental_forbids_new_target_directories(self):
+        prompt = build_prompt(
+            "F001 | file | 合同.pdf | 财务合同 | 付款协议",
+            planning_context={
+                "organize_mode": "incremental",
+                "target_directories": ["Finance"],
+                "target_slots": [{"slot_id": "D001", "relpath": "Finance", "depth": 0}],
+            },
+        )
+
+        self.assertIn("禁止创建新目标目录", prompt)
+        self.assertIn("target_dir 必须精确等于某个已选目标目录", prompt)
+        self.assertIn("或交给系统放入待确认区", prompt)
+        self.assertNotIn("只能放入显式配置的目标目录，或放入 Review", prompt)
+
     def test_build_preview_directories_applies_density_and_prefix_style(self):
         preview = build_preview_directories(
             "media_assets",
@@ -70,6 +97,22 @@ class OrganizerServiceTests(unittest.TestCase):
         )
 
         self.assertEqual(preview[:3], ["01_截图", "02_媒体", "03_设计"])
+
+    def test_strategy_catalog_does_not_expose_review_as_candidate_directory(self):
+        catalog_path = Path(__file__).resolve().parents[1] / "frontend" / "src" / "lib" / "strategy-catalog.json"
+        catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+
+        def walk(value):
+            if isinstance(value, dict):
+                if value.get("id") == "review":
+                    self.fail("strategy catalog must not expose review as a candidate directory")
+                for child in value.values():
+                    walk(child)
+            elif isinstance(value, list):
+                for child in value:
+                    walk(child)
+
+        walk(catalog)
 
 
 if __name__ == "__main__":

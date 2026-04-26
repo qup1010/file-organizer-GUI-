@@ -70,8 +70,7 @@ class ApiAuthTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["session_snapshot"]["stage"], "draft")
 
-    def test_legacy_file_organizer_env_and_header_remain_supported(self):
-        original_modern = os.environ.pop("FILE_PILOT_API_TOKEN", None)
+    def test_legacy_file_organizer_header_is_not_accepted(self):
         original_legacy = os.environ.get("FILE_ORGANIZER_API_TOKEN")
         try:
             os.environ["FILE_ORGANIZER_API_TOKEN"] = "legacy-token"
@@ -83,15 +82,12 @@ class ApiAuthTests(unittest.TestCase):
                 json={"target_dir": str(self.target_dir), "resume_if_exists": False},
             )
         finally:
-            if original_modern is not None:
-                os.environ["FILE_PILOT_API_TOKEN"] = original_modern
             if original_legacy is None:
                 os.environ.pop("FILE_ORGANIZER_API_TOKEN", None)
             else:
                 os.environ["FILE_ORGANIZER_API_TOKEN"] = original_legacy
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["session_snapshot"]["stage"], "draft")
+        self.assertEqual(response.status_code, 401)
 
     def test_events_endpoint_requires_auth(self):
         created = self.client.post(

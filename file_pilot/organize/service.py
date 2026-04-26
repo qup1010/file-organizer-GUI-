@@ -43,7 +43,7 @@ def _base_plan_diff_tool_description() -> str:
         "unresolved_adds=新增待确认条目，unresolved_removals=已确认并移出待确认的条目。"
         "约束：所有 item_id 都必须来自当前规划范围；move_updates 优先使用 target_slot，必要时再使用 target_dir；"
         "target_dir 只写相对新目录生成位置的目录路径，不要拼接文件名，也不要输出绝对路径或 Review 路径；"
-        "拿不准的条目直接加入 unresolved_adds，系统会自动放入 Review。"
+        "拿不准的条目只加入 unresolved_adds，系统会自动放入待确认区，不要再为该项提交 move_updates。"
     )
 
 
@@ -68,9 +68,10 @@ def _incremental_plan_diff_tool_description(
         "字段含义：directory_renames=目录改名，move_updates=条目去向更新，"
         "unresolved_adds=新增待确认条目，unresolved_removals=已确认并移出待确认的条目。"
         "约束：所有 item_id 都必须来自当前已选规划范围；禁止 directory_renames；"
-        "move_updates 只能放入已选目标目录及其子目录，或在新目录生成位置下创建新目录；"
-        "禁止移动到未选中的既有顶级目录；优先使用 target_slot，只有在新建目录或没有合适槽位时才使用 target_dir；"
-        "target_dir 只写相对新目录生成位置的目录路径，不要拼接文件名，也不要输出绝对路径或 Review 路径。"
+        "move_updates 只能放入已选目标目录，不能创建新目标目录；"
+        "禁止移动到未选中的既有顶级目录；优先使用 target_slot，只有没有合适槽位时才使用 target_dir；"
+        "target_dir 必须精确等于某个已选目标目录，不要拼接文件名，也不要输出绝对路径或 Review 路径；"
+        "拿不准的条目只加入 unresolved_adds，系统会自动放入待确认区。"
         + target_hint
         + slot_hint
         + blocked_hint
@@ -1189,7 +1190,7 @@ def build_command_retry_message(
         ]
         details.append("当前任务类型为“归入已有目录”的硬性限制：")
         details.append("- 禁止目录改名")
-        details.append("- 只能放入显式配置的目标目录，或放入 Review")
+        details.append("- 只能放入显式配置的目标目录，或交给系统放入待确认区")
         details.append("- 父目录不会自动授权子目录；子目录必须单独配置后才能作为目标")
         details.append("- 禁止新建目标目录，禁止移动到未显式配置的目录")
         details.append("- 优先使用 target_slot 指向现有 D-ID")
@@ -1278,7 +1279,7 @@ def _build_repair_messages(
         ]
         repair_prompt.append("“归入已有目录”任务的硬性限制：")
         repair_prompt.append("- 禁止目录改名")
-        repair_prompt.append("- 只能放入显式配置的目标目录，或放入 Review")
+        repair_prompt.append("- 只能放入显式配置的目标目录，或交给系统放入待确认区")
         repair_prompt.append("- 父目录不会自动授权子目录；子目录必须单独配置后才能作为目标")
         repair_prompt.append("- 禁止新建目标目录，禁止移动到未显式配置的目录")
         repair_prompt.append("- 优先使用 target_slot 指向已有 D-ID")

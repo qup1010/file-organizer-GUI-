@@ -14,6 +14,8 @@ use tauri::{App, Manager, RunEvent};
 use serde::Serialize;
 use tauri_plugin_notification::NotificationExt;
 
+const APP_USER_MODEL_ID: &str = "com.filepilot.desktop";
+
 use crate::icon_apply::{
     apply_folder_icon,
     apply_ready_icons,
@@ -238,8 +240,7 @@ fn open_directory(path: String) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
-fn show_desktop_notification(app: tauri::AppHandle, title: String, body: String) -> Result<(), String> {
+fn show_desktop_notification_inner(app: &tauri::AppHandle, title: String, body: String) -> Result<(), String> {
     let title = title.trim();
     if title.is_empty() {
         return Err("notification title is required".to_string());
@@ -252,6 +253,56 @@ fn show_desktop_notification(app: tauri::AppHandle, title: String, body: String)
     }
 
     builder.show().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn show_desktop_notification(app: tauri::AppHandle, title: String, body: String) -> Result<(), String> {
+    show_desktop_notification_inner(&app, title, body)
+}
+
+#[tauri::command]
+fn show_desktop_notification_when_away(app: tauri::AppHandle, title: String, body: String) -> Result<bool, String> {
+    if let Some(window) = app.get_webview_window("main") {
+        let is_minimized = window.is_minimized().unwrap_or(false);
+        let is_focused = window.is_focused().unwrap_or(false);
+        if is_focused && !is_minimized {
+            return Ok(false);
+        }
+    }
+
+    show_desktop_notification_inner(&app, title, body)?;
+    Ok(true)
+}
+
+#[cfg(windows)]
+fn ensure_windows_notification_identity(_app: &App) -> Result<(), String> {
+    use windows_registry::CURRENT_USER;
+    use windows_sys::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID;
+
+    let exe_path = std::env::current_exe()
+        .map_err(|error| format!("failed to resolve current executable: {error}"))?;
+    let key = CURRENT_USER
+        .create(format!(r"SOFTWARE\Classes\AppUserModelId\{APP_USER_MODEL_ID}"))
+        .map_err(|error| format!("failed to create AppUserModelId registry key: {error}"))?;
+    key.set_string("DisplayName", "FilePilot")
+        .map_err(|error| format!("failed to set notification display name: {error}"))?;
+    key.set_string("IconUri", &exe_path.to_string_lossy())
+        .map_err(|error| format!("failed to set notification icon uri: {error}"))?;
+    key.set_string("IconBackgroundColor", "0")
+        .map_err(|error| format!("failed to set notification icon background: {error}"))?;
+
+    let app_id: Vec<u16> = APP_USER_MODEL_ID.encode_utf16().chain(std::iter::once(0)).collect();
+    let result = unsafe { SetCurrentProcessExplicitAppUserModelID(app_id.as_ptr()) };
+    if result < 0 {
+        return Err(format!("failed to set process AppUserModelID: HRESULT 0x{result:08X}"));
+    }
+
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn ensure_windows_notification_identity(_app: &App) -> Result<(), String> {
+    Ok(())
 }
 
 
@@ -484,6 +535,7 @@ pub fn run() {
             open_directory,
             save_file_as,
             show_desktop_notification,
+            show_desktop_notification_when_away,
             get_runtime_config,
             apply_folder_icon,
             apply_ready_icons,
@@ -495,6 +547,9 @@ pub fn run() {
             crate::bg_removal::test_bg_removal_connection
         ])
         .setup(|app| {
+            if let Err(error) = ensure_windows_notification_identity(app) {
+                eprintln!("failed to prepare Windows notification identity: {error}");
+            }
             let state = resolve_desktop_state(app)?;
             std::env::set_var("FILE_PILOT_PROJECT_ROOT", &state.project_root);
             app.manage(state);

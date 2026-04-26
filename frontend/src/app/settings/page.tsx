@@ -1663,7 +1663,7 @@ export default function SettingsPage() {
                     </FieldGroup>
                     <FieldGroup label="保存方式" className="xl:col-span-2">
                       <div className="grid gap-3 md:grid-cols-2">
-                        <StrategyOptionButton active={draft.icon_image.save_mode === "centralized"} label="集中保存" onClick={() => updateDraft("icon_image", (current) => ({ ...current, save_mode: "centralized" }))} description="应用后的 .ico 写入 %APPDATA%/FileOrganizer/managed_icons；预览 PNG 仍保存在项目 output/icon_workbench/previews。" />
+                        <StrategyOptionButton active={draft.icon_image.save_mode === "centralized"} label="集中保存" onClick={() => updateDraft("icon_image", (current) => ({ ...current, save_mode: "centralized" }))} description="应用后的 .ico 写入 %APPDATA%/FilePilot/managed_icons；预览 PNG 仍保存在项目 output/icon_workbench/previews。" />
                         <StrategyOptionButton active={draft.icon_image.save_mode === "in_folder"} label="就地保存" onClick={() => updateDraft("icon_image", (current) => ({ ...current, save_mode: "in_folder" }))} description="处理后资源靠近目标文件夹，适合边做边核对。" />
                       </div>
                     </FieldGroup>

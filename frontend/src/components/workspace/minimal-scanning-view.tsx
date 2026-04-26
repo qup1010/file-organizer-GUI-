@@ -6,6 +6,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock3,
+  Bell,
   FolderOpen,
   StopCircle, 
   Loader2,
@@ -229,6 +230,17 @@ export function MinimalScanningView({
                     <p className="text-[12px] leading-relaxed text-ui-muted/60 max-w-[600px]">
                       扫描阶段只读取文件信息和必要摘要，不会移动或改写原文件。真正移动前还会先做安全检查。
                     </p>
+                  </div>
+
+                  <div className="rounded-xl border border-primary/12 bg-primary/[0.035] p-4">
+                    <div className="flex gap-3">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-primary/15 bg-primary/8 text-primary">
+                        <Bell className="h-4 w-4" />
+                      </div>
+                      <p className="text-[12px] font-medium leading-relaxed text-on-surface/70">
+                        文件较多时扫描可能需要较长时间。你可以随时最小化窗口，任务完成后 FilePilot 会通过系统通知提醒你回来查看结果。
+                      </p>
+                    </div>
                   </div>
                 </motion.div>
               </AnimatePresence>
