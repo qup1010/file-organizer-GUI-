@@ -108,6 +108,7 @@ export default function WorkspaceClient() {
   const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
   const [executeConfirmOpen, setExecuteConfirmOpen] = useState(false);
   const [scanAbortConfirmOpen, setScanAbortConfirmOpen] = useState(false);
+  const [scanAborting, setScanAborting] = useState(false);
   const [showExitMenu, setShowExitMenu] = useState(false);
   const [dividerLeft, setDividerLeft] = useState<number | null>(null);
   const [previewFocusRequest, setPreviewFocusRequest] = useState<PreviewFocusRequest | null>(null);
@@ -388,13 +389,18 @@ export default function WorkspaceClient() {
   };
 
   const handleConfirmAbortScan = async () => {
-    const success = await abandonSession();
-    if (success) {
-      if (typeof window !== "undefined") {
-        window.localStorage.removeItem(ACTIVE_WORKSPACE_ROUTE_KEY);
+    setScanAborting(true);
+    try {
+      const success = await abandonSession();
+      if (success) {
+        if (typeof window !== "undefined") {
+          window.localStorage.removeItem(ACTIVE_WORKSPACE_ROUTE_KEY);
+        }
+        setScanAbortConfirmOpen(false);
+        router.push("/");
       }
-      setScanAbortConfirmOpen(false);
-      router.push("/");
+    } finally {
+      setScanAborting(false);
     }
   };
   const handleStartScan = React.useCallback(() => {
@@ -725,7 +731,7 @@ export default function WorkspaceClient() {
                   scanner={scanner}
                   progressPercent={progressPercent}
                   onAbort={() => setScanAbortConfirmOpen(true)}
-                  aborting={loading}
+                  aborting={scanAborting}
                   isModelConfigured={isTextModelConfigured}
                 />
               );
@@ -1136,9 +1142,13 @@ export default function WorkspaceClient() {
         confirmLabel="停止扫描"
         cancelLabel="继续扫描"
         tone="danger"
-        loading={loading}
+        loading={scanAborting}
         onConfirm={handleConfirmAbortScan}
-        onCancel={() => setScanAbortConfirmOpen(false)}
+        onCancel={() => {
+          if (!scanAborting) {
+            setScanAbortConfirmOpen(false);
+          }
+        }}
       />
       <ConfirmDialog
         open={executeConfirmOpen}

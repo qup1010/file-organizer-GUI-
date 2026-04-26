@@ -73,3 +73,4 @@ desktop/.env.local
 logs/
 .history/
 test_temp_*/
+logs/backend/*

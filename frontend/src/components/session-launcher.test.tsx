@@ -136,6 +136,7 @@ function createSnapshot(stage: string = "planning", sessionId = "session-old") {
 
 describe("SessionLauncher", () => {
   beforeEach(() => {
+    window.localStorage.clear();
     pushMock.mockReset();
     createLaunchSessionMock.mockReset();
     startFreshSessionMock.mockReset();
@@ -192,6 +193,7 @@ describe("SessionLauncher", () => {
 
   afterEach(() => {
     cleanup();
+    window.localStorage.clear();
   });
 
   it("supports multiple file and directory sources and submits a full-categorize payload", async () => {
@@ -230,6 +232,27 @@ describe("SessionLauncher", () => {
         }),
       );
     });
+  });
+
+  it("restores the unfinished launcher draft after navigating back", async () => {
+    window.localStorage.setItem(
+      "file_pilot_launcher_draft",
+      JSON.stringify({
+        version: 1,
+        step: 1,
+        sources: [
+          { source_type: "file", path: "D:/incoming/readme.txt" },
+          { source_type: "directory", path: "D:/incoming/photos", directory_mode: "atomic" },
+        ],
+      }),
+    );
+
+    render(<SessionLauncher />);
+
+    expect(await screen.findByText("已加入 2 项")).toBeInTheDocument();
+    const folderName = screen.getByText("photos");
+    const fileName = screen.getByText("readme.txt");
+    expect(folderName.compareDocumentPosition(fileName) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("falls back to the source workspace when full categorize output_dir is not manually overridden", async () => {

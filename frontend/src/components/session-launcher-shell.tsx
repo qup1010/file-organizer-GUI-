@@ -110,7 +110,27 @@ type LaunchRequestState = {
   display_path: string;
 };
 
+type LauncherDraftState = {
+  version: 1;
+  step?: 1 | 2 | 3;
+  strategy?: SessionStrategySelection;
+  sources?: SessionSourceSelection[];
+  sourceImportGroups?: SourceImportGroup[];
+  sourceDraftType?: SourceDraftType;
+  sourceDraftPath?: string;
+  newDirectoryRoot?: string;
+  reviewRoot?: string;
+  reviewFollowsNewRoot?: boolean;
+  showPlacementOverrides?: boolean;
+  manualTargetDirectories?: TargetDirectoryDraft[];
+  targetDirectoryDraft?: string;
+  selectedTargetProfileId?: string;
+  showManualInput?: boolean;
+  showManualTargetInput?: boolean;
+};
+
 const IMPORT_GROUP_PREVIEW_LIMIT = 5;
+const LAUNCHER_DRAFT_KEY = "file_pilot_launcher_draft";
 
 function createImportGroupId(): string {
   return `import-group:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
@@ -161,6 +181,75 @@ function dedupeSources(items: SessionSourceSelection[]): SessionSourceSelection[
     seen.set(key, normalized);
   }
   return Array.from(seen.values());
+}
+
+function sourceDisplayName(item: Pick<SessionSourceSelection, "path">): string {
+  return item.path.split(/[\\/]/).pop() || item.path;
+}
+
+function compareSourceForDisplay(a: SessionSourceSelection, b: SessionSourceSelection): number {
+  if (a.source_type !== b.source_type) {
+    return a.source_type === "directory" ? -1 : 1;
+  }
+  return sourceDisplayName(a).localeCompare(sourceDisplayName(b), "zh-Hans-CN", {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
+function sortSourcesForDisplay(items: SessionSourceSelection[]): SessionSourceSelection[] {
+  return [...items].sort(compareSourceForDisplay);
+}
+
+function readLauncherDraft(): LauncherDraftState | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const raw = window.localStorage.getItem(LAUNCHER_DRAFT_KEY);
+  if (!raw) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(raw) as LauncherDraftState;
+    return parsed?.version === 1 ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function sanitizeLauncherDraft(draft: LauncherDraftState | null): LauncherDraftState | null {
+  if (!draft) {
+    return null;
+  }
+  const sources = dedupeSources(draft.sources || []);
+  const sourceKeys = new Set(sources.map((item) => sourceSelectionKey(item)));
+  return {
+    ...draft,
+    step: draft.step === 2 || draft.step === 3 ? draft.step : 1,
+    sources,
+    sourceImportGroups: (draft.sourceImportGroups || [])
+      .map((group) => ({
+        ...group,
+        item_keys: group.item_keys.filter((key) => sourceKeys.has(key)),
+        expanded: Boolean(group.expanded),
+      }))
+      .filter((group) => group.item_keys.length > 0),
+    sourceDraftType: draft.sourceDraftType === "file" ? "file" : "directory",
+    sourceDraftPath: draft.sourceDraftPath || "",
+    manualTargetDirectories: (draft.manualTargetDirectories || []).filter((item) => item.path.trim()),
+    targetDirectoryDraft: draft.targetDirectoryDraft || "",
+    selectedTargetProfileId: draft.selectedTargetProfileId || "",
+    showManualInput: Boolean(draft.showManualInput),
+    showManualTargetInput: Boolean(draft.showManualTargetInput),
+    showPlacementOverrides: Boolean(draft.showPlacementOverrides),
+  };
+}
+
+function clearLauncherDraft() {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.removeItem(LAUNCHER_DRAFT_KEY);
 }
 
 function dedupeTargetDirectories(items: TargetProfileDirectory[]): TargetProfileDirectory[] {
@@ -306,23 +395,30 @@ function placementDefaults(
 export function SessionLauncherShell() {
   const router = useRouter();
   const apiBaseUrl = getApiBaseUrl();
+  const launcherDraftRef = useRef<LauncherDraftState | null | undefined>(undefined);
+  const [draftHydrated, setDraftHydrated] = useState(false);
 
-  const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [strategy, setStrategy] = useState<SessionStrategySelection>(DEFAULT_STRATEGY_SELECTION);
+  if (launcherDraftRef.current === undefined && typeof window !== "undefined") {
+    launcherDraftRef.current = sanitizeLauncherDraft(readLauncherDraft());
+  }
+  const launcherDraft = launcherDraftRef.current || null;
+
+  const [step, setStep] = useState<1 | 2 | 3>(launcherDraft?.step || 1);
+  const [strategy, setStrategy] = useState<SessionStrategySelection>(launcherDraft?.strategy || DEFAULT_STRATEGY_SELECTION);
   const [launchConfig, setLaunchConfig] = useState<LaunchStrategyConfig | null>(null);
-  const [sources, setSources] = useState<SessionSourceSelection[]>([]);
-  const [sourceImportGroups, setSourceImportGroups] = useState<SourceImportGroup[]>([]);
+  const [sources, setSources] = useState<SessionSourceSelection[]>(launcherDraft?.sources || []);
+  const [sourceImportGroups, setSourceImportGroups] = useState<SourceImportGroup[]>(launcherDraft?.sourceImportGroups || []);
   const [sourceFeedback, setSourceFeedback] = useState<SourceFeedback | null>(null);
-  const [sourceDraftType, setSourceDraftType] = useState<SourceDraftType>("directory");
-  const [sourceDraftPath, setSourceDraftPath] = useState("");
-  const [newDirectoryRoot, setNewDirectoryRoot] = useState("");
-  const [reviewRoot, setReviewRoot] = useState("");
-  const [reviewFollowsNewRoot, setReviewFollowsNewRoot] = useState(true);
-  const [showPlacementOverrides, setShowPlacementOverrides] = useState(false);
+  const [sourceDraftType, setSourceDraftType] = useState<SourceDraftType>(launcherDraft?.sourceDraftType || "directory");
+  const [sourceDraftPath, setSourceDraftPath] = useState(launcherDraft?.sourceDraftPath || "");
+  const [newDirectoryRoot, setNewDirectoryRoot] = useState(launcherDraft?.newDirectoryRoot || "");
+  const [reviewRoot, setReviewRoot] = useState(launcherDraft?.reviewRoot || "");
+  const [reviewFollowsNewRoot, setReviewFollowsNewRoot] = useState(launcherDraft?.reviewFollowsNewRoot ?? true);
+  const [showPlacementOverrides, setShowPlacementOverrides] = useState(Boolean(launcherDraft?.showPlacementOverrides));
   const [advancedSettingsDialogOpen, setAdvancedSettingsDialogOpen] = useState(false);
-  const [manualTargetDirectories, setManualTargetDirectories] = useState<TargetDirectoryDraft[]>([]);
-  const [targetDirectoryDraft, setTargetDirectoryDraft] = useState("");
-  const [selectedTargetProfileId, setSelectedTargetProfileId] = useState("");
+  const [manualTargetDirectories, setManualTargetDirectories] = useState<TargetDirectoryDraft[]>(launcherDraft?.manualTargetDirectories || []);
+  const [targetDirectoryDraft, setTargetDirectoryDraft] = useState(launcherDraft?.targetDirectoryDraft || "");
+  const [selectedTargetProfileId, setSelectedTargetProfileId] = useState(launcherDraft?.selectedTargetProfileId || "");
   const [profileNameDraft, setProfileNameDraft] = useState("");
   const [targetProfiles, setTargetProfiles] = useState<TargetProfile[]>([]);
   const [targetProfilesLoading, setTargetProfilesLoading] = useState(false);
@@ -330,8 +426,8 @@ export function SessionLauncherShell() {
   const [loading, setLoading] = useState(false);
   const [launchTransitionOpen, setLaunchTransitionOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showManualInput, setShowManualInput] = useState(false);
-  const [showManualTargetInput, setShowManualTargetInput] = useState(false);
+  const [showManualInput, setShowManualInput] = useState(Boolean(launcherDraft?.showManualInput));
+  const [showManualTargetInput, setShowManualTargetInput] = useState(Boolean(launcherDraft?.showManualTargetInput));
   const [resumePrompt, setResumePrompt] = useState<{ sessionId: string; snapshot: SessionSnapshot; launch: LaunchRequestState } | null>(null);
   const [commonDirs, setCommonDirs] = useState<{ label: string; path: string }[]>([]);
   const [isDropActive, setIsDropActive] = useState(false);
@@ -411,15 +507,30 @@ export function SessionLauncherShell() {
     () => new Map(sources.map((item) => [sourceSelectionKey(item), item])),
     [sources],
   );
+  const sourceStats = useMemo(() => {
+    const directoryCount = sources.filter((item) => item.source_type === "directory").length;
+    return {
+      total: sources.length,
+      directoryCount,
+      fileCount: sources.length - directoryCount,
+    };
+  }, [sources]);
+  const displaySources = useMemo(() => sortSourcesForDisplay(sources), [sources]);
   const sourceImportGroupViews = useMemo(
     () =>
       sourceImportGroups
-        .map((group) => ({
-          ...group,
-          items: group.item_keys
+        .map((group) => {
+          const items = sortSourcesForDisplay(
+            group.item_keys
             .map((key) => sourceKeyMap.get(key))
             .filter((item): item is SessionSourceSelection => Boolean(item)),
-        }))
+          );
+          return {
+            ...group,
+            item_keys: items.map((item) => sourceSelectionKey(item)),
+            items,
+          };
+        })
         .filter((group) => group.items.length > 0),
     [sourceImportGroups, sourceKeyMap],
   );
@@ -507,6 +618,53 @@ export function SessionLauncherShell() {
     : null;
 
   useEffect(() => {
+    setDraftHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!draftHydrated || typeof window === "undefined") {
+      return;
+    }
+    const draft: LauncherDraftState = {
+      version: 1,
+      step,
+      strategy,
+      sources,
+      sourceImportGroups: pruneImportGroups(sourceImportGroups, sources),
+      sourceDraftType,
+      sourceDraftPath,
+      newDirectoryRoot,
+      reviewRoot,
+      reviewFollowsNewRoot,
+      showPlacementOverrides,
+      manualTargetDirectories,
+      targetDirectoryDraft,
+      selectedTargetProfileId,
+      showManualInput,
+      showManualTargetInput,
+    };
+    window.localStorage.setItem(LAUNCHER_DRAFT_KEY, JSON.stringify(draft));
+  }, [
+    draftHydrated,
+    manualTargetDirectories,
+    newDirectoryRoot,
+    pruneImportGroups,
+    reviewFollowsNewRoot,
+    reviewRoot,
+    selectedTargetProfileId,
+    showManualInput,
+    showManualTargetInput,
+    showPlacementOverrides,
+    sourceDraftPath,
+    sourceDraftType,
+    sourceImportGroups,
+    sources,
+    step,
+    strategy,
+    targetDirectoryDraft,
+  ]);
+
+  useEffect(() => {
     let cancelled = false;
 
     async function loadLaunchPreferences() {
@@ -514,15 +672,23 @@ export function SessionLauncherShell() {
         const api = createApiClient(apiBaseUrl, getApiToken());
         const data = await api.getSettings();
         if (cancelled) return;
-        setStrategy(getLaunchStrategyFromConfig(data.global_config));
+        if (!launcherDraft?.strategy) {
+          setStrategy(getLaunchStrategyFromConfig(data.global_config));
+        }
         setLaunchConfig((data.global_config || {}) as LaunchStrategyConfig);
-        setReviewFollowsNewRoot(data.global_config?.LAUNCH_REVIEW_FOLLOWS_NEW_ROOT !== false);
+        if (launcherDraft?.reviewFollowsNewRoot === undefined) {
+          setReviewFollowsNewRoot(data.global_config?.LAUNCH_REVIEW_FOLLOWS_NEW_ROOT !== false);
+        }
         setTextModelConfigured(Boolean(data.status?.text_configured));
       } catch {
         if (!cancelled) {
-          setStrategy(DEFAULT_STRATEGY_SELECTION);
+          if (!launcherDraft?.strategy) {
+            setStrategy(DEFAULT_STRATEGY_SELECTION);
+          }
           setLaunchConfig(null);
-          setReviewFollowsNewRoot(true);
+          if (launcherDraft?.reviewFollowsNewRoot === undefined) {
+            setReviewFollowsNewRoot(true);
+          }
           setTextModelConfigured(true);
         }
       }
@@ -532,7 +698,7 @@ export function SessionLauncherShell() {
     return () => {
       cancelled = true;
     };
-  }, [apiBaseUrl]);
+  }, [apiBaseUrl, launcherDraft?.reviewFollowsNewRoot, launcherDraft?.strategy]);
 
   useEffect(() => {
     setIsDesktopEnvironment(isTauriDesktop());
@@ -1129,6 +1295,7 @@ export function SessionLauncherShell() {
         return;
       }
       if (!response.session_id) throw new Error("没有成功创建整理会话，请再试一次。");
+      clearLauncherDraft();
       router.push(`/workspace?session_id=${response.session_id}&dir=${encodeURIComponent(launchRequest.display_path || firstSourcePath(launchRequest.sources))}&auto_scan=1`);
     } catch (err: any) {
       setLaunchTransitionOpen(false);
@@ -1153,6 +1320,7 @@ export function SessionLauncherShell() {
       const response = await startFreshSession(api, resumePrompt.sessionId, resumePrompt.snapshot.stage, resumePrompt.launch);
       setResumePrompt(null);
       if (!response.session_id) throw new Error("没有成功重新开始，请再试一次。");
+      clearLauncherDraft();
       router.push(`/workspace?session_id=${response.session_id}&dir=${encodeURIComponent(resumePrompt.launch.display_path || firstSourcePath(resumePrompt.launch.sources))}&auto_scan=1`);
     } catch (err: any) {
       setLaunchTransitionOpen(false);
@@ -1479,10 +1647,33 @@ export function SessionLauncherShell() {
                       </motion.div>
                       ) : (
                         <div className="mt-2 space-y-3">
+                          <div className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-on-surface/8 bg-surface-container-lowest px-3 py-2">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] bg-primary/10 text-primary">
+                                <Layers3 className="h-3.5 w-3.5" />
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-[12px] font-black tracking-tight text-on-surface">
+                                  已加入 {sourceStats.total} 项
+                                </p>
+                                <p className="text-[10.5px] font-medium text-ui-muted/60">
+                                  文件夹已优先显示，方便继续选择是否导入里面的项
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-[10.5px] font-black">
+                              <span className="rounded-full border border-on-surface/8 bg-surface px-2 py-1 text-on-surface/65">
+                                文件夹 {sourceStats.directoryCount}
+                              </span>
+                              <span className="rounded-full border border-on-surface/8 bg-surface px-2 py-1 text-on-surface/65">
+                                文件 {sourceStats.fileCount}
+                              </span>
+                            </div>
+                          </div>
                           <div className="grid gap-2">
                             {(() => {
                               const renderedGroupIds = new Set<string>();
-                              return sources.map((item) => {
+                              return displaySources.map((item) => {
                                 const key = sourceSelectionKey(item);
                                 const group = sourceImportGroupByKey.get(key);
                                 if (!group) {
