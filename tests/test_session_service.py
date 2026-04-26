@@ -1671,8 +1671,8 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         assert session is not None
 
         with mock.patch(
-            "file_pilot.app.session_service.analysis_service.run_analysis_cycle_for_entries",
-            return_value="plan.md | 技术设计 | 架构设计文档",
+            "file_pilot.app.session_service.analysis_service.run_analysis_cycle_for_entry_context",
+            return_value="plan.md | file | 技术设计 | 架构设计文档",
         ), mock.patch(
             "file_pilot.app.session_service.organize_service.build_initial_messages",
             return_value=[{"role": "system", "content": "scan"}],

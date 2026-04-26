@@ -11,7 +11,14 @@ from types import SimpleNamespace
 from file_pilot.analysis.file_reader import list_local_files, read_local_file, read_local_files_batch
 from file_pilot.analysis.models import AnalysisItem
 from file_pilot.analysis.prompts import build_system_prompt
-from file_pilot.shared.config import ANALYSIS_MODEL_NAME, RESULT_FILE_PATH, create_openai_client, get_analysis_model_name
+from file_pilot.shared.config import (
+    ANALYSIS_MODEL_NAME,
+    RESULT_FILE_PATH,
+    create_openai_client,
+    get_analysis_model_name,
+    get_scan_batch_target_size,
+    get_scan_worker_count,
+)
 from file_pilot.shared.events import emit
 from file_pilot.shared.logging_utils import append_debug_event
 from file_pilot.shared.path_utils import normalize_entry_name, resolve_tool_path
@@ -19,8 +26,8 @@ from file_pilot.shared.path_utils import normalize_entry_name, resolve_tool_path
 MAX_ANALYSIS_RETRIES = 3
 BATCH_ANALYSIS_RETRIES = 2
 BATCH_THRESHOLD = 30
-BATCH_TARGET_SIZE = 30
-MAX_SCAN_WORKERS = 3
+BATCH_TARGET_SIZE = 100
+MAX_SCAN_WORKERS = 5
 MAX_TOOL_ROUNDS = 3
 WORKDIR_PATH = Path.cwd().resolve()
 SUBMIT_ANALYSIS_TOOL_NAME = "submit_analysis_result"
@@ -145,6 +152,39 @@ def _build_entry_context(
             "display_name": display_names.get(entry_name, entry_name),
             "entry_type": _infer_entry_type(entry_name, target_dir) or "file",
             "absolute_path": str(absolute_path),
+            "source_relpath": entry_name,
+            "origin_path": str(target_dir.resolve()),
+            "origin_relpath": entry_name,
+            "allowed_base_dir": str(target_dir.resolve()),
+        }
+    return context
+
+
+def build_entry_context_from_records(records: list[dict]) -> dict[str, dict[str, str]]:
+    context: dict[str, dict[str, str]] = {}
+    seen_ids: set[str] = set()
+    display_names = _dedupe_display_names([str(item.get("display_name") or item.get("entry_name") or "") for item in records])
+    for index, record in enumerate(records, start=1):
+        raw_entry_id = str(record.get("entry_id") or "").strip()
+        entry_id = raw_entry_id or f"F{index:03d}"
+        while entry_id in seen_ids:
+            entry_id = f"{raw_entry_id or 'F'}_{index:03d}"
+        seen_ids.add(entry_id)
+
+        entry_name = str(record.get("entry_name") or record.get("source_relpath") or record.get("display_name") or entry_id).replace("\\", "/").strip()
+        display_name = str(record.get("display_name") or Path(entry_name).name or entry_name)
+        absolute_path = Path(str(record.get("absolute_path") or "")).resolve()
+        allowed_base_dir = Path(str(record.get("allowed_base_dir") or absolute_path.parent)).resolve()
+        context[entry_id] = {
+            "entry_id": entry_id,
+            "entry_name": entry_name,
+            "display_name": display_names.get(display_name, display_name),
+            "entry_type": str(record.get("entry_type") or ("dir" if absolute_path.is_dir() else "file")).strip().lower() or "file",
+            "absolute_path": str(absolute_path),
+            "source_relpath": str(record.get("source_relpath") or entry_name).replace("\\", "/").strip(),
+            "origin_path": str(record.get("origin_path") or allowed_base_dir),
+            "origin_relpath": str(record.get("origin_relpath") or Path(entry_name).name or entry_name).replace("\\", "/").strip(),
+            "allowed_base_dir": str(allowed_base_dir),
         }
     return context
 
@@ -276,6 +316,56 @@ def validate_analysis_items(
     }
 
 
+def _normalize_analysis_items_for_context(
+    items: list[AnalysisItem] | list[dict] | None,
+    entry_context: dict[str, dict[str, str]],
+) -> tuple[list[AnalysisItem], list[str]]:
+    normalized_items: list[AnalysisItem] = []
+    invalid_lines: list[str] = []
+    entry_name_to_id = {
+        str(item.get("entry_name") or ""): entry_id
+        for entry_id, item in entry_context.items()
+        if str(item.get("entry_name") or "")
+    }
+    for item in _coerce_analysis_items(items):
+        entry_id = str(item.entry_id or "").strip()
+        if not entry_id and item.entry_name:
+            entry_id = entry_name_to_id.get(str(item.entry_name).replace("\\", "/").strip(), "")
+        context_item = entry_context.get(entry_id)
+        if context_item is None:
+            invalid_lines.append(entry_id or item.entry_name)
+            continue
+        item_data = dict(item.__dict__)
+        item_data["entry_id"] = entry_id
+        item_data["entry_name"] = context_item["entry_name"]
+        item_data["display_name"] = context_item["display_name"]
+        item_data["entry_type"] = str(item_data.get("entry_type") or context_item.get("entry_type") or "file").strip().lower()
+        normalized_items.append(AnalysisItem.from_dict(item_data))
+    return normalized_items, invalid_lines
+
+
+def validate_analysis_items_for_context(
+    items: list[AnalysisItem] | list[dict],
+    entry_context: dict[str, dict[str, str]],
+    expected_entry_ids: list[str] | None = None,
+) -> dict:
+    parsed_items, invalid_lines = _normalize_analysis_items_for_context(items, entry_context)
+    expected = set(expected_entry_ids if expected_entry_ids is not None else entry_context.keys())
+    parsed_ids = [item.entry_id for item in parsed_items]
+    actual = set(parsed_ids)
+    counter = Counter(parsed_ids)
+    duplicates = [entry_id for entry_id, count in counter.items() if count > 1]
+    missing = sorted(expected - actual)
+    extra = sorted(actual - expected)
+    return {
+        "is_valid": not (missing or extra or duplicates or invalid_lines),
+        "missing": missing,
+        "extra": extra,
+        "duplicates": duplicates,
+        "invalid_lines": invalid_lines,
+    }
+
+
 def _parse_rendered_analysis_items(content: str, directory: Path) -> tuple[list[AnalysisItem], list[str]]:
     parsed_items: list[AnalysisItem] = []
     invalid_lines: list[str] = []
@@ -379,6 +469,14 @@ def _sanitize_file_preview(preview: str, *, entry_id: str, display_name: str) ->
     return f"--- 条目 [{entry_id} | {display_name}] 内容开始 ---\n{content.strip()}\n--- 内容结束 ---"
 
 
+def _is_path_within_base(path: Path, base_dir: Path) -> bool:
+    try:
+        path.resolve().relative_to(base_dir.resolve())
+        return True
+    except ValueError:
+        return False
+
+
 def _dispatch_tool_call(target_dir: Path, name: str, args: dict, entry_context: dict[str, dict[str, str]] | None = None):
     if name == "read_local_file":
         filename = _resolve_readable_file(target_dir, args.get("filename"))
@@ -395,12 +493,19 @@ def _dispatch_tool_call(target_dir: Path, name: str, args: dict, entry_context: 
                     results.append(f"--- 条目 [{entry_id}] ---\n错误：未找到对应条目。\n--- 结束 ---")
                     continue
                 absolute_path = Path(context_item["absolute_path"])
+                allowed_base_dir = Path(context_item.get("allowed_base_dir") or target_dir).resolve()
+                if not _is_path_within_base(absolute_path, allowed_base_dir):
+                    results.append(f"--- 条目 [{entry_id}] ---\n错误：条目路径超出授权范围。\n--- 结束 ---")
+                    continue
                 if absolute_path.is_dir():
                     results.append(
                         _describe_directory_for_model(entry_id, context_item["display_name"], absolute_path)
                     )
                 else:
-                    preview = read_local_file(str(absolute_path), allowed_base_dir=str(target_dir.resolve()))
+                    preview = read_local_file(
+                        str(absolute_path),
+                        allowed_base_dir=str(allowed_base_dir),
+                    )
                     results.append(
                         _sanitize_file_preview(
                             preview,
@@ -645,7 +750,11 @@ def _emit_text_response(content: str, event_handler=None) -> None:
 def _compute_batch_count(entry_count: int) -> int:
     if entry_count <= 0:
         return 0
-    return max(1, math.ceil(entry_count / BATCH_TARGET_SIZE))
+    return max(1, math.ceil(entry_count / get_scan_batch_target_size()))
+
+
+def _scan_worker_count(batch_count: int) -> int:
+    return max(1, min(get_scan_worker_count(), max(1, batch_count)))
 
 
 def _split_batches(entries: list[str]) -> list[list[str]]:
@@ -876,8 +985,12 @@ def _run_analysis_worker(
                 emit(event_handler, "model_wait_end")
             submitted_items = _extract_submitted_analysis(getattr(msg, "tool_calls", None), entry_context=entry_context)
             if submitted_items is not None:
-                normalized_items, invalid_lines = _normalize_analysis_items(submitted_items, target_dir)
-                check = validate_analysis_items(normalized_items, target_dir, expected_entries=expected_entries)
+                if entry_context:
+                    normalized_items, invalid_lines = _normalize_analysis_items_for_context(submitted_items, entry_context)
+                    check = validate_analysis_items_for_context(normalized_items, entry_context, expected_entry_ids=expected_entries)
+                else:
+                    normalized_items, invalid_lines = _normalize_analysis_items(submitted_items, target_dir)
+                    check = validate_analysis_items(normalized_items, target_dir, expected_entries=expected_entries)
                 image_probe_failures = _validate_failed_image_probe_items(normalized_items, image_probe_statuses)
                 if image_probe_failures:
                     check["image_probe_failures"] = image_probe_failures
@@ -896,9 +1009,18 @@ def _run_analysis_worker(
                 legacy_text = getattr(msg, "content", "") or ""
                 _emit_text_response(legacy_text, event_handler=event_handler)
                 parsed_items, invalid_lines = _parse_rendered_analysis_items(legacy_text, target_dir)
-                normalized_items = parsed_items
-                rendered = render_analysis_items(parsed_items) if parsed_items else (extract_output_content(legacy_text) or legacy_text.strip())
-                check = validate_analysis(rendered, target_dir, expected_entries=expected_entries)
+                if entry_context and parsed_items:
+                    normalized_items, context_invalid_lines = _normalize_analysis_items_for_context(parsed_items, entry_context)
+                    invalid_lines.extend(context_invalid_lines)
+                    check = validate_analysis_items_for_context(normalized_items, entry_context, expected_entry_ids=expected_entries)
+                else:
+                    normalized_items = parsed_items
+                    check = validate_analysis(
+                        render_analysis_items(parsed_items) if parsed_items else (extract_output_content(legacy_text) or legacy_text.strip()),
+                        target_dir,
+                        expected_entries=expected_entries,
+                    )
+                rendered = render_analysis_items(normalized_items) if normalized_items else (extract_output_content(legacy_text) or legacy_text.strip())
                 if invalid_lines:
                     check["invalid_lines"] = list(check.get("invalid_lines", [])) + invalid_lines
                     check["is_valid"] = False
@@ -1068,7 +1190,7 @@ def _run_single_analysis(target_dir: Path, files_info: str, model: str, event_ha
         target_dir=target_dir,
         files_info=files_info,
         user_message="请分析当前目录下的所有条目及其用途。",
-        expected_entries=entries,
+        expected_entries=list(entry_context.keys()),
         model=model,
         session_id=session_id,
         event_handler=event_handler,
@@ -1095,7 +1217,7 @@ def _run_selected_entries_analysis(
         target_dir=target_dir,
         files_info=files_info,
         user_message="请分析以上选中的条目及其用途。",
-        expected_entries=entry_names,
+        expected_entries=list(entry_context.keys()),
         model=model,
         session_id=session_id,
         event_handler=event_handler,
@@ -1118,21 +1240,26 @@ def _analyze_batch(
     model: str,
     session_id: str | None = None,
     event_handler=None,
+    entry_context: dict[str, dict[str, str]] | None = None,
 ) -> list[AnalysisItem]:
-    entry_context = _build_entry_context(target_dir, batch_entries)
-    batch_files_info = _render_entry_catalog(entry_context)
+    batch_context = (
+        {entry_id: entry_context[entry_id] for entry_id in batch_entries if entry_context and entry_id in entry_context}
+        if entry_context
+        else _build_entry_context(target_dir, batch_entries)
+    )
+    batch_files_info = _render_entry_catalog(batch_context)
     items = _run_analysis_worker(
         target_dir=target_dir,
         files_info=batch_files_info,
         user_message="请分析以上条目及其用途。",
-        expected_entries=batch_entries,
+        expected_entries=list(batch_context.keys()),
         model=model,
         session_id=session_id,
         event_handler=event_handler,
         max_retries=BATCH_ANALYSIS_RETRIES,
         retry_scope="以上条目",
         wait_message=f"正在分析批次 {batch_index + 1}/{total_batches}",
-        entry_context=entry_context,
+        entry_context=batch_context,
     )
     if items is None:
         raise RuntimeError(f"batch_{batch_index}_analysis_failed")
@@ -1180,6 +1307,180 @@ def _merge_selected_batch_results(
     return [merged_by_name.get(entry_name) or _placeholder_analysis_item(entry_name) for entry_name in selected_entries]
 
 
+def _merge_context_batch_results(
+    batch_results: list[list[AnalysisItem]],
+    entry_context: dict[str, dict[str, str]],
+    ordered_entry_ids: list[str],
+) -> list[AnalysisItem]:
+    merged_by_id: dict[str, AnalysisItem] = {}
+    for batch_items in batch_results:
+        normalized_items, _ = _normalize_analysis_items_for_context(batch_items, entry_context)
+        for item in normalized_items:
+            if item.entry_id in entry_context:
+                merged_by_id.setdefault(item.entry_id, item)
+
+    ordered_items: list[AnalysisItem] = []
+    for entry_id in ordered_entry_ids:
+        context_item = entry_context[entry_id]
+        ordered_items.append(
+            merged_by_id.get(entry_id)
+            or AnalysisItem(
+                entry_id=entry_id,
+                entry_name=context_item["entry_name"],
+                display_name=context_item["display_name"],
+                entry_type=context_item["entry_type"],
+                suggested_purpose="待判断",
+                summary="分析未覆盖，需手动确认",
+            )
+        )
+    return ordered_items
+
+
+def run_analysis_cycle_for_entry_context(
+    target_dir: Path,
+    entry_context: dict[str, dict[str, str]],
+    event_handler=None,
+    model: str | None = None,
+    session_id: str | None = None,
+):
+    target_dir = Path(target_dir).resolve()
+    model = model or get_analysis_model_name()
+    ordered_entry_ids = list(entry_context.keys())
+    if not ordered_entry_ids:
+        return ""
+
+    files_info = _render_entry_catalog(entry_context)
+    _write_analysis_debug_event(
+        target_dir,
+        "analysis.started",
+        session_id=session_id,
+        payload={
+            "model": model,
+            "entry_count": len(ordered_entry_ids),
+            "mode": "entry_context" if len(ordered_entry_ids) <= BATCH_THRESHOLD else "entry_context_batch",
+        },
+    )
+
+    if len(ordered_entry_ids) <= BATCH_THRESHOLD:
+        items = _run_analysis_worker(
+            target_dir=target_dir,
+            files_info=files_info,
+            user_message="请分析以上条目及其用途。",
+            expected_entries=ordered_entry_ids,
+            model=model,
+            session_id=session_id,
+            event_handler=event_handler,
+            max_retries=MAX_ANALYSIS_RETRIES,
+            retry_scope="以上条目",
+            wait_message="正在分析所选条目",
+            entry_context=entry_context,
+        )
+        result = render_analysis_items(items) if items is not None else None
+        _write_analysis_debug_event(
+            target_dir,
+            "analysis.completed" if result else "analysis.empty_result",
+            session_id=session_id,
+            level="INFO" if result else "ERROR",
+            payload={
+                "model": model,
+                "entry_count": len(ordered_entry_ids),
+                "result_count": len(items or []),
+                "mode": "entry_context",
+            },
+        )
+        return result or ""
+
+    batches = _split_batches(ordered_entry_ids)
+    worker_count = _scan_worker_count(len(batches))
+    emit(event_handler, "batch_split", {
+        "total_entries": len(ordered_entry_ids),
+        "batch_count": len(batches),
+        "worker_count": worker_count,
+    })
+    finished_batches = 0
+    successful_batches = 0
+    batch_results: list[list[AnalysisItem]] = []
+    failed_entries: list[str] = []
+
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        futures = {
+            executor.submit(
+                _analyze_batch,
+                target_dir,
+                batch_entries,
+                batch_index,
+                len(batches),
+                files_info,
+                model,
+                session_id,
+                event_handler,
+                entry_context,
+            ): (batch_index, batch_entries)
+            for batch_index, batch_entries in enumerate(batches)
+        }
+        for future in as_completed(futures):
+            batch_index, batch_entries = futures[future]
+            try:
+                status = "completed"
+                batch_result_items = future.result()
+                batch_results.append(batch_result_items)
+                successful_batches += 1
+            except Exception:
+                batch_result_items = []
+                status = "failed"
+                failed_entries.extend(batch_entries)
+            finished_batches += 1
+            emit(event_handler, "batch_progress", {
+                "batch_index": batch_index,
+                "total_batches": len(batches),
+                "batch_size": len(batch_entries),
+                "status": status,
+                "completed_batches": successful_batches,
+                "finished_batches": finished_batches,
+                "items": [item.to_dict() for item in batch_result_items] if status == "completed" else [],
+            })
+
+    if failed_entries:
+        emit(event_handler, "batch_progress", {
+            "total_batches": len(batches),
+            "batch_size": len(failed_entries),
+            "status": "retrying",
+            "completed_batches": successful_batches,
+            "finished_batches": finished_batches,
+            "items": [],
+        })
+        try:
+            retry_batch_index = len(batches)
+            retry_items = _analyze_batch(
+                target_dir,
+                failed_entries,
+                retry_batch_index,
+                retry_batch_index + 1,
+                files_info,
+                model,
+                session_id,
+                event_handler,
+                entry_context,
+            )
+            batch_results.append(retry_items)
+            successful_batches += 1
+            emit(event_handler, "batch_progress", {
+                "batch_index": retry_batch_index,
+                "total_batches": len(batches),
+                "batch_size": len(failed_entries),
+                "status": "completed",
+                "completed_batches": successful_batches,
+                "finished_batches": finished_batches + 1,
+                "items": [item.to_dict() for item in retry_items],
+            })
+        except Exception:
+            pass
+
+    merged_items = _merge_context_batch_results(batch_results, entry_context, ordered_entry_ids)
+    emit(event_handler, "validation_pass", {"attempt": 1, "items": [item.to_dict() for item in merged_items]})
+    return render_analysis_items(merged_items)
+
+
 def run_analysis_cycle(target_dir: Path, event_handler=None, model: str | None = None, session_id: str | None = None):
     global WORKDIR_PATH
     """一个完整的分析循环：扫描 -> 工具调用/结构化提交 -> 校验 -> 重试。"""
@@ -1216,7 +1517,7 @@ def run_analysis_cycle(target_dir: Path, event_handler=None, model: str | None =
         return result
 
     batches = _split_batches(entries)
-    worker_count = min(MAX_SCAN_WORKERS, len(batches))
+    worker_count = _scan_worker_count(len(batches))
     emit(event_handler, "batch_split", {
         "total_entries": len(entries),
         "batch_count": len(batches),
@@ -1278,18 +1579,27 @@ def run_analysis_cycle(target_dir: Path, event_handler=None, model: str | None =
         })
         retry_batch_index = len(batches)
         try:
-            batch_results.append(
-                _analyze_batch(
-                    target_dir,
-                    failed_entries,
-                    retry_batch_index,
-                    retry_batch_index + 1,
-                    files_info,
-                    model,
-                    session_id,
-                    event_handler,
-                )
+            retry_items = _analyze_batch(
+                target_dir,
+                failed_entries,
+                retry_batch_index,
+                retry_batch_index + 1,
+                files_info,
+                model,
+                session_id,
+                event_handler,
             )
+            batch_results.append(retry_items)
+            successful_batches += 1
+            emit(event_handler, "batch_progress", {
+                "batch_index": retry_batch_index,
+                "total_batches": len(batches),
+                "batch_size": len(failed_entries),
+                "status": "completed",
+                "completed_batches": successful_batches,
+                "finished_batches": finished_batches + 1,
+                "items": [item.to_dict() for item in retry_items],
+            })
         except Exception:
             pass
 
@@ -1391,11 +1701,18 @@ def run_analysis_cycle_for_entries(
         )
         return result
 
-    batch_results: list[list[AnalysisItem]] = []
     batches = _split_batches(selected_entries)
-    for batch_index, batch_entries in enumerate(batches):
-        batch_results.append(
-            _analyze_batch(
+    worker_count = _scan_worker_count(len(batches))
+    emit(event_handler, "batch_split", {
+        "total_entries": len(selected_entries),
+        "batch_count": len(batches),
+        "worker_count": worker_count,
+    })
+    batch_results: list[list[AnalysisItem]] = []
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        futures = {
+            executor.submit(
+                _analyze_batch,
                 target_dir,
                 batch_entries,
                 batch_index,
@@ -1404,8 +1721,31 @@ def run_analysis_cycle_for_entries(
                 model,
                 session_id,
                 event_handler,
-            )
-        )
+            ): (batch_index, batch_entries)
+            for batch_index, batch_entries in enumerate(batches)
+        }
+        finished_batches = 0
+        successful_batches = 0
+        for future in as_completed(futures):
+            batch_index, batch_entries = futures[future]
+            try:
+                status = "completed"
+                batch_result_items = future.result()
+                batch_results.append(batch_result_items)
+                successful_batches += 1
+            except Exception:
+                status = "failed"
+                batch_result_items = []
+            finished_batches += 1
+            emit(event_handler, "batch_progress", {
+                "batch_index": batch_index,
+                "total_batches": len(batches),
+                "batch_size": len(batch_entries),
+                "status": status,
+                "completed_batches": successful_batches,
+                "finished_batches": finished_batches,
+                "items": [item.to_dict() for item in batch_result_items] if status == "completed" else [],
+            })
 
     merged_items = _merge_selected_batch_results(batch_results, target_dir, selected_entries)
     return render_analysis_items(merged_items)

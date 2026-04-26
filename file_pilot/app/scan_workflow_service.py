@@ -216,15 +216,15 @@ class ScanWorkflowService:
             self.helpers._run_incremental_target_discovery(session, self.helpers._incremental_root_discovery_runner)
             return self.helpers._load_or_raise(session_id)
 
-        if not self.helpers._can_use_single_directory_scan(session):
-            self.helpers._run_scan_sync(session, scan_runner or self.helpers._default_scan_runner)
-            self.helpers.orchestrator.maybe_run_auto_plan_after_scan(session)
-            return self.helpers._load_or_raise(session_id)
-
         target_dir = Path(session.target_dir).resolve()
+        use_single_directory_scan = self.helpers._can_use_single_directory_scan(session)
         session.stage = "scanning"
         self.helpers._clear_scan_recovery_state(session)
-        session.scanner_progress = self.helpers._initial_scan_progress(target_dir)
+        session.scanner_progress = (
+            self.helpers._initial_scan_progress(target_dir)
+            if use_single_directory_scan
+            else self.helpers._initial_source_collection_scan_progress(session)
+        )
         self.helpers._sync_session_views(session)
         self.helpers.store.save(session)
         self.helpers._log_runtime_event("scan.started", session)
@@ -270,7 +270,16 @@ class ScanWorkflowService:
         self.helpers.async_scanner.start(
             session_id=session.session_id,
             target_dir=target_dir,
-            run_scan=lambda d: self.helpers._default_scan_runner(d, event_handler=on_scan_event, session_id=session.session_id),
+            run_scan=(
+                lambda d: self.helpers._default_scan_runner(d, event_handler=on_scan_event, session_id=session.session_id)
+                if use_single_directory_scan
+                else self.helpers._scan_source_collection(
+                    session,
+                    self.helpers._default_scan_runner,
+                    session_id=session.session_id,
+                    event_handler=on_scan_event,
+                )[0]
+            ),
             on_complete=self.helpers._finish_async_scan,
             on_error=self.helpers._fail_async_scan,
         )

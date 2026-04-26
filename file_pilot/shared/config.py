@@ -98,6 +98,21 @@ def get_analysis_model_name() -> str:
 def get_organizer_model_name() -> str:
     return config_manager.get("OPENAI_MODEL", DEFAULT_ORGANIZER_MODEL)
 
+def _get_int_config(name: str, default: int, *, minimum: int, maximum: int) -> int:
+    try:
+        value = int(config_manager.get(name, os.getenv(name, default)))
+    except (TypeError, ValueError):
+        value = default
+    return max(minimum, min(maximum, value))
+
+
+def get_scan_batch_target_size() -> int:
+    return _get_int_config("FILE_PILOT_SCAN_BATCH_SIZE", 100, minimum=30, maximum=200)
+
+
+def get_scan_worker_count() -> int:
+    return _get_int_config("FILE_PILOT_SCAN_WORKERS", 5, minimum=1, maximum=8)
+
 ANALYSIS_MODEL_NAME, ORGANIZER_MODEL_NAME = get_model_names()
 DEBUG_MODE = config_manager.get("DEBUG_MODE", False)
 

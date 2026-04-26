@@ -10,6 +10,7 @@ import {
   FolderOpen,
   History,
   Layers3,
+  ListTree,
   Plus,
   Loader2,
   Sparkles,
@@ -1646,7 +1647,7 @@ export function SessionLauncherShell() {
                           </div>
                       </motion.div>
                       ) : (
-                        <div className="mt-2 space-y-3">
+                        <div ref={sourceDropZoneRef} className="mt-2 space-y-3">
                           <div className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-on-surface/8 bg-surface-container-lowest px-3 py-2">
                             <div className="flex min-w-0 items-center gap-2">
                               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] bg-primary/10 text-primary">
@@ -1670,101 +1671,46 @@ export function SessionLauncherShell() {
                               </span>
                             </div>
                           </div>
-                          <div className="grid gap-2">
-                            {(() => {
-                              const renderedGroupIds = new Set<string>();
-                              return displaySources.map((item) => {
-                                const key = sourceSelectionKey(item);
-                                const group = sourceImportGroupByKey.get(key);
-                                if (!group) {
-                                  return renderSourceRow(item);
-                                }
-                                if (renderedGroupIds.has(group.group_id)) {
-                                  return null;
-                                }
-                                const firstVisibleKey = group.item_keys.find((candidate) => sourceKeyMap.has(candidate));
-                                if (firstVisibleKey !== key) {
-                                  return null;
-                                }
-                                renderedGroupIds.add(group.group_id);
-                                const previewItems = group.expanded ? group.items : group.items.slice(0, IMPORT_GROUP_PREVIEW_LIMIT);
-                                const remainingCount = group.items.length - previewItems.length;
-                                return (
-                                  <div key={group.group_id} className="rounded-xl border border-primary/20 bg-primary/[0.04] p-3 text-on-surface/80">
-                                    <div className="flex items-start justify-between gap-3">
-                                      <div className="min-w-0">
-                                        <div className="flex items-center gap-2">
-                                          <Layers3 className="h-4 w-4 text-primary/70" />
-                                          <p className="text-[13px] font-black tracking-tight text-on-surface">
-                                            已从 {group.source_path.split(/[\\/]/).pop()} 导入 {group.items.length} 项
-                                          </p>
-                                        </div>
-                                        <p className="mt-1 font-mono text-[10px] font-bold text-ui-muted opacity-40 uppercase tracking-widest">
-                                          批量导入 · {group.source_path}
-                                        </p>
-                                      </div>
-                                      <div className="flex shrink-0 items-center gap-1.5">
-                                        {remainingCount > 0 ? (
-                                          <button
-                                            type="button"
-                                            disabled={loading}
-                                            onClick={() => toggleImportGroupExpanded(group.group_id)}
-                                            className="rounded-[6px] px-2 py-1 text-[10.5px] font-bold text-primary transition-colors hover:bg-primary/8"
-                                          >
-                                            {group.expanded ? "收起" : `展开其余 ${remainingCount} 项`}
-                                          </button>
-                                        ) : null}
-                                        <button
-                                          type="button"
-                                          disabled={loading}
-                                          onClick={() => removeImportGroup(group.group_id)}
-                                          className="rounded-[6px] px-2 py-1 text-[10.5px] font-bold text-error transition-colors hover:bg-error/10"
-                                        >
-                                          移除整组
-                                        </button>
-                                      </div>
-                                    </div>
-                                    <div className="mt-3 grid gap-2">
-                                      {previewItems.map((groupItem) => renderSourceRow(groupItem, { nested: true }))}
-                                    </div>
-                                  </div>
-                                );
-                              });
-                            })()}
-                          </div>
 
                           <motion.div
-                            ref={sourceDropZoneRef}
                             animate={{
                               scale: isDropActive ? 1.01 : 1,
                             }}
                             className={cn(
-                              "flex flex-col items-center justify-center gap-2 rounded-[12px] border-2 border-dashed py-5 transition-all duration-300 text-on-surface group/add-more",
+                              "flex flex-col items-center justify-center gap-2 rounded-[10px] border border-dashed px-4 py-4 text-on-surface transition-all duration-300 group/add-more",
                               isDropActive 
-                                ? "border-primary/25 bg-primary/5 text-primary"
-                                : "border-on-surface/8 bg-on-surface/[0.015]"
+                                ? "border-primary/45 bg-primary/8 text-primary ring-1 ring-primary/15"
+                                : isDraggingGlobal
+                                  ? "border-primary/30 bg-primary/[0.025]"
+                                  : "border-on-surface/8 bg-on-surface/[0.015]"
                             )}
                           >
-                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-on-surface/[0.03] text-on-surface/20 group-hover/add-more:bg-primary/10 group-hover/add-more:text-primary transition-colors">
-                              <Plus className="h-5 w-5" />
-                            </div>
-                            <p className="text-[14px] font-bold text-on-surface/60 group-hover/add-more:text-on-surface transition-colors">
-                              还可以继续补充更多来源
-                            </p>
-                            <div className="flex flex-col items-center gap-2">
+                            <div className="flex flex-wrap items-center justify-center gap-3">
+                              <div className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-on-surface/[0.03] text-on-surface/25 transition-colors group-hover/add-more:bg-primary/10 group-hover/add-more:text-primary">
+                                <Plus className="h-4.5 w-4.5" />
+                              </div>
+                              <div className="text-center sm:text-left">
+                                <p className="text-[13px] font-black text-on-surface/70 transition-colors group-hover/add-more:text-on-surface">
+                                  {isDropActive ? "松手即可继续加入来源" : "继续拖入文件或文件夹"}
+                                </p>
+                                <p className="text-[10.5px] font-medium text-ui-muted/50">
+                                  添加入口会保持在列表上方，已加入项可在下方窗口中滑动查看
+                                </p>
+                              </div>
                               {isDesktopEnvironment ? (
                                 <button
                                   type="button"
                                   onClick={() => void handleImportDirectoryEntries()}
-                                  className="rounded-[8px] bg-primary/8 px-3 py-1.5 text-[12px] font-black text-primary hover:bg-primary/12"
+                                  disabled={loading}
+                                  className="rounded-[7px] bg-primary/8 px-3 py-1.5 text-[12px] font-black text-primary hover:bg-primary/12 disabled:opacity-40"
                                 >
                                   整理文件夹里的内容
                                 </button>
                               ) : null}
                               <div className="flex flex-wrap items-center justify-center gap-2 text-[12px] font-bold text-on-surface/55">
-                                <button type="button" onClick={() => void handleChooseDirectories()} className="rounded-[6px] px-2.5 py-1 text-on-surface/65 hover:bg-on-surface/[0.04] hover:text-on-surface">把文件夹当作一个项目移动</button>
+                                <button type="button" disabled={loading} onClick={() => void handleChooseDirectories()} className="rounded-[6px] px-2.5 py-1 text-on-surface/65 hover:bg-on-surface/[0.04] hover:text-on-surface disabled:opacity-40">把文件夹当作一个项目移动</button>
                                 <span className="opacity-20">/</span>
-                                <button type="button" onClick={() => void handleChooseFiles()} className="rounded-[6px] px-2.5 py-1 text-on-surface/65 hover:bg-on-surface/[0.04] hover:text-on-surface">添加文件</button>
+                                <button type="button" disabled={loading} onClick={() => void handleChooseFiles()} className="rounded-[6px] px-2.5 py-1 text-on-surface/65 hover:bg-on-surface/[0.04] hover:text-on-surface disabled:opacity-40">添加文件</button>
                               </div>
                             </div>
                             <button
@@ -1775,6 +1721,84 @@ export function SessionLauncherShell() {
                               [ 手填路径 ]
                             </button>
                           </motion.div>
+
+                          <div className="overflow-hidden rounded-[10px] border border-on-surface/8 bg-surface-container-lowest">
+                            <div className="flex items-center justify-between border-b border-on-surface/6 px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <span className="flex h-6 w-6 items-center justify-center rounded-[6px] bg-on-surface/5 text-primary">
+                                  <ListTree className="h-3.5 w-3.5" />
+                                </span>
+                                <span className="text-[11px] font-black tracking-widest text-ui-muted">已加入来源</span>
+                              </div>
+                              <span className="text-[10.5px] font-bold text-ui-muted/55">
+                                文件夹 {sourceStats.directoryCount} · 文件 {sourceStats.fileCount}
+                              </span>
+                            </div>
+                            <div className="max-h-[42vh] min-h-[180px] overflow-y-auto p-2 scrollbar-thin">
+                              <div className="grid gap-2">
+                                {(() => {
+                                  const renderedGroupIds = new Set<string>();
+                                  return displaySources.map((item) => {
+                                    const key = sourceSelectionKey(item);
+                                    const group = sourceImportGroupByKey.get(key);
+                                    if (!group) {
+                                      return renderSourceRow(item);
+                                    }
+                                    if (renderedGroupIds.has(group.group_id)) {
+                                      return null;
+                                    }
+                                    const firstVisibleKey = group.item_keys.find((candidate) => sourceKeyMap.has(candidate));
+                                    if (firstVisibleKey !== key) {
+                                      return null;
+                                    }
+                                    renderedGroupIds.add(group.group_id);
+                                    const previewItems = group.expanded ? group.items : group.items.slice(0, IMPORT_GROUP_PREVIEW_LIMIT);
+                                    const remainingCount = group.items.length - previewItems.length;
+                                    return (
+                                      <div key={group.group_id} className="rounded-xl border border-primary/20 bg-primary/[0.04] p-3 text-on-surface/80">
+                                        <div className="flex items-start justify-between gap-3">
+                                          <div className="min-w-0">
+                                            <div className="flex items-center gap-2">
+                                              <Layers3 className="h-4 w-4 text-primary/70" />
+                                              <p className="text-[13px] font-black tracking-tight text-on-surface">
+                                                已从 {group.source_path.split(/[\\/]/).pop()} 导入 {group.items.length} 项
+                                              </p>
+                                            </div>
+                                            <p className="mt-1 truncate font-mono text-[10px] font-bold text-ui-muted opacity-40 uppercase tracking-widest">
+                                              批量导入 · {group.source_path}
+                                            </p>
+                                          </div>
+                                          <div className="flex shrink-0 items-center gap-1.5">
+                                            {remainingCount > 0 ? (
+                                              <button
+                                                type="button"
+                                                disabled={loading}
+                                                onClick={() => toggleImportGroupExpanded(group.group_id)}
+                                                className="rounded-[6px] px-2 py-1 text-[10.5px] font-bold text-primary transition-colors hover:bg-primary/8"
+                                              >
+                                                {group.expanded ? "收起" : `展开其余 ${remainingCount} 项`}
+                                              </button>
+                                            ) : null}
+                                            <button
+                                              type="button"
+                                              disabled={loading}
+                                              onClick={() => removeImportGroup(group.group_id)}
+                                              className="rounded-[6px] px-2 py-1 text-[10.5px] font-bold text-error transition-colors hover:bg-error/10"
+                                            >
+                                              移除整组
+                                            </button>
+                                          </div>
+                                        </div>
+                                        <div className="mt-3 grid gap-2">
+                                          {previewItems.map((groupItem) => renderSourceRow(groupItem, { nested: true }))}
+                                        </div>
+                                      </div>
+                                    );
+                                  });
+                                })()}
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       )}
 

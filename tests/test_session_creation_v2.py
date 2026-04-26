@@ -148,6 +148,7 @@ class SessionCreationV2Tests(unittest.TestCase):
     def test_start_scan_supports_mixed_source_collection(self):
         source_dir = self.sources_dir / "dir-source"
         source_dir.mkdir(parents=True, exist_ok=True)
+        (source_dir / "inside.txt").write_text("inside", encoding="utf-8")
         single_file = self.sources_dir / "lonely.txt"
         single_file.write_text("hello", encoding="utf-8")
 
@@ -164,15 +165,20 @@ class SessionCreationV2Tests(unittest.TestCase):
         session = created.session
         assert session is not None
 
-        def scan_runner(_path: Path, session_id: str | None = None):
-            del session_id
-            return "inside.txt | file | 资料 | 目录中的文件"
+        def analyze_context(_target_dir: Path, entry_context: dict, **_kwargs):
+            lines = []
+            for item in entry_context.values():
+                if item["entry_name"] == "dir-source/inside.txt":
+                    lines.append("dir-source/inside.txt | file | 资料 | 目录中的文件")
+                elif item["entry_name"] == "lonely.txt":
+                    lines.append("lonely.txt | file | 资料 | 单文件来源")
+            return "\n".join(lines)
 
         with mock.patch(
-            "file_pilot.app.session_service.analysis_service.run_analysis_cycle_for_entries",
-            return_value="lonely.txt | file | 资料 | 单文件来源",
+            "file_pilot.app.session_service.analysis_service.run_analysis_cycle_for_entry_context",
+            side_effect=analyze_context,
         ):
-            scanned = self.service.start_scan(session.session_id, scan_runner=scan_runner)
+            scanned = self.service.start_scan(session.session_id, scan_runner=lambda _path: "")
 
         self.assertEqual(scanned.stage, "planning")
         snapshot = self.service.get_snapshot(session.session_id)
@@ -199,19 +205,23 @@ class SessionCreationV2Tests(unittest.TestCase):
         session = created.session
         assert session is not None
 
-        def analyze_entries(_directory: Path, entry_names: list[str], session_id: str | None = None):
-            del session_id
-            name = entry_names[0]
-            if name.endswith(".md"):
-                return f"{name} | file | 技术文档 | 架构说明"
-            return f"{name} | file | 图片/截图 | 分析截图"
+        def analyze_context(_target_dir: Path, entry_context: dict, **_kwargs):
+            lines = []
+            for item in entry_context.values():
+                name = item["entry_name"]
+                if name.endswith(".md"):
+                    lines.append(f"{name} | file | 技术文档 | 架构说明")
+                else:
+                    lines.append(f"{name} | file | 图片/截图 | 分析截图")
+            return "\n".join(lines)
 
         with mock.patch(
-            "file_pilot.app.session_service.analysis_service.run_analysis_cycle_for_entries",
-            side_effect=analyze_entries,
-        ):
+            "file_pilot.app.session_service.analysis_service.run_analysis_cycle_for_entry_context",
+            side_effect=analyze_context,
+        ) as analyze_entries:
             scan_lines, entries = self.service._scan_source_collection(session, scan_runner=lambda _path: "")
 
+        analyze_entries.assert_called_once()
         self.assertEqual({entry["source_relpath"] for entry in entries}, {"future_architecture.md", "分析.png"})
         self.assertNotIn("future_architecture.md/future_architecture.md", scan_lines)
         self.assertNotIn("分析.png/分析.png", scan_lines)
@@ -264,15 +274,16 @@ class SessionCreationV2Tests(unittest.TestCase):
             raise AssertionError("atomic directory source should not use directory scan")
 
         with mock.patch(
-            "file_pilot.app.session_service.analysis_service.run_analysis_cycle_for_entries",
+            "file_pilot.app.session_service.analysis_service.run_analysis_cycle_for_entry_context",
             return_value="project.v1 | dir | 项目目录 | 整体项目目录",
         ) as analyze_entries:
             scan_lines, entries = self.service._scan_source_collection(session, scan_runner=fail_directory_scan)
 
         analyze_entries.assert_called_once()
         args, kwargs = analyze_entries.call_args
-        self.assertEqual(args[0], atomic_dir.parent.resolve())
-        self.assertEqual(args[1], ["project.v1"])
+        self.assertEqual(args[0], self.output_dir.resolve())
+        self.assertEqual(list(args[1].keys()), ["F001"])
+        self.assertEqual(args[1]["F001"]["absolute_path"], str(atomic_dir.resolve()))
         self.assertEqual(kwargs["session_id"], None)
         self.assertEqual(scan_lines, "project.v1 | dir | 项目目录 | 整体项目目录")
         self.assertEqual(entries[0]["source_relpath"], "project.v1")

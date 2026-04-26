@@ -19,6 +19,9 @@ class ParallelAnalysisTests(unittest.TestCase):
     def tearDown(self):
         if self.base_dir.exists():
             shutil.rmtree(self.base_dir)
+        outside_dir = Path("test_temp_parallel_analysis_outside")
+        if outside_dir.exists():
+            shutil.rmtree(outside_dir)
 
     def _make_entries(self, count: int) -> list[str]:
         entries = []
@@ -30,10 +33,11 @@ class ParallelAnalysisTests(unittest.TestCase):
 
     def test_split_batches_balances_large_directory(self):
         cases = {
-            31: [16, 15],
-            45: [23, 22],
-            60: [30, 30],
-            100: [25, 25, 25, 25],
+            31: [31],
+            45: [45],
+            60: [60],
+            100: [100],
+            201: [67, 67, 67],
         }
         for total, expected_sizes in cases.items():
             with self.subTest(total=total):
@@ -95,6 +99,49 @@ class ParallelAnalysisTests(unittest.TestCase):
         self.assertEqual([item.entry_name for item in items], ["alpha.txt", "keepdir"])
         self.assertEqual(items[0].summary, "alpha")
 
+    def test_context_batch_read_rejects_unknown_and_out_of_scope_entry_ids(self):
+        inside_file = self.base_dir / "inside.txt"
+        inside_file.write_text("inside", encoding="utf-8")
+        outside_dir = Path("test_temp_parallel_analysis_outside")
+        outside_dir.mkdir()
+        (outside_dir / "secret.txt").write_text("secret", encoding="utf-8")
+        entry_context = {
+            "F001": {
+                "entry_id": "F001",
+                "entry_name": "inside.txt",
+                "display_name": "inside.txt",
+                "entry_type": "file",
+                "absolute_path": str(inside_file.resolve()),
+                "source_relpath": "inside.txt",
+                "origin_path": str(self.base_dir.resolve()),
+                "origin_relpath": "inside.txt",
+                "allowed_base_dir": str(self.base_dir.resolve()),
+            },
+            "F002": {
+                "entry_id": "F002",
+                "entry_name": "outside",
+                "display_name": "outside",
+                "entry_type": "dir",
+                "absolute_path": str(outside_dir.resolve()),
+                "source_relpath": "outside",
+                "origin_path": str(outside_dir.resolve()),
+                "origin_relpath": "outside",
+                "allowed_base_dir": str(self.base_dir.resolve()),
+            },
+        }
+
+        result = analysis_service._dispatch_tool_call(
+            self.base_dir,
+            analysis_service.BATCH_READ_TOOL_NAME,
+            {"entry_ids": ["F001", "F002", "F999"]},
+            entry_context=entry_context,
+        )
+
+        self.assertIn("inside", result)
+        self.assertIn("条目路径超出授权范围", result)
+        self.assertIn("未找到对应条目", result)
+        self.assertNotIn("secret", result)
+
     def test_run_analysis_cycle_uses_single_path_for_small_directory(self):
         self._make_entries(30)
 
@@ -123,8 +170,8 @@ class ParallelAnalysisTests(unittest.TestCase):
     def test_failed_batch_triggers_retry_and_merges_complete_result(self):
         entries = self._make_entries(31)
 
-        def fake_analyze_batch(_target_dir, batch_entries, batch_index, _total_batches, _files_info, _model, event_handler=None):
-            del event_handler
+        def fake_analyze_batch(_target_dir, batch_entries, batch_index, _total_batches, _files_info, _model, session_id=None, event_handler=None):
+            del session_id, event_handler
             if batch_index == 0:
                 raise RuntimeError("first batch failed")
             return [
@@ -146,7 +193,7 @@ class ParallelAnalysisTests(unittest.TestCase):
         self.assertIsNotNone(rendered)
         for name in entries:
             self.assertIn(name, rendered)
-        self.assertIn(("batch_split", {"total_entries": 31, "batch_count": 2, "worker_count": 2}), events)
+        self.assertIn(("batch_split", {"total_entries": 31, "batch_count": 1, "worker_count": 1}), events)
         progress_events = [event for event in events if event[0] == "batch_progress"]
         self.assertEqual(len(progress_events), 3)
         self.assertTrue(any(payload.get("status") == "failed" for _, payload in progress_events))
@@ -179,9 +226,9 @@ class ParallelAnalysisTests(unittest.TestCase):
         self.assertIsNotNone(rendered)
         for name in entries:
             self.assertIn(name, rendered)
-        self.assertIn(("batch_split", {"total_entries": 60, "batch_count": 2, "worker_count": 2}), events)
+        self.assertIn(("batch_split", {"total_entries": 60, "batch_count": 1, "worker_count": 1}), events)
         progress_events = [event for event in events if event[0] == "batch_progress"]
-        self.assertEqual(len(progress_events), 2)
+        self.assertEqual(len(progress_events), 1)
 
     def test_missing_entries_get_placeholder_when_retry_also_fails(self):
         entries = self._make_entries(31)

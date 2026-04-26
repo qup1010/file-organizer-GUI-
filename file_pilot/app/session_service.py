@@ -655,65 +655,105 @@ class OrganizerSessionService:
             mapping[alias] = item
         return mapping
 
+    def _source_collection_entry_context(self, session: OrganizerSession) -> dict[str, dict[str, str]]:
+        source_collection = self._normalize_source_collection(session.source_collection)
+        if not source_collection:
+            source_collection = [SourceCollectionItem(source_type="directory", path=session.target_dir)]
+        alias_map = self._source_alias_map(session)
+        records: list[dict] = []
+
+        def alias_for(item: SourceCollectionItem) -> str:
+            return next((key for key, value in alias_map.items() if self._source_item_matches(value, item)), "")
+
+        for item in source_collection:
+            item_path = Path(item.path).resolve()
+            alias = alias_for(item)
+            if item.scans_directory_contents:
+                try:
+                    children = sorted(
+                        [child for child in item_path.iterdir() if not child.name.startswith(".")],
+                        key=lambda child: child.name.lower(),
+                    )
+                except OSError:
+                    children = []
+                for child in children:
+                    child_name = self._normalize_relpath(child.name) or child.name
+                    source_relpath = f"{alias}/{child_name}" if alias else child_name
+                    records.append(
+                        {
+                            "entry_id": f"F{len(records) + 1:03d}",
+                            "entry_name": source_relpath,
+                            "display_name": child.name,
+                            "entry_type": "dir" if child.is_dir() else "file",
+                            "absolute_path": str(child.resolve()),
+                            "source_relpath": source_relpath,
+                            "origin_path": str(item_path),
+                            "origin_relpath": child_name,
+                            "allowed_base_dir": str(item_path),
+                        }
+                    )
+                continue
+
+            selected_entry_name = self._normalize_relpath(item_path.name) or item_path.name
+            source_relpath = alias or selected_entry_name
+            records.append(
+                {
+                    "entry_id": f"F{len(records) + 1:03d}",
+                    "entry_name": source_relpath,
+                    "display_name": item_path.name,
+                    "entry_type": "dir" if item.is_atomic_directory else "file",
+                    "absolute_path": str(item_path),
+                    "source_relpath": source_relpath,
+                    "origin_path": str(item_path.parent if item.is_atomic_directory else item_path.parent),
+                    "origin_relpath": selected_entry_name,
+                    "allowed_base_dir": str(item_path.parent),
+                }
+            )
+
+        return analysis_service.build_entry_context_from_records(records)
+
     def _scan_source_collection(
         self,
         session: OrganizerSession,
         scan_runner,
         *,
         session_id: str | None = None,
+        event_handler=None,
     ) -> tuple[str, list[dict]]:
         source_collection = self._normalize_source_collection(session.source_collection)
         if not source_collection:
             source_collection = [SourceCollectionItem(source_type="directory", path=session.target_dir)]
-        alias_map = self._source_alias_map(session)
-        entries: list[dict] = []
-        for item in source_collection:
-            item_path = Path(item.path).resolve()
-            alias = next((key for key, value in alias_map.items() if self._source_item_matches(value, item)), "")
-            if item.scans_directory_contents:
-                scan_lines = self._call_with_optional_session_id(scan_runner, item_path, session_id=session_id)
-                for entry in self._scan_entries(scan_lines):
-                    source_relpath = self._normalize_relpath(entry.get("source_relpath"))
-                    if not source_relpath:
-                        continue
-                    prefixed = f"{alias}/{source_relpath}" if alias else source_relpath
-                    entries.append(
-                        {
-                            **entry,
-                            "source_relpath": prefixed,
-                            "origin_path": str(item_path),
-                            "origin_relpath": source_relpath,
-                        }
-                    )
+        entry_context = self._source_collection_entry_context(session)
+        if not entry_context:
+            return "", []
+        scan_lines = analysis_service.run_analysis_cycle_for_entry_context(
+            Path(session.target_dir),
+            entry_context,
+            event_handler=event_handler,
+            session_id=session_id,
+        )
+        entries = self._scan_entries(scan_lines)
+        context_by_relpath = {
+            str(item.get("entry_name") or "").replace("\\", "/"): item
+            for item in entry_context.values()
+        }
+        enriched_entries: list[dict] = []
+        for entry in entries:
+            source_relpath = self._normalize_relpath(entry.get("source_relpath"))
+            if not source_relpath:
                 continue
-
-            selected_entry_name = self._normalize_relpath(item_path.name) or item_path.name
-            analyzed_lines = self._call_with_optional_session_id(
-                analysis_service.run_analysis_cycle_for_entries,
-                item_path.parent,
-                [selected_entry_name],
-                session_id=session_id,
+            context_item = context_by_relpath.get(source_relpath, {})
+            enriched_entries.append(
+                {
+                    **entry,
+                    "item_id": source_relpath,
+                    "display_name": str(entry.get("display_name") or context_item.get("display_name") or Path(source_relpath).name),
+                    "source_relpath": source_relpath,
+                    "origin_path": str(context_item.get("origin_path") or Path(session.target_dir).resolve()),
+                    "origin_relpath": str(context_item.get("origin_relpath") or source_relpath),
+                }
             )
-            analyzed_entries = self._scan_entries(analyzed_lines)
-            if not analyzed_entries:
-                raise RuntimeError(f"SINGLE_SOURCE_ANALYSIS_EMPTY:{item_path}")
-            for entry in analyzed_entries:
-                source_relpath = self._normalize_relpath(entry.get("source_relpath")) or selected_entry_name
-                if alias:
-                    prefixed = alias if source_relpath == selected_entry_name else f"{alias}/{source_relpath}"
-                else:
-                    prefixed = source_relpath
-                entries.append(
-                    {
-                        **entry,
-                        "item_id": prefixed,
-                        "display_name": str(entry.get("display_name") or item_path.name),
-                        "source_relpath": prefixed,
-                        "origin_path": str(item_path.parent if item.is_atomic_directory else item_path),
-                        "origin_relpath": source_relpath,
-                    }
-                )
-        return self._render_scan_lines(entries), entries
+        return self._render_scan_lines(enriched_entries), enriched_entries
 
     def _origin_for_source_relpath(self, session: OrganizerSession, source_relpath: str) -> tuple[str, str]:
         normalized = self._normalize_relpath(source_relpath)
@@ -1758,25 +1798,25 @@ class OrganizerSessionService:
         }
 
     def _initial_source_collection_scan_progress(self, session: OrganizerSession) -> dict:
-        source_collection = self._normalize_source_collection(session.source_collection)
-        if not source_collection:
+        entry_context = self._source_collection_entry_context(session)
+        if not entry_context:
             return self._initial_scan_progress(Path(session.target_dir))
 
         recent_items = [
             {
-                "item_id": str(index),
-                "display_name": self._source_item_display_name(item),
-                "source_relpath": self._source_item_display_name(item),
-                "entry_type": item.source_type,
+                "item_id": str(item.get("entry_id") or index),
+                "display_name": str(item.get("display_name") or item.get("entry_name") or index),
+                "source_relpath": str(item.get("source_relpath") or item.get("entry_name") or index),
+                "entry_type": str(item.get("entry_type") or "file"),
                 "suggested_purpose": "准备分析",
                 "summary": "等待分配并进行文件内容分析...",
             }
-            for index, item in enumerate(source_collection[:10], start=1)
+            for index, item in enumerate(list(entry_context.values())[:10], start=1)
         ]
         return {
             "status": "running",
             "processed_count": 0,
-            "total_count": len(source_collection),
+            "total_count": len(entry_context),
             "current_item": "正在准备扫描任务",
             "recent_analysis_items": recent_items,
             "completed_batches": 0,
@@ -2108,7 +2148,13 @@ class OrganizerSessionService:
             if session.stage != "scanning":
                 return
             all_entries = self._scan_entries(scan_lines)
-            total_count = self._count_visible_entries(Path(session.target_dir))
+            total_count = int((session.scanner_progress or {}).get("total_count") or 0)
+            if total_count <= 0:
+                total_count = (
+                    self._count_visible_entries(Path(session.target_dir))
+                    if self._can_use_single_directory_scan(session)
+                    else len(all_entries)
+                )
             if not all_entries:
                 self._handle_empty_scan_result(session, total_count=total_count, mode="async")
                 return

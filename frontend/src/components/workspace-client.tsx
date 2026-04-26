@@ -228,6 +228,14 @@ export default function WorkspaceClient() {
   const isPlanSyncing = plannerStatus.isRunning;
   const canRunPrecheck = deriveCanRunPrecheck(stage, plan.readiness, isPlanSyncing);
   const progressPercent = scanner.total_count > 0 ? (scanner.processed_count / scanner.total_count) * 100 : 0;
+  const isHiddenInitialAutoPlanning = Boolean(
+    stageView.isPlanningConversation &&
+    plannerStatus.isRunning &&
+    scanner.status !== "idle" &&
+    scanner.total_count > 0 &&
+    !snapshot?.assistant_message &&
+    Number(snapshot?.plan_snapshot?.stats?.move_count || 0) === 0,
+  );
   const showConversationPane = !isCompactLayout || compactConversationOpen;
   const showPreviewPane = !isCompactLayout || !compactConversationOpen;
   const effectiveComposerMode = isReadOnly ? "hidden" : composerMode;
@@ -291,7 +299,7 @@ export default function WorkspaceClient() {
     }
     setScanPreviewHoldUntil(Date.now() + SCAN_PREVIEW_GRACE_MS);
   }, []);
-  const shouldShowScanningPreview = stageView.isScanning || (
+  const shouldShowScanningPreview = stageView.isScanning || isHiddenInitialAutoPlanning || (
     scanPreviewHoldUntil !== null &&
     stageView.isPlanningConversation &&
     scanner.status !== "idle" &&
@@ -438,7 +446,7 @@ export default function WorkspaceClient() {
     }
 
     const current = taskNotificationRef.current;
-    const isScanningNow = stageView.isScanning;
+    const isScanningNow = stageView.isScanning || isHiddenInitialAutoPlanning;
     const isPlanningNow = plannerStatus.isRunning;
     const planStartedAt = snapshot.planner_progress?.started_at || null;
 
@@ -452,18 +460,18 @@ export default function WorkspaceClient() {
       return;
     }
 
-    if (current.wasScanning && !isScanningNow) {
+    if (current.wasScanning && !isScanningNow && !isPlanningNow) {
       const totalCount = Number(snapshot.scanner_progress?.total_count || 0);
       const processedCount = Number(snapshot.scanner_progress?.processed_count || 0);
       const countLabel = totalCount > 0 ? `已读取 ${processedCount || totalCount}/${totalCount} 项。` : "已完成目录读取。";
       notifyWorkspaceWhenAway(
-        "FilePilot 扫描已完成",
-        `${countLabel}${isPlanningNow ? "正在继续生成整理方案。" : "可以回到工作台查看整理建议。"}`,
+        "FilePilot 方案已准备好",
+        `${countLabel}可以回到工作台查看整理建议。`,
         `filepilot-scan-${sessionIdParam}`,
       );
     }
 
-    if (current.wasPlanning && !isPlanningNow && current.lastPlanStartedAt) {
+    if (current.wasPlanning && !isPlanningNow && current.lastPlanStartedAt && !current.wasScanning) {
       const moveCount = Number(snapshot.plan_snapshot?.stats?.move_count || 0);
       const unresolvedCount = Number(snapshot.plan_snapshot?.stats?.unresolved_count || 0);
       const detail = unresolvedCount > 0
@@ -484,6 +492,7 @@ export default function WorkspaceClient() {
     };
   }, [
     plannerStatus.isRunning,
+    isHiddenInitialAutoPlanning,
     sessionIdParam,
     snapshot,
     stageView.isScanning,
@@ -730,9 +739,10 @@ export default function WorkspaceClient() {
                 <MinimalScanningView
                   scanner={scanner}
                   progressPercent={progressPercent}
-                  onAbort={() => setScanAbortConfirmOpen(true)}
+                  onAbort={isHiddenInitialAutoPlanning ? undefined : () => setScanAbortConfirmOpen(true)}
                   aborting={scanAborting}
                   isModelConfigured={isTextModelConfigured}
+                  hiddenAutoPlanning={isHiddenInitialAutoPlanning}
                 />
               );
             }

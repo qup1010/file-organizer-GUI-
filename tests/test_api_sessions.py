@@ -15,6 +15,28 @@ from file_pilot.execution.models import ExecutionJournal
 from file_pilot.execution.service import save_execution_journal
 
 
+class HoldingScanner:
+    def __init__(self):
+        self.started: list[dict] = []
+
+    def start(self, session_id, target_dir, run_scan, on_complete, on_error):
+        self.started.append(
+            {
+                "session_id": session_id,
+                "target_dir": target_dir,
+                "run_scan": run_scan,
+                "on_complete": on_complete,
+                "on_error": on_error,
+            }
+        )
+
+    def get_progress(self, session_id):
+        return {"running": any(item["session_id"] == session_id for item in self.started)}
+
+    def is_running(self, session_id):
+        return any(item["session_id"] == session_id for item in self.started)
+
+
 class SessionApiTests(unittest.TestCase):
     def setUp(self):
         self.root = Path("test_temp_api")
@@ -649,6 +671,36 @@ class SessionApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["session_id"], created["session_id"])
+
+    def test_scan_endpoint_starts_multi_source_scan_asynchronously(self):
+        source_a = self.root / "source_a.txt"
+        source_b = self.root / "nested" / "source_b.txt"
+        source_b.parent.mkdir(parents=True, exist_ok=True)
+        source_a.write_text("A", encoding="utf-8")
+        source_b.write_text("B", encoding="utf-8")
+        scanner = HoldingScanner()
+        service = OrganizerSessionService(self.store, scanner=scanner)
+        client = TestClient(create_app(service))
+        created = service.create_session(
+            [
+                {"source_type": "file", "path": str(source_a)},
+                {"source_type": "file", "path": str(source_b)},
+            ],
+            resume_if_exists=False,
+            organize_method="categorize_into_new_structure",
+            output_dir=str(self.target_dir),
+        )
+        self.store.save(created.session)
+
+        response = client.post(f"/api/sessions/{created.session.session_id}/scan")
+
+        self.assertEqual(response.status_code, 200)
+        snapshot = response.json()["session_snapshot"]
+        self.assertEqual(snapshot["stage"], "scanning")
+        self.assertEqual(snapshot["scanner_progress"]["status"], "running")
+        self.assertEqual(snapshot["scanner_progress"]["total_count"], 2)
+        self.assertEqual(snapshot["scanner_progress"]["processed_count"], 0)
+        self.assertEqual(len(scanner.started), 1)
 
     def test_messages_endpoint_returns_422_when_content_is_missing(self):
         created = self.client.post(
