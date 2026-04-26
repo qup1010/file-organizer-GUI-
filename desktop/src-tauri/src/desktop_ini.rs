@@ -90,24 +90,24 @@ mod tests {
 
     #[test]
     fn parse_icon_resource_reads_ini_value() {
-        let content = "[.ShellClassInfo]\r\nIconResource=file-organizer-icon.ico,0\r\n";
+        let content = "[.ShellClassInfo]\r\nIconResource=file-pilot-icon.ico,0\r\n";
         assert_eq!(
             parse_icon_resource(content).as_deref(),
-            Some("file-organizer-icon.ico")
+            Some("file-pilot-icon.ico")
         );
     }
 
     #[test]
     fn resolve_icon_path_supports_relative_resource() {
-        let resolved = resolve_icon_path("D:/Work", "file-organizer-icon.ico");
-        assert_eq!(resolved, PathBuf::from("D:/Work").join("file-organizer-icon.ico"));
+        let resolved = resolve_icon_path("D:/Work", "file-pilot-icon.ico");
+        assert_eq!(resolved, PathBuf::from("D:/Work").join("file-pilot-icon.ico"));
     }
 
     #[test]
     fn create_writes_utf16le_bom_for_non_ascii_icon_paths() {
         let dir = tempdir().expect("temp dir");
         let folder_path = dir.path().to_string_lossy().to_string();
-        create(&folder_path, r"C:\Users\测试\AppData\Roaming\FileOrganizer\managed_icons\a.ico")
+        create(&folder_path, r"C:\Users\测试\AppData\Roaming\FilePilot\managed_icons\a.ico")
             .expect("desktop.ini should be created");
 
         let bytes = std::fs::read(dir.path().join("desktop.ini")).expect("desktop.ini bytes");
@@ -118,10 +118,10 @@ mod tests {
     fn read_existing_decodes_utf16le_desktop_ini() {
         let dir = tempdir().expect("temp dir");
         let folder_path = dir.path().to_string_lossy().to_string();
-        create(&folder_path, r"C:\Users\测试\AppData\Roaming\FileOrganizer\managed_icons\a.ico")
+        create(&folder_path, r"C:\Users\测试\AppData\Roaming\FilePilot\managed_icons\a.ico")
             .expect("desktop.ini should be created");
 
         let content = read_existing(&folder_path).expect("desktop.ini content");
-        assert!(content.contains(r"IconResource=C:\Users\测试\AppData\Roaming\FileOrganizer\managed_icons\a.ico,0"));
+        assert!(content.contains(r"IconResource=C:\Users\测试\AppData\Roaming\FilePilot\managed_icons\a.ico,0"));
     }
 }

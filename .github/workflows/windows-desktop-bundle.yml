@@ -63,15 +63,15 @@ jobs:
             --clean `
             --onefile `
             --noconsole `
-            --name file_organizer_api `
+            --name file_pilot_api `
             --paths . `
             --add-data "frontend/src/lib/strategy-catalog.json;frontend/src/lib" `
-            --collect-submodules file_organizer `
+            --collect-submodules file_pilot `
             --collect-submodules uvicorn `
             --collect-submodules fastapi `
-            file_organizer/api/__main__.py
+            file_pilot/api/__main__.py
           New-Item -ItemType Directory -Force -Path dist\backend | Out-Null
-          Copy-Item -LiteralPath dist\file_organizer_api.exe -Destination dist\backend\file_organizer_api.exe -Force
+          Copy-Item -LiteralPath dist\file_pilot_api.exe -Destination dist\backend\file_pilot_api.exe -Force
 
       - name: Build Windows desktop bundle
         working-directory: desktop
@@ -83,7 +83,7 @@ jobs:
         shell: pwsh
         run: |
           $builtExe = Get-ChildItem 'desktop/src-tauri/target/release' -Filter *.exe |
-            Where-Object { $_.Name -ne 'file_organizer_api.exe' } |
+            Where-Object { $_.Name -ne 'file_pilot_api.exe' } |
             Select-Object -First 1
           if (-not $builtExe) {
             throw "Built desktop executable was not found."
@@ -128,7 +128,7 @@ jobs:
         if: failure()
         shell: pwsh
         run: |
-          $runtimeRoot = Join-Path $env:APPDATA 'com.fileorganizer.desktop'
+          $runtimeRoot = Join-Path $env:APPDATA 'com.filepilot.desktop'
           Write-Output "runtimeRoot=$runtimeRoot"
           if (Test-Path -LiteralPath $runtimeRoot) {
             Get-ChildItem $runtimeRoot -Recurse -Force | Select-Object FullName, Length | Format-Table -AutoSize | Out-String -Width 240 | Write-Output
@@ -146,7 +146,7 @@ jobs:
             Get-Content -LiteralPath $logFile -Encoding utf8 | Select-Object -Last 120 | Write-Output
           }
 
-          Get-Process -Name 'file_organizer_api' -ErrorAction SilentlyContinue | Format-Table Id, ProcessName, Path -AutoSize | Out-String -Width 240 | Write-Output
+          Get-Process -Name 'file_pilot_api' -ErrorAction SilentlyContinue | Format-Table Id, ProcessName, Path -AutoSize | Out-String -Width 240 | Write-Output
 
       - name: Upload Windows bundle artifact
         uses: actions/upload-artifact@v6

@@ -1,8 +1,8 @@
 import unittest
 
-from file_organizer.organize import service as organizer_service
-from file_organizer.organize.prompts import build_prompt
-from file_organizer.organize.strategy_templates import build_preview_directories
+from file_pilot.organize import service as organizer_service
+from file_pilot.organize.prompts import build_prompt
+from file_pilot.organize.strategy_templates import build_preview_directories
 
 
 class OrganizerServiceTests(unittest.TestCase):

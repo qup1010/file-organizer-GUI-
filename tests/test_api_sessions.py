@@ -8,11 +8,11 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from file_organizer.api.main import create_app
-from file_organizer.app.session_service import OrganizerSessionService
-from file_organizer.app.session_store import SessionStore
-from file_organizer.execution.models import ExecutionJournal
-from file_organizer.execution.service import save_execution_journal
+from file_pilot.api.main import create_app
+from file_pilot.app.session_service import OrganizerSessionService
+from file_pilot.app.session_store import SessionStore
+from file_pilot.execution.models import ExecutionJournal
+from file_pilot.execution.service import save_execution_journal
 
 
 class SessionApiTests(unittest.TestCase):
@@ -72,7 +72,7 @@ class SessionApiTests(unittest.TestCase):
         self.assertIn("POST", response.headers["access-control-allow-methods"])
 
     def test_health_endpoint_returns_instance_id_when_present(self):
-        with mock.patch.dict(os.environ, {"FILE_ORGANIZER_INSTANCE_ID": "desktop-instance"}):
+        with mock.patch.dict(os.environ, {"FILE_PILOT_INSTANCE_ID": "desktop-instance"}):
             client = TestClient(create_app(self.service))
             response = client.get("/api/health")
 
@@ -615,7 +615,7 @@ class SessionApiTests(unittest.TestCase):
         with self.client.stream(
             "GET",
             f"/api/sessions/{created['session_id']}/events",
-            headers={"x-file-organizer-once": "1"},
+            headers={"x-file-pilot-once": "1"},
         ) as response:
             chunks = []
             for chunk in response.iter_text():

@@ -65,6 +65,28 @@ function shouldDisplayMessage(message: AssistantMessage): boolean {
   return role === "assistant" || role === "user";
 }
 
+function normalizeMessageContent(content: string): string {
+  return String(content || "").replace(/\s+/g, " ").trim();
+}
+
+function collapseAdjacentDuplicateAssistantMessages(messages: AssistantMessage[]): AssistantMessage[] {
+  const collapsed: AssistantMessage[] = [];
+  for (const message of messages) {
+    const previous = collapsed[collapsed.length - 1];
+    const isDuplicateAssistant = previous
+      && String(previous.role || "").trim() === "assistant"
+      && String(message.role || "").trim() === "assistant"
+      && normalizeMessageContent(previous.content) === normalizeMessageContent(message.content);
+
+    if (isDuplicateAssistant) {
+      collapsed[collapsed.length - 1] = message;
+    } else {
+      collapsed.push(message);
+    }
+  }
+  return collapsed;
+}
+
 function collectSnapshotMessages(snapshot?: SessionSnapshot | null): AssistantMessage[] {
   if (!snapshot) {
     return [];
@@ -498,7 +520,9 @@ export function useSession(sessionId: string | null) {
     [plannerClock, plannerProgress],
   );
   const chatMessages = useMemo(() => {
-    const visibleMessages = collectSnapshotMessages(snapshot).filter(shouldDisplayMessage);
+    const visibleMessages = collapseAdjacentDuplicateAssistantMessages(
+      collectSnapshotMessages(snapshot).filter(shouldDisplayMessage),
+    );
     if (!assistantDraft.trim() && shouldShowPlanFallbackMessage(snapshot)) {
       return [
         ...visibleMessages,

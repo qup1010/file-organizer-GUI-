@@ -2,11 +2,11 @@ import shutil
 import unittest
 from pathlib import Path
 
-from file_organizer.app.id_registry import IdRegistry
-from file_organizer.app.session_service import OrganizerSessionService
-from file_organizer.app.session_store import SessionStore
-from file_organizer.domain.models import SourceRef, TargetSlot
-from file_organizer.organize.models import PendingPlan, PlanMove
+from file_pilot.app.id_registry import IdRegistry
+from file_pilot.app.session_service import OrganizerSessionService
+from file_pilot.app.session_store import SessionStore
+from file_pilot.domain.models import SourceRef, TargetSlot
+from file_pilot.organize.models import PendingPlan, PlanMove
 
 
 class DomainArchitectureTests(unittest.TestCase):

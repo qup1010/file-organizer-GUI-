@@ -1,6 +1,6 @@
 import unittest
 
-from file_organizer.analysis.prompts import build_system_prompt
+from file_pilot.analysis.prompts import build_system_prompt
 
 
 class AnalysisPromptVisionTests(unittest.TestCase):

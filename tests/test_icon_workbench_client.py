@@ -1,8 +1,8 @@
 import unittest
 
-from file_organizer.icon_workbench.client import IconWorkbenchTextClient
-from file_organizer.icon_workbench.models import ModelConfig
-from file_organizer.icon_workbench.prompts import TEXT_ANALYSIS_SYSTEM_PROMPT
+from file_pilot.icon_workbench.client import IconWorkbenchTextClient
+from file_pilot.icon_workbench.models import ModelConfig
+from file_pilot.icon_workbench.prompts import TEXT_ANALYSIS_SYSTEM_PROMPT
 
 
 class RecordingTextClient(IconWorkbenchTextClient):

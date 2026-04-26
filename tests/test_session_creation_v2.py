@@ -6,9 +6,9 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from file_organizer.api.main import create_app
-from file_organizer.app.session_service import OrganizerSessionService
-from file_organizer.app.session_store import SessionStore
+from file_pilot.api.main import create_app
+from file_pilot.app.session_service import OrganizerSessionService
+from file_pilot.app.session_store import SessionStore
 
 
 class SessionCreationV2Tests(unittest.TestCase):
@@ -169,7 +169,7 @@ class SessionCreationV2Tests(unittest.TestCase):
             return "inside.txt | file | 资料 | 目录中的文件"
 
         with mock.patch(
-            "file_organizer.app.session_service.analysis_service.run_analysis_cycle_for_entries",
+            "file_pilot.app.session_service.analysis_service.run_analysis_cycle_for_entries",
             return_value="lonely.txt | file | 资料 | 单文件来源",
         ):
             scanned = self.service.start_scan(session.session_id, scan_runner=scan_runner)
@@ -207,7 +207,7 @@ class SessionCreationV2Tests(unittest.TestCase):
             return f"{name} | file | 图片/截图 | 分析截图"
 
         with mock.patch(
-            "file_organizer.app.session_service.analysis_service.run_analysis_cycle_for_entries",
+            "file_pilot.app.session_service.analysis_service.run_analysis_cycle_for_entries",
             side_effect=analyze_entries,
         ):
             scan_lines, entries = self.service._scan_source_collection(session, scan_runner=lambda _path: "")
@@ -264,7 +264,7 @@ class SessionCreationV2Tests(unittest.TestCase):
             raise AssertionError("atomic directory source should not use directory scan")
 
         with mock.patch(
-            "file_organizer.app.session_service.analysis_service.run_analysis_cycle_for_entries",
+            "file_pilot.app.session_service.analysis_service.run_analysis_cycle_for_entries",
             return_value="project.v1 | dir | 项目目录 | 整体项目目录",
         ) as analyze_entries:
             scan_lines, entries = self.service._scan_source_collection(session, scan_runner=fail_directory_scan)

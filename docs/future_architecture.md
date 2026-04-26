@@ -546,7 +546,7 @@ class IdRegistry:
 ### 当前模块 vs 建议模块
 
 ```
-file_organizer/
+file_pilot/
 ├── analysis/          → 保留，职责不变（文件内容分析）
 ├── organize/          → 重命名为 planning/（映射规划，AI 交互）
 │   ├── service.py     → planner.py（只负责调用模型生成映射）

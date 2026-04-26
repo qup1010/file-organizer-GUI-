@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from file_organizer.api.main import create_app
+from file_pilot.api.main import create_app
 
 
 class FakeIconWorkbenchService:
@@ -396,7 +396,7 @@ class ApiIconWorkbenchTests(unittest.TestCase):
     def test_events_route_returns_initial_snapshot(self):
         response = self.client.get(
             "/api/icon-workbench/sessions/icon-session/events",
-            headers={"x-file-organizer-once": "1"},
+            headers={"x-file-pilot-once": "1"},
         )
 
         self.assertEqual(response.status_code, 200)

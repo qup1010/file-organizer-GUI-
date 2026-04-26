@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from file_organizer.analysis import service as analysis_service
+from file_pilot.analysis import service as analysis_service
 
 
 class AnalysisPathBoundaryTests(unittest.TestCase):

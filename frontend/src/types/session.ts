@@ -422,9 +422,23 @@ export interface CleanupResponse {
   session_snapshot: SessionSnapshot;
 }
 
+export interface RollbackPrecheckAction {
+  type: string;
+  display_name: string;
+  source: string;
+  target: string;
+}
+
+export interface RollbackPrecheckSummary {
+  can_execute: boolean;
+  blocking_errors: string[];
+  actions: RollbackPrecheckAction[];
+}
+
 export interface RollbackResponse {
   session_id: string;
   session_snapshot: SessionSnapshot;
+  rollback_precheck?: RollbackPrecheckSummary;
 }
 
 export interface JournalSummary {

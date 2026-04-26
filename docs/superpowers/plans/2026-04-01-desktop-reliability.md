@@ -23,7 +23,7 @@
 ```rust
 #[test]
 fn backend_command_keeps_default_port_in_dev_mode() {
-    std::env::remove_var("FILE_ORGANIZER_API_PORT");
+    std::env::remove_var("FILE_PILOT_API_PORT");
     let config = resolve_backend_runtime_config(None).expect("config");
     assert_eq!(config.port, 8765);
     assert_eq!(config.base_url, "http://127.0.0.1:8765");
@@ -31,8 +31,8 @@ fn backend_command_keeps_default_port_in_dev_mode() {
 
 #[test]
 fn backend_command_picks_ephemeral_port_for_bundled_mode() {
-    std::env::remove_var("FILE_ORGANIZER_API_PORT");
-    let config = resolve_backend_runtime_config(Some(Path::new("D:/bundle/backend/file_organizer_api.exe")))
+    std::env::remove_var("FILE_PILOT_API_PORT");
+    let config = resolve_backend_runtime_config(Some(Path::new("D:/bundle/backend/file_pilot_api.exe")))
         .expect("config");
     assert_ne!(config.port, 8765);
     assert!(config.port > 0);
@@ -58,11 +58,11 @@ pub struct BackendRuntimeConfig {
 }
 
 fn resolve_backend_runtime_config(backend_executable: Option<&Path>) -> Result<BackendRuntimeConfig, String> {
-    let host = env::var("FILE_ORGANIZER_API_HOST").unwrap_or_else(|_| DEFAULT_API_HOST.to_string());
-    if let Ok(port) = env::var("FILE_ORGANIZER_API_PORT") {
-        let port = port.parse::<u16>().map_err(|_| format!("invalid FILE_ORGANIZER_API_PORT: {port}"))?;
+    let host = env::var("FILE_PILOT_API_HOST").unwrap_or_else(|_| DEFAULT_API_HOST.to_string());
+    if let Ok(port) = env::var("FILE_PILOT_API_PORT") {
+        let port = port.parse::<u16>().map_err(|_| format!("invalid FILE_PILOT_API_PORT: {port}"))?;
         return Ok(BackendRuntimeConfig {
-            base_url: env::var("FILE_ORGANIZER_API_BASE_URL").unwrap_or_else(|_| format!("http://{host}:{port}")),
+            base_url: env::var("FILE_PILOT_API_BASE_URL").unwrap_or_else(|_| format!("http://{host}:{port}")),
             host,
             port,
         });
@@ -218,7 +218,7 @@ Invoke-WebRequest "$($config.base_url)/api/health" -UseBasicParsing | Out-Null
 Stop-Process -Id $proc.Id -Force
 Start-Sleep -Seconds 3
 
-$backendAlive = Get-Process -Name "file_organizer_api" -ErrorAction SilentlyContinue
+$backendAlive = Get-Process -Name "file_pilot_api" -ErrorAction SilentlyContinue
 if ($backendAlive) { throw "Backend still running after app exit." }
 
 $proc2 = Start-Process -FilePath $AppPath -PassThru

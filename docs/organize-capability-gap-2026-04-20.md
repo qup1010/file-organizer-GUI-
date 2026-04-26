@@ -53,7 +53,7 @@
 
 对应代码：
 
-- [strategy_templates.py](/d:/code/projects/active/FilePilot/file_organizer/organize/strategy_templates.py)
+- [strategy_templates.py](/d:/code/projects/active/FilePilot/file_pilot/organize/strategy_templates.py)
 - [session-launcher.tsx](/d:/code/projects/active/FilePilot/frontend/src/components/session-launcher.tsx)
 
 ## 2.2 归入已有目录主链已成立
@@ -68,8 +68,8 @@
 
 对应代码：
 
-- [scan_workflow_service.py](/d:/code/projects/active/FilePilot/file_organizer/app/scan_workflow_service.py)
-- [main.py](/d:/code/projects/active/FilePilot/file_organizer/api/main.py)
+- [scan_workflow_service.py](/d:/code/projects/active/FilePilot/file_pilot/app/scan_workflow_service.py)
+- [main.py](/d:/code/projects/active/FilePilot/file_pilot/api/main.py)
 
 ## 2.3 结构化领域模型已经具备
 
@@ -87,9 +87,9 @@
 
 对应代码：
 
-- [domain/models.py](/d:/code/projects/active/FilePilot/file_organizer/domain/models.py)
-- [models.py](/d:/code/projects/active/FilePilot/file_organizer/app/models.py)
-- [id_registry.py](/d:/code/projects/active/FilePilot/file_organizer/app/id_registry.py)
+- [domain/models.py](/d:/code/projects/active/FilePilot/file_pilot/domain/models.py)
+- [models.py](/d:/code/projects/active/FilePilot/file_pilot/app/models.py)
+- [id_registry.py](/d:/code/projects/active/FilePilot/file_pilot/app/id_registry.py)
 
 这意味着在概念层，系统已经接近目标模型。
 
@@ -111,7 +111,7 @@
 
 - [api.ts](/d:/code/projects/active/FilePilot/frontend/src/lib/api.ts)
 - [session-launcher-actions.ts](/d:/code/projects/active/FilePilot/frontend/src/lib/session-launcher-actions.ts)
-- [main.py](/d:/code/projects/active/FilePilot/file_organizer/api/main.py)
+- [main.py](/d:/code/projects/active/FilePilot/file_pilot/api/main.py)
 
 ### 与目标流程的差距
 

@@ -94,7 +94,7 @@ export function useBackgroundRemoval({
           headers: {
             "Content-Type": "application/octet-stream",
             "Authorization": `Bearer ${runtime.api_token?.trim() || getApiToken()}`,
-            "x-file-organizer-token": runtime.api_token?.trim() || getApiToken(),
+            "x-file-pilot-token": runtime.api_token?.trim() || getApiToken(),
           },
           body: bytes,
         }

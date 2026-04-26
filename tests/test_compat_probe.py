@@ -1,7 +1,7 @@
 import unittest
 from types import SimpleNamespace
 
-from file_organizer.debug.compat_probe import collect_stream_response, summarize_response_message
+from file_pilot.debug.compat_probe import collect_stream_response, summarize_response_message
 
 
 class CompatProbeTests(unittest.TestCase):

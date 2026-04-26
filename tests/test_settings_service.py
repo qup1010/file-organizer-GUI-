@@ -3,7 +3,7 @@ import shutil
 import unittest
 from pathlib import Path
 
-from file_organizer.shared.settings_service import SettingsService
+from file_pilot.shared.settings_service import SettingsService
 
 
 class SettingsServiceTests(unittest.TestCase):

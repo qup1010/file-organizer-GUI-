@@ -4,13 +4,13 @@
 
 ## 当前职责
 
-- 开发态拉起本地 `python -m file_organizer.api`
-- 打包态拉起随应用分发的 `file_organizer_api.exe`
+- 开发态拉起本地 `python -m file_pilot.api`
+- 打包态拉起随应用分发的 `file_pilot_api.exe`
 - 打包态后端以后台方式启动，不向用户显示额外终端窗口
 - 打包态默认使用动态空闲端口，避免和固定 `8765` 冲突
 - 仅允许单实例运行，重复启动时激活已有窗口
 - 通过 `output/runtime/backend.json` 发现并校验后端实例
-- 向前端注入 `window.__FILE_ORGANIZER_RUNTIME__`
+- 向前端注入 `window.__FILE_PILOT_RUNTIME__`
 - 提供目录选择、批量目录选择、文件夹图标应用 / 恢复、抠图测试等原生命令
 
 ## 目录说明
@@ -50,7 +50,7 @@ cargo check
 - 触发后会在 GitHub Actions 中完成：
   - 安装 `frontend/` 与 `desktop/` 的 Node 依赖
   - 安装根目录 `requirements.txt`、`fastapi`、`uvicorn`、`pyinstaller`
-  - 构建 `file_organizer_api.exe`
+  - 构建 `file_pilot_api.exe`
   - 执行 `npm run tauri:build`
   - 静默安装 MSI 并执行安装包 smoke test
   - 上传 Windows bundle 产物为 `filepilot-windows-bundle` artifact
@@ -66,10 +66,10 @@ cargo check
 
 ## 安装包 Smoke 验证
 
-本地在已安装桌面应用后，可以直接对安装目录中的桌面可执行文件运行 smoke 脚本。当前构建产物中的可执行文件名通常与 Rust 包名一致，例如 `file-organizer-desktop.exe`：
+本地在已安装桌面应用后，可以直接对安装目录中的桌面可执行文件运行 smoke 脚本。当前构建产物中的可执行文件名通常与 Rust 包名一致，例如 `file-pilot-desktop.exe`：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\smoke_desktop_bundle.ps1 -AppPath "C:\Users\<User>\AppData\Local\Programs\FilePilot\file-organizer-desktop.exe"
+powershell -ExecutionPolicy Bypass -File scripts\smoke_desktop_bundle.ps1 -AppPath "C:\Users\<User>\AppData\Local\Programs\FilePilot\file-pilot-desktop.exe"
 ```
 
 脚本会验证：
@@ -77,7 +77,7 @@ powershell -ExecutionPolicy Bypass -File scripts\smoke_desktop_bundle.ps1 -AppPa
 1. 启动后能生成运行时文件并通过 `/api/health`
 2. 安装包态默认未落在固定端口 `8765`
 3. 重复启动时不会常驻第二个桌面实例
-4. 关闭桌面应用后，`file_organizer_api.exe` 会退出
+4. 关闭桌面应用后，`file_pilot_api.exe` 会退出
 5. 再次启动后仍能恢复正常工作
 
 ## 运行时契约
@@ -85,7 +85,7 @@ powershell -ExecutionPolicy Bypass -File scripts\smoke_desktop_bundle.ps1 -AppPa
 前端读取入口固定为：
 
 ```ts
-window.__FILE_ORGANIZER_RUNTIME__
+window.__FILE_PILOT_RUNTIME__
 ```
 
 当前注入字段至少包括：
@@ -113,10 +113,10 @@ window.__FILE_ORGANIZER_RUNTIME__
 
 补充说明：
 
-- `api_token` 只存在于桌面壳注入给前端的 `window.__FILE_ORGANIZER_RUNTIME__`，不写入 `output/runtime/backend.json`。
+- `api_token` 只存在于桌面壳注入给前端的 `window.__FILE_PILOT_RUNTIME__`，不写入 `output/runtime/backend.json`。
 - 桌面壳会同时校验 runtime 文件中的 `instance_id` 与 `/api/health` 返回值，避免误连到旧实例或其他本地进程。
 - 这部分契约如果要调整，需要同时检查：
-  - `file_organizer/api/runtime.py`
+  - `file_pilot/api/runtime.py`
   - `frontend/src/lib/*`
   - `desktop/src-tauri/src/runtime.rs`
 

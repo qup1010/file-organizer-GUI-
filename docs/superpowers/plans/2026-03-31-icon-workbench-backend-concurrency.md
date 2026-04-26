@@ -22,7 +22,7 @@
 ### Task 2: 在服务层实现受限并发
 
 **Files:**
-- Modify: `file_organizer/icon_workbench/service.py`
+- Modify: `file_pilot/icon_workbench/service.py`
 
 - [ ] 提取通用的并发执行辅助方法，输入目标列表、配置并发数、单项处理函数，输出统一的结果映射。
 - [ ] 将 `analyze_folders()` 改成按目标文件夹并发分析，保留单个文件夹上的错误隔离逻辑。

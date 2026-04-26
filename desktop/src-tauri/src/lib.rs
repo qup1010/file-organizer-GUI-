@@ -12,6 +12,7 @@ use std::time::Duration;
 
 use tauri::{App, Manager, RunEvent};
 use serde::Serialize;
+use tauri_plugin_notification::NotificationExt;
 
 use crate::icon_apply::{
     apply_folder_icon,
@@ -237,6 +238,22 @@ fn open_directory(path: String) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+fn show_desktop_notification(app: tauri::AppHandle, title: String, body: String) -> Result<(), String> {
+    let title = title.trim();
+    if title.is_empty() {
+        return Err("notification title is required".to_string());
+    }
+
+    let mut builder = app.notification().builder().title(title);
+    let body = body.trim();
+    if !body.is_empty() {
+        builder = builder.body(body);
+    }
+
+    builder.show().map_err(|error| error.to_string())
+}
+
 
 struct DesktopState {
     project_root: PathBuf,
@@ -288,7 +305,7 @@ impl DesktopState {
 }
 
 fn resolve_project_root() -> PathBuf {
-    if let Some(project_root) = std::env::var_os("FILE_ORGANIZER_PROJECT_ROOT") {
+    if let Some(project_root) = std::env::var_os("FILE_PILOT_PROJECT_ROOT") {
         return PathBuf::from(project_root);
     }
 
@@ -305,8 +322,8 @@ fn resolve_bundled_backend_executable(app: &App) -> Result<PathBuf, String> {
         .resource_dir()
         .map_err(|error| format!("failed to resolve resource dir: {error}"))?;
     let candidates = [
-        resource_dir.join("backend").join("file_organizer_api.exe"),
-        resource_dir.join("file_organizer_api.exe"),
+        resource_dir.join("backend").join("file_pilot_api.exe"),
+        resource_dir.join("file_pilot_api.exe"),
     ];
 
     candidates
@@ -457,6 +474,7 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             focus_existing_main_window(app);
         }))
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             pick_directory,
             pick_directories,
@@ -465,6 +483,7 @@ pub fn run() {
             list_directory_entries,
             open_directory,
             save_file_as,
+            show_desktop_notification,
             get_runtime_config,
             apply_folder_icon,
             apply_ready_icons,
@@ -477,7 +496,7 @@ pub fn run() {
         ])
         .setup(|app| {
             let state = resolve_desktop_state(app)?;
-            std::env::set_var("FILE_ORGANIZER_PROJECT_ROOT", &state.project_root);
+            std::env::set_var("FILE_PILOT_PROJECT_ROOT", &state.project_root);
             app.manage(state);
             bootstrap_backend(app).map_err(Into::into)
         })

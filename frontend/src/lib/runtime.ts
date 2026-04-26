@@ -2,7 +2,7 @@ import type { RuntimeConfig } from "@/types/session";
 
 declare global {
   interface Window {
-    __FILE_ORGANIZER_RUNTIME__?: RuntimeConfig;
+    __FILE_PILOT_RUNTIME__?: RuntimeConfig;
     __TAURI_INTERNALS__?: {
       invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>;
     };
@@ -10,12 +10,12 @@ declare global {
 }
 
 const DEFAULT_BASE_URL = "http://127.0.0.1:8765";
-const RUNTIME_READY_EVENT = "file-organizer-runtime-ready";
+const RUNTIME_READY_EVENT = "file-pilot-runtime-ready";
 
 function hasInjectedDesktopRuntime(): boolean {
   return Boolean(
     typeof window !== "undefined" &&
-      window.__FILE_ORGANIZER_RUNTIME__?.base_url?.trim(),
+      window.__FILE_PILOT_RUNTIME__?.base_url?.trim(),
   );
 }
 
@@ -34,7 +34,7 @@ async function hasTauriCore(): Promise<boolean> {
 async function tryHydrateRuntimeFromTauri(): Promise<RuntimeConfig | null> {
   const runtime = await invokeTauriCommand<RuntimeConfig>("get_runtime_config");
   if (runtime?.base_url?.trim() && typeof window !== "undefined") {
-    window.__FILE_ORGANIZER_RUNTIME__ = runtime;
+    window.__FILE_PILOT_RUNTIME__ = runtime;
     window.dispatchEvent(
       new CustomEvent(RUNTIME_READY_EVENT, { detail: runtime }),
     );
@@ -44,8 +44,8 @@ async function tryHydrateRuntimeFromTauri(): Promise<RuntimeConfig | null> {
 }
 
 export function readRuntimeConfig(): RuntimeConfig {
-  if (typeof window !== "undefined" && window.__FILE_ORGANIZER_RUNTIME__) {
-    return window.__FILE_ORGANIZER_RUNTIME__;
+  if (typeof window !== "undefined" && window.__FILE_PILOT_RUNTIME__) {
+    return window.__FILE_PILOT_RUNTIME__;
   }
 
   return {

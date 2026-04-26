@@ -3,8 +3,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from file_organizer.analysis import service as scanner_service
-from file_organizer.organize import service as organizer_service
+from file_pilot.analysis import service as scanner_service
+from file_pilot.organize import service as organizer_service
 
 
 class ScannerServiceTests(unittest.TestCase):

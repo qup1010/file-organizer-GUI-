@@ -34,11 +34,11 @@ export function GlobalTaskIndicator() {
     checkActive();
     window.addEventListener("storage", checkActive);
     // Also listen to local events since storage event only fires on other tabs
-    window.addEventListener("file-organizer-context-change", checkActive);
+    window.addEventListener("file-pilot-context-change", checkActive);
     
     return () => {
       window.removeEventListener("storage", checkActive);
-      window.removeEventListener("file-organizer-context-change", checkActive);
+      window.removeEventListener("file-pilot-context-change", checkActive);
     };
   }, []);
 

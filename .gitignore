@@ -17,6 +17,10 @@ config.json
 .spec-workflow/
 
 # 临时数据与结果
+dist/*
+!dist/backend/
+dist/backend/*
+!dist/backend/.gitkeep
 output/
 result.txt
 test_out.txt

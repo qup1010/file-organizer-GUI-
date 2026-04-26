@@ -15,6 +15,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { createApiClient } from "@/lib/api";
 import { getApiBaseUrl, getApiToken } from "@/lib/runtime";
+import { notifyWorkspaceWhenAway, requestWorkspaceNotificationPermission } from "@/lib/workspace-notifications";
 import { MinimalScanningView } from "./workspace/minimal-scanning-view";
 import { PrecheckView } from "./workspace/precheck-view";
 import { CompletionView } from "./workspace/completion-view";
@@ -43,7 +44,7 @@ function summarizeItemNames(names: string[], limit = 3): string {
 }
 
 export default function WorkspaceClient() {
-  const APP_CONTEXT_EVENT = "file-organizer-context-change";
+  const APP_CONTEXT_EVENT = "file-pilot-context-change";
   const WORKSPACE_CONTEXT_KEY = "workspace_header_context";
   const ACTIVE_WORKSPACE_ROUTE_KEY = "workspace_active_route";
   const searchParams = useSearchParams();
@@ -123,6 +124,12 @@ export default function WorkspaceClient() {
   const isResizing = React.useRef(false);
   const scanPreviewTimerRef = React.useRef<number | null>(null);
   const autoScanRequestedRef = React.useRef(false);
+  const taskNotificationRef = React.useRef({
+    initialized: false,
+    wasScanning: false,
+    wasPlanning: false,
+    lastPlanStartedAt: null as string | null,
+  });
 
   React.useEffect(() => {
     autoScanRequestedRef.current = false;
@@ -247,13 +254,13 @@ export default function WorkspaceClient() {
       return "下一步先读取目录，确认这次要整理的项目。";
     }
     if (stageView.isScanning) {
-      return "正在只读分析文件，完成后会显示整理建议。";
+      return "正在只读分析文件。文件较多时可能需要几分钟，可以先最小化，完成后会通知你。";
     }
     if (stageView.isTargetSelection) {
       return "先选择可归入的目标目录，剩余项目会作为本次待整理对象。";
     }
     if (stageView.isPlanning) {
-      return isPlanSyncing ? "正在按你的要求更新方案。" : "可以继续调整要求，确认后再做移动前检查。";
+      return isPlanSyncing ? "正在按你的要求更新方案；文件较多时可以先最小化等待通知。" : "可以继续调整要求，确认后再做移动前检查。";
     }
     if (stageView.isAwaitingPrecheck) {
       return canRunPrecheck ? "方案已就绪，建议先做一次移动前安全检查。" : "方案还在更新，完成后即可检查。";
@@ -351,6 +358,7 @@ export default function WorkspaceClient() {
     if (isReadOnly || !messageInput.trim() || isBusy || isComposerLocked) {
       return;
     }
+    void requestWorkspaceNotificationPermission();
     const content = messageInput;
     setMessageInput("");
     await sendMessage(content);
@@ -390,6 +398,7 @@ export default function WorkspaceClient() {
     }
   };
   const handleStartScan = React.useCallback(() => {
+    void requestWorkspaceNotificationPermission();
     beginScanPreviewHold();
     void scan();
   }, [beginScanPreviewHold, scan]);
@@ -407,6 +416,72 @@ export default function WorkspaceClient() {
     autoScanRequestedRef.current = true;
     handleStartScan();
   }, [autoStartScan, handleStartScan, isReadOnly, loading, sessionIdParam, snapshot, stageView.isDraftLike]);
+
+  React.useEffect(() => {
+    taskNotificationRef.current = {
+      initialized: false,
+      wasScanning: false,
+      wasPlanning: false,
+      lastPlanStartedAt: null,
+    };
+  }, [sessionIdParam]);
+
+  React.useEffect(() => {
+    if (!snapshot || !sessionIdParam) {
+      return;
+    }
+
+    const current = taskNotificationRef.current;
+    const isScanningNow = stageView.isScanning;
+    const isPlanningNow = plannerStatus.isRunning;
+    const planStartedAt = snapshot.planner_progress?.started_at || null;
+
+    if (!current.initialized) {
+      taskNotificationRef.current = {
+        initialized: true,
+        wasScanning: isScanningNow,
+        wasPlanning: isPlanningNow,
+        lastPlanStartedAt: planStartedAt,
+      };
+      return;
+    }
+
+    if (current.wasScanning && !isScanningNow) {
+      const totalCount = Number(snapshot.scanner_progress?.total_count || 0);
+      const processedCount = Number(snapshot.scanner_progress?.processed_count || 0);
+      const countLabel = totalCount > 0 ? `已读取 ${processedCount || totalCount}/${totalCount} 项。` : "已完成目录读取。";
+      notifyWorkspaceWhenAway(
+        "FilePilot 扫描已完成",
+        `${countLabel}${isPlanningNow ? "正在继续生成整理方案。" : "可以回到工作台查看整理建议。"}`,
+        `filepilot-scan-${sessionIdParam}`,
+      );
+    }
+
+    if (current.wasPlanning && !isPlanningNow && current.lastPlanStartedAt) {
+      const moveCount = Number(snapshot.plan_snapshot?.stats?.move_count || 0);
+      const unresolvedCount = Number(snapshot.plan_snapshot?.stats?.unresolved_count || 0);
+      const detail = unresolvedCount > 0
+        ? `方案已更新，仍有 ${unresolvedCount} 项需要确认。`
+        : `方案已更新，已规划 ${moveCount} 项，可以进行移动风险检查。`;
+      notifyWorkspaceWhenAway(
+        "FilePilot 方案已更新",
+        detail,
+        `filepilot-plan-${sessionIdParam}-${current.lastPlanStartedAt}`,
+      );
+    }
+
+    taskNotificationRef.current = {
+      initialized: true,
+      wasScanning: isScanningNow,
+      wasPlanning: isPlanningNow,
+      lastPlanStartedAt: planStartedAt,
+    };
+  }, [
+    plannerStatus.isRunning,
+    sessionIdParam,
+    snapshot,
+    stageView.isScanning,
+  ]);
 
   const statusNotice = useMemo<ConversationNotice | null>(() => {
     if (streamStatus === "offline") {
@@ -725,6 +800,7 @@ export default function WorkspaceClient() {
                   loading={loading}
                   onConfirm={(selectedTargetDirs) => {
                     if (!isReadOnly) {
+                      void requestWorkspaceNotificationPermission();
                       void confirmTargetDirectories(selectedTargetDirs);
                     }
                   }}
@@ -964,8 +1040,8 @@ export default function WorkspaceClient() {
                   exit={{ width: 0, opacity: 0 }}
                   transition={{ ease: [0.4, 0, 0.2, 1], duration: 0.35 }}
                   className={cn(
-                    "relative flex h-full min-h-0 flex-col bg-surface-container-lowest overflow-hidden min-w-0",
-                    isCompactLayout ? "" : "border-r border-on-surface/6",
+                    "relative flex h-full min-h-0 flex-col bg-surface-container-low overflow-hidden min-w-0",
+                    isCompactLayout ? "" : "",
                   )}
                 >
                   <div className="flex flex-col h-full min-w-[360px]">
@@ -1012,8 +1088,8 @@ export default function WorkspaceClient() {
                   className={cn(
                     "w-[1px] h-full transition-all duration-300",
                     isResizingState
-                      ? "bg-on-surface text-surface"
-                      : "text-ui-muted hover:text-on-surface hover:bg-on-surface/5",
+                      ? "bg-primary/20"
+                      : "bg-transparent",
                   )}
                 />
                 <div
@@ -1034,7 +1110,7 @@ export default function WorkspaceClient() {
               <section
                 ref={rightPaneRef as any}
                 style={{ width: !isCompactLayout && showConversationPane && !isChatCollapsed ? `${100 - leftWidth}%` : "100%" }}
-                className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-surface-container-lowest/30"
+                className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-surface"
               >
                 <div className="flex-1 min-h-0 w-full overflow-hidden flex flex-col">{renderPreviewContent()}</div>
               </section>

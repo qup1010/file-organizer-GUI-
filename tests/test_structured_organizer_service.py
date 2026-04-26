@@ -6,8 +6,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from file_organizer.organize.models import FinalPlan, PendingPlan, PlanMove
-from file_organizer.organize import service as organizer_service
+from file_pilot.organize.models import FinalPlan, PendingPlan, PlanMove
+from file_pilot.organize import service as organizer_service
 
 
 class StructuredOrganizerServiceTests(unittest.TestCase):
@@ -572,10 +572,10 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
         debug_jsonl = runtime_dir / "backend-debug.jsonl"
         try:
             with mock.patch.object(organizer_service, "create_openai_client", return_value=client), \
-                 mock.patch("file_organizer.shared.config.RUNTIME_DIR", runtime_dir), \
-                 mock.patch("file_organizer.shared.logging_utils.DEBUG_LOG_PATH", debug_jsonl), \
+                 mock.patch("file_pilot.shared.config.RUNTIME_DIR", runtime_dir), \
+                 mock.patch("file_pilot.shared.logging_utils.DEBUG_LOG_PATH", debug_jsonl), \
                  mock.patch(
-                     "file_organizer.shared.config.config_manager.get",
+                     "file_pilot.shared.config.config_manager.get",
                      side_effect=lambda key, default=None: True if key == "DEBUG_MODE" else default,
                  ):
                 organizer_service.chat_one_round(
@@ -613,10 +613,10 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
         debug_jsonl = runtime_dir / "backend-debug.jsonl"
         try:
             with mock.patch.object(organizer_service, "create_openai_client", return_value=client), \
-                 mock.patch("file_organizer.shared.config.RUNTIME_DIR", runtime_dir), \
-                 mock.patch("file_organizer.shared.logging_utils.DEBUG_LOG_PATH", debug_jsonl), \
+                 mock.patch("file_pilot.shared.config.RUNTIME_DIR", runtime_dir), \
+                 mock.patch("file_pilot.shared.logging_utils.DEBUG_LOG_PATH", debug_jsonl), \
                  mock.patch(
-                     "file_organizer.shared.config.config_manager.get",
+                     "file_pilot.shared.config.config_manager.get",
                      side_effect=lambda key, default=None: True if key == "DEBUG_MODE" else default,
                  ), \
                  mock.patch.dict(os.environ, {"ORGANIZER_CHAT_STREAM": "false"}, clear=False):

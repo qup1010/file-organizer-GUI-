@@ -3,7 +3,7 @@ import shutil
 import unittest
 from pathlib import Path
 
-from file_organizer.shared import history_store
+from file_pilot.shared import history_store
 
 
 class HistoryStoreTests(unittest.TestCase):

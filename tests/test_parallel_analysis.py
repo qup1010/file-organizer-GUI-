@@ -5,8 +5,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from file_organizer.analysis import service as analysis_service
-from file_organizer.analysis.models import AnalysisItem
+from file_pilot.analysis import service as analysis_service
+from file_pilot.analysis.models import AnalysisItem
 
 
 class ParallelAnalysisTests(unittest.TestCase):

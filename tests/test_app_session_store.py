@@ -3,9 +3,9 @@ import shutil
 import unittest
 from pathlib import Path
 
-from file_organizer.app.models import OrganizerSession
-from file_organizer.app.session_store import SessionStore
-from file_organizer.shared.path_utils import canonical_target_dir
+from file_pilot.app.models import OrganizerSession
+from file_pilot.app.session_store import SessionStore
+from file_pilot.shared.path_utils import canonical_target_dir
 
 
 class CanonicalTargetDirTests(unittest.TestCase):

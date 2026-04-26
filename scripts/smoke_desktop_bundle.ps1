@@ -9,10 +9,10 @@
 已安装桌面应用的可执行文件路径，例如 FilePilot.exe。
 
 .PARAMETER AppIdentifier
-桌面应用写入运行时文件的标识符目录名，默认是 com.fileorganizer.desktop。
+桌面应用写入运行时文件的标识符目录名，默认是 com.filepilot.desktop。
 
 .PARAMETER BackendProcessName
-后端进程名，默认是 file_organizer_api。
+后端进程名，默认是 file_pilot_api。
 
 .PARAMETER StartupTimeoutSeconds
 等待桌面应用启动和健康检查通过的超时时间。
@@ -27,9 +27,9 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$AppPath,
 
-    [string]$AppIdentifier = "com.fileorganizer.desktop",
+    [string]$AppIdentifier = "com.filepilot.desktop",
 
-    [string]$BackendProcessName = "file_organizer_api",
+    [string]$BackendProcessName = "file_pilot_api",
 
     [int]$StartupTimeoutSeconds = 30,
 

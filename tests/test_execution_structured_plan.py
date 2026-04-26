@@ -1,8 +1,8 @@
 ﻿import unittest
 from pathlib import Path
 
-from file_organizer.execution import service as execution_service
-from file_organizer.organize.models import FinalPlan, PlanMove
+from file_pilot.execution import service as execution_service
+from file_pilot.organize.models import FinalPlan, PlanMove
 
 
 class StructuredExecutionPlanTests(unittest.TestCase):

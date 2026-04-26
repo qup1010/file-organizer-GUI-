@@ -12,14 +12,30 @@ export interface PresetSummary {
   secret_state?: SecretState;
 }
 
-export interface TextSettingsPreset extends PresetSummary {
+export interface ProviderCapabilities {
+  chat?: boolean;
+  streaming?: boolean;
+  tools?: boolean;
+  vision?: boolean;
+  json_output?: boolean;
+  image_generation?: boolean;
+}
+
+export interface ProviderMetadata {
+  provider?: string;
+  api_format?: string;
+  tool_mode?: string;
+  capabilities?: ProviderCapabilities;
+}
+
+export interface TextSettingsPreset extends PresetSummary, ProviderMetadata {
   OPENAI_BASE_URL: string;
   OPENAI_MODEL: string;
   OPENAI_API_KEY: string;
   secret_state: SecretState;
 }
 
-export interface VisionSettingsPreset extends PresetSummary {
+export interface VisionSettingsPreset extends PresetSummary, ProviderMetadata {
   IMAGE_ANALYSIS_NAME: string;
   IMAGE_ANALYSIS_BASE_URL: string;
   IMAGE_ANALYSIS_MODEL: string;
@@ -27,7 +43,7 @@ export interface VisionSettingsPreset extends PresetSummary {
   secret_state: SecretState;
 }
 
-export interface SafeModelConfig {
+export interface SafeModelConfig extends ProviderMetadata {
   base_url: string;
   model: string;
   api_key?: string;

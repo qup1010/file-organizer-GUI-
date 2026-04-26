@@ -1,6 +1,6 @@
-# File Organizer Desktop API 文档（审阅版）
+# FilePilot Desktop API 文档（审阅版）
 
-本文档基于当前实际后端实现整理，代码来源以 [`file_organizer/api/main.py`](D:\3_Projects\Active\File-Organizer-CLI - v2\file_organizer\api\main.py)、[`file_organizer/app/session_service.py`](D:\3_Projects\Active\File-Organizer-CLI - v2\file_organizer\app\session_service.py)、[`frontend/src/lib/api.ts`](D:\3_Projects\Active\File-Organizer-CLI - v2\frontend\src\lib\api.ts)、[`frontend/src/types/session.ts`](D:\3_Projects\Active\File-Organizer-CLI - v2\frontend\src\types\session.ts) 为准。
+本文档基于当前实际后端实现整理，代码来源以 [`file_pilot/api/main.py`](D:\3_Projects\Active\File-Organizer-CLI - v2\file_pilot\api\main.py)、[`file_pilot/app/session_service.py`](D:\3_Projects\Active\File-Organizer-CLI - v2\file_pilot\app\session_service.py)、[`frontend/src/lib/api.ts`](D:\3_Projects\Active\File-Organizer-CLI - v2\frontend\src\lib\api.ts)、[`frontend/src/types/session.ts`](D:\3_Projects\Active\File-Organizer-CLI - v2\frontend\src\types\session.ts) 为准。
 
 ## 1. 总览
 
@@ -34,7 +34,7 @@
 - `stale`
 - `interrupted`
 
-实际后端可用动作来自 [`session_service.py`](D:\3_Projects\Active\File-Organizer-CLI - v2\file_organizer\app\session_service.py)：
+实际后端可用动作来自 [`session_service.py`](D:\3_Projects\Active\File-Organizer-CLI - v2\file_pilot\app\session_service.py)：
 
 - `draft`: `scan`, `abandon`
 - `scanning`: 无
