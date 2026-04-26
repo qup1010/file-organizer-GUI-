@@ -1455,25 +1455,6 @@ export default function SettingsPage() {
               </div>
             )}
 
-            {!snapshot.status.text_configured && (
-              <div className="mb-6 flex items-center justify-between gap-4 rounded-[6px] border border-warning/20 bg-warning-container/15 px-4 py-3 animate-in fade-in slide-in-from-top-2 duration-300">
-                <div className="flex items-start gap-3 min-w-0">
-                  <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] bg-warning/10 text-warning">
-                    <AlertCircle className="h-4 w-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[14px] font-black tracking-tight text-on-surface">当前还没有可用的文本模型</p>
-                    <p className="mt-1 text-[12px] font-medium leading-6 text-ui-muted">
-                      文本模型接口是整理分析主链路的核心配置。请先创建并补全文本预设，再回到首页启动任务。
-                    </p>
-                  </div>
-                </div>
-                <Button variant="secondary" size="sm" onClick={() => handleSelectTab("text")}>
-                  去配置文本模型
-                </Button>
-              </div>
-            )}
-
             {activeTab === "text" && (
               <SettingsSection
                 icon={Layers3}

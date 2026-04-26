@@ -175,7 +175,7 @@ export function MinimalScanningView({
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: 10 }}
-                  className="space-y-8"
+                  className="space-y-5"
                 >
                   <div className="space-y-4">
                     <div className="flex items-center gap-2">
@@ -185,7 +185,7 @@ export function MinimalScanningView({
                        <span className="text-[10px] font-black tracking-widest text-primary/60">正在查看的项目</span>
                     </div>
                     
-                    <div className="min-h-[140px] rounded-2xl border border-on-surface/10 bg-surface-container-lowest p-6">
+                    <div className="min-h-[140px] rounded-[10px] border border-on-surface/10 bg-surface-container-lowest p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
                       <div className="flex items-start gap-4">
                         <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-on-surface/[0.03] border border-on-surface/5">
                            <FileText className="h-6 w-6 text-primary/60" />
@@ -218,29 +218,32 @@ export function MinimalScanningView({
                          </div>
                       </div>
                     </div>
+
+                    <div className="rounded-[9px] border border-primary/15 bg-primary/[0.035] px-4 py-3">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] border border-primary/15 bg-primary/8 text-primary">
+                          <Bell className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[12px] font-black tracking-tight text-on-surface">可以先最小化等待</p>
+                          <p className="mt-0.5 text-[12px] font-medium leading-5 text-on-surface/68">
+                            文件较多时扫描会更久；任务完成后，FilePilot 会通过系统通知提醒你回来查看结果。
+                          </p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="space-y-4">
+                  <div className="rounded-[9px] border border-on-surface/8 bg-surface px-4 py-3">
                      <div className="flex items-center gap-2">
                        <span className="flex h-5 w-5 items-center justify-center rounded-md bg-on-surface/5 text-on-surface/40">
                          <CheckCircle2 className="h-3 w-3" />
                        </span>
-                       <span className="text-[10px] font-black tracking-widest text-ui-muted/40">安全说明</span>
+                       <span className="text-[11px] font-black tracking-tight text-on-surface/70">安全说明</span>
                     </div>
-                    <p className="text-[12px] leading-relaxed text-ui-muted/60 max-w-[600px]">
+                    <p className="mt-2 text-[12px] leading-5 text-ui-muted/70">
                       扫描阶段只读取文件信息和必要摘要，不会移动或改写原文件。真正移动前还会先做安全检查。
                     </p>
-                  </div>
-
-                  <div className="rounded-xl border border-primary/12 bg-primary/[0.035] p-4">
-                    <div className="flex gap-3">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-primary/15 bg-primary/8 text-primary">
-                        <Bell className="h-4 w-4" />
-                      </div>
-                      <p className="text-[12px] font-medium leading-relaxed text-on-surface/70">
-                        文件较多时扫描可能需要较长时间。你可以随时最小化窗口，任务完成后 FilePilot 会通过系统通知提醒你回来查看结果。
-                      </p>
-                    </div>
                   </div>
                 </motion.div>
               </AnimatePresence>

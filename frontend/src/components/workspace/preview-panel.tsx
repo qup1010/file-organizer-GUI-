@@ -438,31 +438,31 @@ function QueueCard({
 }) {
   if (items.length === 0) return null;
   return (
-    <section className={cn("rounded-lg border overflow-hidden", tone)}>
-      <div className="flex items-center justify-between gap-3 border-b border-inherit bg-on-surface/[0.03] px-4 py-2">
+    <section className={cn("overflow-hidden rounded-[8px] border bg-surface shadow-[0_1px_2px_rgba(15,23,42,0.04)]", tone)}>
+      <div className="flex items-center justify-between gap-3 border-b border-on-surface/8 bg-surface-container-lowest/70 px-3 py-2">
         <div className="flex items-center gap-2">
-          <h3 className="text-[12px] font-black uppercase tracking-wider opacity-80">{title}</h3>
-          <span className="rounded-full bg-on-surface/10 px-2 py-0.5 text-[10px] font-black tabular-nums">{items.length}</span>
+          <h3 className="text-[12px] font-black tracking-tight text-on-surface/80">{title}</h3>
+          <span className="rounded-full border border-on-surface/10 bg-surface px-2 py-0.5 text-[10px] font-black tabular-nums text-on-surface/65">{items.length}</span>
         </div>
         <button 
           type="button" 
           onClick={onShowAll} 
-          className="rounded-[4px] bg-on-surface/5 px-2.5 py-1 text-[10px] font-black uppercase tracking-tight hover:bg-on-surface/10 transition-all"
+          className="rounded-[5px] border border-on-surface/8 bg-surface px-2.5 py-1 text-[10px] font-black text-on-surface/70 transition-all hover:border-primary/20 hover:text-primary"
         >
           查看全部
         </button>
       </div>
-      <div className="p-1.5 flex flex-col gap-1">
+      <div className="flex flex-col gap-1 p-2">
         {items.slice(0, 4).map((item) => (
           <button
             key={item.item_id}
             type="button"
             onClick={() => onSelectItem(item.item_id)}
             className={cn(
-              "group relative flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left transition-all",
+              "group relative flex w-full items-center justify-between gap-3 rounded-[7px] border px-3 py-2 text-left transition-all",
               selectedItemId === item.item_id 
-                ? "border-on-surface/20 bg-surface ring-1 ring-on-surface/5" 
-                : "border-transparent hover:bg-on-surface/5",
+                ? "border-primary/25 bg-primary/[0.035] ring-1 ring-primary/10" 
+                : "border-on-surface/6 bg-surface-container-lowest/35 hover:border-on-surface/12 hover:bg-on-surface/[0.025]",
             )}
           >
             <div className="min-w-0 flex-1">
@@ -480,7 +480,7 @@ function QueueCard({
           </button>
         ))}
         {items.length > 4 && (
-          <button type="button" onClick={onShowAll} className="w-full py-2 text-[10.5px] font-black uppercase tracking-widest text-ui-muted/50 hover:text-ui-muted hover:bg-on-surface/5 transition-all rounded-lg">
+          <button type="button" onClick={onShowAll} className="w-full rounded-[7px] py-2 text-[10.5px] font-black tracking-tight text-ui-muted/65 transition-all hover:bg-on-surface/5 hover:text-on-surface/70">
             还有 {items.length - 4} 项 · 点击展开
           </button>
         )}
@@ -511,12 +511,12 @@ function QueuePanel({
   if (queueCount === 0) return null;
   return (
     <aside className="w-full shrink-0 min-w-0">
-      <section className="rounded-lg border border-on-surface/10 bg-surface overflow-hidden">
-        <div className="flex items-center justify-between gap-3 border-b border-on-surface/8 bg-on-surface/[0.02] px-4 py-3">
+      <section className="overflow-hidden rounded-[8px] border border-on-surface/10 bg-surface shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+        <div className="flex items-center justify-between gap-3 border-b border-on-surface/8 bg-surface-container-lowest/75 px-4 py-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h3 className="text-[13px] font-black uppercase tracking-widest text-on-surface/80">待处理队列</h3>
-              <span className="rounded-full bg-warning/10 px-2 py-0.5 text-[10px] font-black text-warning ring-1 ring-warning/20">
+              <h3 className="text-[13px] font-black tracking-tight text-on-surface/85">待处理队列</h3>
+              <span className="rounded-full border border-warning/20 bg-warning/8 px-2 py-0.5 text-[10px] font-black text-warning tabular-nums">
                 {queueCount}
               </span>
             </div>
@@ -527,7 +527,7 @@ function QueuePanel({
               type="button"
               onClick={onToggle}
               aria-expanded={!collapsed}
-              className="inline-flex items-center gap-1.5 rounded-[8px] border border-on-surface/10 bg-surface/95 px-3 py-1.5 text-[11px] font-bold text-on-surface-variant backdrop-blur transition-colors hover:bg-surface-container-low hover:text-on-surface"
+              className="inline-flex h-8 items-center gap-1.5 rounded-[7px] border border-on-surface/10 bg-surface px-3 text-[11px] font-bold text-on-surface-variant transition-colors hover:bg-surface-container-low hover:text-on-surface"
             >
               {collapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
               {collapsed ? "展开列表" : "收起"}
@@ -542,7 +542,7 @@ function QueuePanel({
               exit={{ opacity: 0, height: 0 }}
               className="overflow-hidden"
             >
-              <div className="space-y-4 p-4 bg-surface-container-lowest/30">
+              <div className="space-y-3 bg-surface-container-lowest/35 p-3">
                 {children}
               </div>
             </motion.div>
@@ -1224,19 +1224,19 @@ export function PreviewPanel(props: PreviewPanelProps) {
                   onToggle={() => setQueueCollapsed((current) => !current)}
                   actions={
                     !readOnly && activeReviewItems.length > 0 ? (
-                      <div className="flex shrink-0 flex-col items-end gap-1">
+                      <div className="flex shrink-0 items-center gap-2">
+                        {canRunPrecheck && invalidatedItems.length === 0 && unresolvedItems.length === 0 ? (
+                          <span className="hidden text-[10px] font-medium text-ui-muted/60 xl:inline">保留后可安全检查</span>
+                        ) : null}
                         <button
                           type="button"
                           onClick={() => {
                             void acceptAllReviewItems();
                           }}
-                          className="inline-flex h-8 items-center gap-1 rounded-[8px] border border-primary/12 bg-primary/[0.05] px-2.5 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/[0.08]"
+                          className="inline-flex h-8 items-center rounded-[7px] border border-primary/15 bg-primary/[0.05] px-3 text-[11px] font-black text-primary transition-colors hover:bg-primary/[0.08]"
                         >
                           全部保留在待确认区
                         </button>
-                        {canRunPrecheck && invalidatedItems.length === 0 && unresolvedItems.length === 0 ? (
-                          <span className="text-[10px] font-medium text-ui-muted/60">保留后可单独点击“安全检查”。</span>
-                        ) : null}
                       </div>
                     ) : undefined
                   }

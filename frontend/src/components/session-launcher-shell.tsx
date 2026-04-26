@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Activity,
-  AlertTriangle,
   Check,
   CheckCircle2,
   FileText,
@@ -67,6 +66,7 @@ import type {
   TargetProfileDirectory,
 } from "@/types/session";
 import { ErrorAlert } from "@/components/ui/error-alert";
+import { ModelConfigBanner } from "@/components/ui/model-config-banner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -1272,28 +1272,7 @@ export function SessionLauncherShell() {
             >
 
 
-            {!textModelConfigured ? (
-              <div className="flex items-center justify-between gap-4 rounded-[8px] border border-warning/18 bg-warning-container/18 px-5 py-4">
-                <div className="flex min-w-0 items-start gap-3">
-                  <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-warning/12 text-warning">
-                    <AlertTriangle className="h-4.5 w-4.5" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[14px] font-black tracking-tight text-on-surface">AI 文本模型尚未配置</p>
-                    <p className="mt-1 text-[12px] font-medium leading-6 text-ui-muted">
-                      未配置文本模型时，系统无法稳定完成用途分析和整理规划。建议先前往“设置 &gt; 文本模型”完成配置。
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => router.push("/settings")}
-                  className="shrink-0 rounded-[6px] border border-warning/15 bg-surface px-4 py-2 text-[12px] font-black text-on-surface transition-colors hover:border-warning/30 hover:text-warning"
-                >
-                  去配置文本模型
-                </button>
-              </div>
-            ) : null}
+            {!textModelConfigured ? <ModelConfigBanner /> : null}
 
             <AnimatePresence>
               {error ? (

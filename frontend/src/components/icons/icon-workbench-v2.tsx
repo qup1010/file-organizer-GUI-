@@ -3,12 +3,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { AlertCircle, FolderOpen, LoaderCircle, Sparkles, Palette, FolderPlus, Plus, X } from "lucide-react";
-import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ErrorAlert } from "@/components/ui/error-alert";
+import { ModelConfigBanner } from "@/components/ui/model-config-banner";
 import { createApiClient } from "@/lib/api";
 import { createIconWorkbenchApiClient } from "@/lib/icon-workbench-api";
 import { createIconWorkbenchEventStream, type IconWorkbenchEventStream } from "@/lib/icon-workbench-sse";
@@ -481,15 +481,18 @@ export default function IconWorkbenchV2() {
   
   const statusRail = (error || shouldShowNotice || generationConfigBlockedReason || (streamStatus !== "connected" && session)) ? (
     <div className="flex flex-col">
-      {(error || generationConfigBlockedReason) && (
-        <div className={cn("flex h-8 items-center justify-between gap-4 border-b px-5", error ? "bg-error/5 text-error" : "bg-warning/5 text-warning")}>
-          <div className="flex items-center gap-2">
+      {error ? (
+        <div className="flex h-8 items-center justify-between gap-4 border-b bg-error/5 px-5 text-error">
+          <div className="flex min-w-0 items-center gap-2">
             <AlertCircle className="h-3 w-3 shrink-0" />
-            <p className="text-[11px] font-bold truncate">{error || generationConfigBlockedReason}</p>
+            <p className="truncate text-[11px] font-bold">{error}</p>
           </div>
-          {generationConfigBlockedReason && <Link href="/settings" className="h-5 rounded bg-warning/10 px-2 text-[9px] font-black uppercase text-warning hover:bg-warning/20 flex items-center">去设置</Link>}
         </div>
-      )}
+      ) : generationConfigBlockedReason ? (
+        <div className="border-b border-on-surface/8 bg-surface px-5 py-3">
+          <ModelConfigBanner />
+        </div>
+      ) : null}
       {streamStatus !== "connected" && session && (
         <div className={cn("flex h-7 items-center justify-between border-b px-5 bg-on-surface/[0.02]")}>
           <div className="flex items-center gap-2">
