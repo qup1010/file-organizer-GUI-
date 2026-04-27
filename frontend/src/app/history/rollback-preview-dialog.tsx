@@ -18,9 +18,8 @@ import {
   RotateCcw,
   Info
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import type { RollbackPrecheckSummary } from "@/types/session";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 
 interface RollbackPreviewDialogProps {
   open: boolean;
