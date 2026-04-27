@@ -1,6 +1,6 @@
 # Frontend Workbench
 
-这是 File Organizer 的本地工作台前端，基于 Next.js + React，主要负责：
+这是 FilePilot 的本地工作台前端，基于 Next.js + React，主要负责：
 
 - 启动新的整理任务
 - 承接 `/workspace` 整理工作区
@@ -20,8 +20,8 @@
 ## 当前状态
 
 - 已有首页启动台、整理工作区、历史页、设置页、图标工坊等主要路由。
-- 前端会优先读取 `window.__FILE_ORGANIZER_RUNTIME__.base_url`，没有时回退到 `NEXT_PUBLIC_API_BASE_URL`，最后才用本地默认值。
-- 如果桌面壳注入了 `window.__FILE_ORGANIZER_RUNTIME__.api_token`，前端会自动携带该 token 调用受保护接口和 SSE。
+- 前端会优先读取 `window.__FILE_PILOT_RUNTIME__.base_url`，没有时回退到 `NEXT_PUBLIC_API_BASE_URL`，最后才用本地默认值。
+- 如果桌面壳注入了 `window.__FILE_PILOT_RUNTIME__.api_token`，前端会自动携带该 token 调用受保护接口和 SSE。
 - API client 已接入本地整理会话、历史、设置和图标工坊端点。
 - 当前前端已围绕真实 `session_snapshot`、扫描进度、预检结果、执行结果、历史记录和图标工坊状态进行渲染。
 
@@ -52,7 +52,7 @@ npm test
 桌面壳或其他宿主应向前端注入：
 
 ```ts
-window.__FILE_ORGANIZER_RUNTIME__ = {
+window.__FILE_PILOT_RUNTIME__ = {
   base_url: "http://127.0.0.1:8765",
   api_token: "optional-token",
 };
@@ -64,7 +64,7 @@ window.__FILE_ORGANIZER_RUNTIME__ = {
 
 - 这里默认服务桌面工作台，不要把页面当成营销页或普通 SaaS dashboard 来设计。
 - 改动 `session_snapshot`、事件流或 API schema 时，要同步检查 `src/types/*`、API client 和对应渲染组件。
-- 如果页面要兼容桌面壳，优先读取 `window.__FILE_ORGANIZER_RUNTIME__`，不要新增并行的端口发现机制。
+- 如果页面要兼容桌面壳，优先读取 `window.__FILE_PILOT_RUNTIME__`，不要新增并行的端口发现机制。
 - 提交前最少执行 `npm run typecheck`；如果改动设置页、路由状态或复杂交互，顺手执行 `npm test`。
 
 ## 主要路由

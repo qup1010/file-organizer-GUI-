@@ -128,7 +128,7 @@
 
 当前已经存在：
 
-- `file_organizer/app/target_resolver.py`
+- `file_pilot/app/target_resolver.py`
 
 它承接的规则包括：
 

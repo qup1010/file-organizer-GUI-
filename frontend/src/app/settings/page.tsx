@@ -115,10 +115,106 @@ type TargetProfileDraft = {
 };
 
 type LaunchSection = "strategy" | "placement" | "targets";
+type ProviderSummaryKind = "text" | "vision" | "icon_image";
 
-const APP_CONTEXT_EVENT = "file-organizer-context-change";
+const APP_CONTEXT_EVENT = "file-pilot-context-change";
 const SETTINGS_CONTEXT_KEY = "settings_header_context";
 const IMAGE_SIZE_OPTIONS = ["1024x1024", "512x512", "256x256"] as const;
+
+const formatProviderLabel = (value?: string) => {
+  if (value === "openai_compatible") {
+    return "OpenAI 兼容服务";
+  }
+  return value?.trim() || "OpenAI 兼容服务";
+};
+
+const formatApiFormatLabel = (value?: string) => {
+  if (value === "openai_chat_completions") {
+    return "聊天补全接口";
+  }
+  return value?.trim() || "聊天补全接口";
+};
+
+const formatToolModeLabel = (value?: string) => {
+  if (value === "native") {
+    return "支持工具调用";
+  }
+  return value?.trim() || "支持工具调用";
+};
+
+function ProviderCapabilitySummary({
+  title,
+  kind,
+  provider,
+  apiFormat,
+  toolMode,
+  capabilities,
+}: {
+  title: string;
+  kind: ProviderSummaryKind;
+  provider?: string;
+  apiFormat?: string;
+  toolMode?: string;
+  capabilities?: SettingsSnapshot["families"]["text"]["active_preset"]["capabilities"];
+}) {
+  const serviceLabel = formatProviderLabel(provider);
+  const formatLabel = kind === "icon_image" ? "图像生成接口" : formatApiFormatLabel(apiFormat);
+  const abilityLabel = kind === "icon_image" ? "图标预览生成" : formatToolModeLabel(toolMode);
+  const badgeLabel = kind === "icon_image" ? "适用于 OpenAI 兼容生图服务" : "适用于 DeepSeek / OpenRouter 等兼容服务";
+  const caps = {
+    chat: capabilities?.chat ?? true,
+    streaming: capabilities?.streaming ?? true,
+    tools: capabilities?.tools ?? true,
+    vision: capabilities?.vision ?? true,
+    json_output: capabilities?.json_output ?? true,
+    image_generation: capabilities?.image_generation ?? false,
+  };
+  const chips =
+    kind === "icon_image"
+      ? [
+          { label: "生图端点", active: true },
+          { label: "可测试连接", active: true },
+        ]
+      : kind === "vision"
+        ? [
+            { label: caps.vision ? "支持图片输入" : "图片能力未声明", active: caps.vision },
+            { label: caps.json_output ? "支持结构化结果" : "结构化能力未声明", active: caps.json_output },
+          ]
+        : [
+            { label: caps.streaming ? "支持实时回复" : "实时回复未声明", active: caps.streaming },
+            { label: caps.json_output ? "支持结构化结果" : "结构化能力未声明", active: caps.json_output },
+          ];
+
+  return (
+    <div
+      className="xl:col-span-2 flex flex-wrap items-center gap-2 rounded-[6px] border border-on-surface/6 bg-surface-container-lowest/70 px-3 py-2 text-[11.5px]"
+      title={badgeLabel}
+    >
+      <div className="flex min-w-0 items-center gap-2 pr-1">
+        <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-primary/65" />
+        <span className="shrink-0 font-bold text-on-surface-variant/65">{title}</span>
+        <span className="truncate font-semibold text-on-surface/85">
+          {serviceLabel} · {formatLabel} · {abilityLabel}
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {chips.map((chip) => (
+          <span
+            key={chip.label}
+            className={cn(
+              "rounded-[5px] border px-1.5 py-0.5 text-[10.5px] font-semibold",
+              chip.active
+                ? "border-primary/15 bg-primary/[0.04] text-primary"
+                : "border-on-surface/8 bg-surface text-on-surface-variant/55",
+            )}
+          >
+            {chip.label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
 const COMPACT_SETTINGS_BREAKPOINT = 960;
 
 function normalizeImageSize(value: string | null | undefined): (typeof IMAGE_SIZE_OPTIONS)[number] {
@@ -1359,30 +1455,11 @@ export default function SettingsPage() {
               </div>
             )}
 
-            {!snapshot.status.text_configured && (
-              <div className="mb-6 flex items-center justify-between gap-4 rounded-[6px] border border-warning/20 bg-warning-container/15 px-4 py-3 animate-in fade-in slide-in-from-top-2 duration-300">
-                <div className="flex items-start gap-3 min-w-0">
-                  <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] bg-warning/10 text-warning">
-                    <AlertCircle className="h-4 w-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[14px] font-black tracking-tight text-on-surface">当前还没有可用的文本模型</p>
-                    <p className="mt-1 text-[12px] font-medium leading-6 text-ui-muted">
-                      文本模型是整理分析主链路的核心配置。请先创建并补全文本预设，再回到首页启动任务。
-                    </p>
-                  </div>
-                </div>
-                <Button variant="secondary" size="sm" onClick={() => handleSelectTab("text")}>
-                  去配置文本模型
-                </Button>
-              </div>
-            )}
-
             {activeTab === "text" && (
               <SettingsSection
                 icon={Layers3}
-                title="文本模型"
-                description="整理任务和图标工坊都会读取这里当前启用的文本预设。支持 OpenAI 兼容的 Chat Completions 接口。"
+                title="文本模型接口"
+                description="整理任务和图标工坊都会读取这里当前启用的文本预设。支持 OpenAI Chat Completions 兼容端点，例如 OpenAI、DeepSeek、OpenRouter 和本地兼容网关。"
               >
                 <PresetSelector
                   label="文本预设"
@@ -1399,12 +1476,20 @@ export default function SettingsPage() {
                         <input value={draft.text.OPENAI_MODEL} onChange={(event) => updateDraft("text", (current) => ({ ...current, OPENAI_MODEL: event.target.value }))} className="w-full bg-transparent py-2 text-sm font-semibold text-on-surface outline-none" placeholder="gpt-5.4" />
                       </InputShell>
                     </FieldGroup>
-                    <FieldGroup label="接口地址" hint="建议填写到 /v1，不要只填裸域名。">
+                    <FieldGroup label="接口地址" hint="填写 OpenAI 兼容地址，通常以 /v1 结尾。">
                       <InputShell icon={Globe}>
                         <input value={draft.text.OPENAI_BASE_URL} onChange={(event) => updateDraft("text", (current) => ({ ...current, OPENAI_BASE_URL: event.target.value }))} className="w-full bg-transparent py-2 text-sm font-mono font-medium text-on-surface outline-none" placeholder="https://api.openai.com/v1" />
                       </InputShell>
                     </FieldGroup>
-                    <div className="xl:col-span-2">{renderSecretField("API 密钥", draft.text.secret_state, textSecret, setTextSecret)}</div>
+                    <div className="xl:col-span-2">{renderSecretField("接口密钥", draft.text.secret_state, textSecret, setTextSecret)}</div>
+                    <ProviderCapabilitySummary
+                      title="当前连接方式"
+                      kind="text"
+                      provider={draft.text.provider}
+                      apiFormat={draft.text.api_format}
+                      toolMode={draft.text.tool_mode}
+                      capabilities={draft.text.capabilities}
+                    />
                     <div className="xl:col-span-2">{renderConnectionTestPanel("text")}</div>
                   </div>
                 ) : (
@@ -1443,12 +1528,20 @@ export default function SettingsPage() {
                         <input value={draft.vision.IMAGE_ANALYSIS_MODEL} onChange={(event) => updateDraft("vision", (current) => ({ ...current, IMAGE_ANALYSIS_MODEL: event.target.value }))} className="w-full bg-transparent py-2 text-sm font-semibold text-on-surface outline-none" placeholder="gpt-4o-mini" />
                       </InputShell>
                     </FieldGroup>
-                    <FieldGroup label="接口地址" hint="建议填写到 /v1，并确保该模型支持图片输入。">
+                    <FieldGroup label="接口地址" hint="填写 OpenAI 兼容地址，通常以 /v1 结尾；该模型还需要支持图片输入。">
                       <InputShell icon={Globe}>
                         <input value={draft.vision.IMAGE_ANALYSIS_BASE_URL} onChange={(event) => updateDraft("vision", (current) => ({ ...current, IMAGE_ANALYSIS_BASE_URL: event.target.value }))} className="w-full bg-transparent py-2 text-sm font-mono font-medium text-on-surface outline-none" placeholder="https://host.example/v1" />
                       </InputShell>
                     </FieldGroup>
                     <div className="xl:col-span-2">{renderSecretField("图片理解密钥", draft.vision.secret_state, visionSecret, setVisionSecret)}</div>
+                    <ProviderCapabilitySummary
+                      title="当前连接方式"
+                      kind="vision"
+                      provider={draft.vision.provider}
+                      apiFormat={draft.vision.api_format}
+                      toolMode={draft.vision.tool_mode}
+                      capabilities={draft.vision.capabilities}
+                    />
                     <div className="xl:col-span-2">{renderConnectionTestPanel("vision")}</div>
                   </div>
                 ) : (
@@ -1478,11 +1571,19 @@ export default function SettingsPage() {
                         <input value={draft.icon_image.image_model.model} onChange={(event) => updateDraft("icon_image", (current) => ({ ...current, image_model: { ...current.image_model, model: event.target.value } }))} className="w-full bg-transparent py-2 text-sm font-semibold text-on-surface outline-none" placeholder="gpt-image-1" />
                       </InputShell>
                     </FieldGroup>
-                    <FieldGroup label="生图接口地址" className="xl:col-span-2" hint="可填写到 /v1，或直接填写完整 /images/generations 端点。">
+                    <FieldGroup label="生图接口地址" className="xl:col-span-2" hint="可填写 OpenAI 兼容 /v1 地址，或服务商给出的完整 /images/generations 端点。">
                       <InputShell icon={Globe}>
                         <input value={draft.icon_image.image_model.base_url} onChange={(event) => updateDraft("icon_image", (current) => ({ ...current, image_model: { ...current.image_model, base_url: event.target.value } }))} className="w-full bg-transparent py-2 text-sm font-mono font-medium text-on-surface outline-none" placeholder="https://host.example/v1" />
                       </InputShell>
                     </FieldGroup>
+                    <ProviderCapabilitySummary
+                      title="当前连接方式"
+                      kind="icon_image"
+                      provider={draft.icon_image.image_model.provider}
+                      apiFormat={draft.icon_image.image_model.api_format}
+                      toolMode={draft.icon_image.image_model.tool_mode}
+                      capabilities={draft.icon_image.image_model.capabilities}
+                    />
                     <FieldGroup label="图片尺寸" hint="默认值为 1024x1024。">
                       <div className="grid gap-3 md:grid-cols-3">
                         {IMAGE_SIZE_OPTIONS.map((size) => (
@@ -1543,7 +1644,7 @@ export default function SettingsPage() {
                     </FieldGroup>
                     <FieldGroup label="保存方式" className="xl:col-span-2">
                       <div className="grid gap-3 md:grid-cols-2">
-                        <StrategyOptionButton active={draft.icon_image.save_mode === "centralized"} label="集中保存" onClick={() => updateDraft("icon_image", (current) => ({ ...current, save_mode: "centralized" }))} description="应用后的 .ico 写入 %APPDATA%/FileOrganizer/managed_icons；预览 PNG 仍保存在项目 output/icon_workbench/previews。" />
+                        <StrategyOptionButton active={draft.icon_image.save_mode === "centralized"} label="集中保存" onClick={() => updateDraft("icon_image", (current) => ({ ...current, save_mode: "centralized" }))} description="应用后的 .ico 写入 %APPDATA%/FilePilot/managed_icons；预览 PNG 仍保存在项目 output/icon_workbench/previews。" />
                         <StrategyOptionButton active={draft.icon_image.save_mode === "in_folder"} label="就地保存" onClick={() => updateDraft("icon_image", (current) => ({ ...current, save_mode: "in_folder" }))} description="处理后资源靠近目标文件夹，适合边做边核对。" />
                       </div>
                     </FieldGroup>

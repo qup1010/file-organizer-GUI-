@@ -1,16 +1,16 @@
 [package]
-name = "file-organizer-desktop"
+name = "file-pilot-desktop"
 version = "0.1.0"
 edition = "2021"
-description = "Tauri desktop host for the File Organizer workbench"
+description = "Tauri desktop host for the FilePilot workbench"
 authors = ["OpenAI Codex"]
 license = "MIT"
 
 [lib]
-name = "file_organizer_desktop_lib"
+name = "file_pilot_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
-[package.metadata.file-organizer]
+[package.metadata.file-pilot]
 host = "tauri"
 
 [build-dependencies]
@@ -22,6 +22,7 @@ rfd = "0.15"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = [] }
+tauri-plugin-notification = "2"
 uuid = { version = "1", features = ["v4"] }
 reqwest = { version = "0.12", features = ["json", "multipart"] }
 tokio = { version = "1", features = ["full"] }
@@ -29,7 +30,8 @@ base64 = "0.22"
 rand = "0.8"
 once_cell = "1.21.3"
 tauri-plugin-single-instance = "2"
-windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading"] }
+windows-registry = "0.6"
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_UI_Shell"] }
 
 [dev-dependencies]
 tempfile = "3"

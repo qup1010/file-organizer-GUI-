@@ -16,7 +16,7 @@
 
 相关文件：
 
-- `file_organizer/shared/config_manager.py`
+- `file_pilot/shared/config_manager.py`
 - `.gitignore`
 - `tests/test_config_manager.py`
 
@@ -39,7 +39,7 @@
 
 相关文件：
 
-- `file_organizer/api/main.py`
+- `file_pilot/api/main.py`
 - `frontend/src/lib/api.ts`
 - `frontend/src/lib/runtime.ts`
 - `frontend/src/lib/sse.ts`
@@ -59,9 +59,9 @@
 - 放行：
   - `GET /api/health`
   - `OPTIONS` 预检请求
-- 当 `FILE_ORGANIZER_API_TOKEN` 已设置时，其余 `/api/*` 要求 token；桌面端启动链路会自动注入该 token。
+- 当 `FILE_PILOT_API_TOKEN` 已设置时，其余 `/api/*` 要求 token；桌面端启动链路会自动注入该 token。
 - token 支持：
-  - REST 请求头：`Authorization: Bearer ...` 或 `x-file-organizer-token`
+  - REST 请求头：`Authorization: Bearer ...` 或 `x-file-pilot-token`
   - SSE query：`access_token`
 - 桌面端启动 Python API 时生成实例 token，并通过运行时注入给前端。
 - 前端 REST 请求统一自动带 token。
@@ -76,9 +76,9 @@
 
 相关文件：
 
-- `file_organizer/analysis/service.py`
-- `file_organizer/analysis/file_reader.py`
-- `file_organizer/analysis/models.py`
+- `file_pilot/analysis/service.py`
+- `file_pilot/analysis/file_reader.py`
+- `file_pilot/analysis/models.py`
 - `tests/test_analysis_path_boundaries.py`
 - `tests/test_analysis_structured_service.py`
 - `tests/test_file_parser.py`

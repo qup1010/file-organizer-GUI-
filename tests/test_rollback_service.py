@@ -4,10 +4,10 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from file_organizer.execution import service as execution_service
-from file_organizer.execution.models import ExecutionJournalItem
-from file_organizer.organize import service as organizer_service
-from file_organizer.rollback import service as rollback_service
+from file_pilot.execution import service as execution_service
+from file_pilot.execution.models import ExecutionJournalItem
+from file_pilot.organize import service as organizer_service
+from file_pilot.rollback import service as rollback_service
 
 
 class RollbackServiceTests(unittest.TestCase):
@@ -41,7 +41,7 @@ class RollbackServiceTests(unittest.TestCase):
                         raise OSError("mock move failure")
                     return original_move(src, dst)
 
-                with mock.patch("file_organizer.execution.service.shutil.move", side_effect=flaky_move):
+                with mock.patch("file_pilot.execution.service.shutil.move", side_effect=flaky_move):
                     execution_service.execute_plan(plan)
             else:
                 execution_service.execute_plan(plan)

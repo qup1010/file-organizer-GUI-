@@ -1,6 +1,6 @@
 import unittest
 
-from file_organizer.app.models import OrganizerSession
+from file_pilot.app.models import OrganizerSession
 
 
 class SessionModelTests(unittest.TestCase):

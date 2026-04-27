@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from file_organizer.shared import config_manager as config_module
+from file_pilot.shared import config_manager as config_module
 
 
 class ConfigManagerPresetTests(unittest.TestCase):

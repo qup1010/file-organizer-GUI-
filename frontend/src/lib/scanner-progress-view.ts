@@ -15,12 +15,15 @@ export interface ScannerProgressViewModel {
   eyebrow: string;
   title: string;
   description: string;
+  backendMessage: string | null;
   stageLabel: string;
   totalCount: number;
   processedCount: number;
   progressPercent: number;
   progressText: string | null;
   batchLabel: string | null;
+  batchDetail: string | null;
+  countLabel: string;
   currentItem: string | null;
   currentItemHint: string;
   reassureText: string;
@@ -87,15 +90,16 @@ export function deriveScannerProgressViewModel(
   const batchCount = Math.max(0, Number(scanner.batch_count || 0));
   const completedBatches = Math.max(0, Number(scanner.completed_batches || 0));
   const status = normalizeText(scanner.status || "running").toLowerCase();
+  const backendMessage = normalizeText(scanner.message) || null;
   const currentItemRaw = normalizeText(scanner.current_item);
   const currentItem = isSpecificScanItem(currentItemRaw) ? currentItemRaw : null;
   const isRetrying = Boolean(scanner.is_retrying);
   const isThinking = Boolean(scanner.ai_thinking);
   const isCompleted = status === "completed";
   const isAborted = status === "failed" || status === "interrupted" || status === "cancelled";
-  const recentObservedItems = uniqueRecentItems(scanner.recent_analysis_items || []).slice(0, 4);
-  const recentCompletedItems = recentObservedItems.filter(isCompletedItem).slice(0, 4);
-  const scanLogItems = (recentCompletedItems.length > 0 ? recentCompletedItems : recentObservedItems).slice(0, 5);
+  const recentObservedItems = uniqueRecentItems(scanner.recent_analysis_items || []).slice(0, 8);
+  const recentCompletedItems = recentObservedItems.filter(isCompletedItem).slice(0, 8);
+  const scanLogItems = (recentCompletedItems.length > 0 ? recentCompletedItems : recentObservedItems).slice(0, 8);
 
   let eyebrow = "扫描进行中";
   let title = "正在读取目录结构";
@@ -162,6 +166,14 @@ export function deriveScannerProgressViewModel(
     batchCount > 0
       ? `批次 ${Math.min(completedBatches + (isCompleted ? 0 : 1), Math.max(batchCount, 1))} / ${batchCount}`
       : null;
+  const batchDetail =
+    batchCount > 0
+      ? `${Math.min(completedBatches, batchCount)} 个批次已完成，最多会并行处理多个批次`
+      : null;
+  const countLabel =
+    totalCount > 0
+      ? `${Math.min(processedCount, totalCount)} / ${totalCount} 项`
+      : "正在统计项目";
 
   const progressSteps: ScannerDisplayStep[] = [
     {
@@ -194,12 +206,15 @@ export function deriveScannerProgressViewModel(
     eyebrow,
     title,
     description,
+    backendMessage,
     stageLabel,
     totalCount,
     processedCount,
     progressPercent: Math.max(0, Math.min(100, Math.round(progressPercent))),
     progressText,
     batchLabel,
+    batchDetail,
+    countLabel,
     currentItem,
     currentItemHint,
     reassureText: "扫描期间只会读取和分析，不会移动或改写原始文件。",

@@ -57,7 +57,7 @@ pip install -r requirements.txt
 ### CLI 主流程
 
 ```bash
-python -m file_organizer
+python -m file_pilot
 ```
 
 适合在终端里直接完成扫描、整理计划查看与确认、执行与回退入口提示。
@@ -65,10 +65,10 @@ python -m file_organizer
 ### 回退最近一次执行
 
 ```bash
-python -m file_organizer.rollback <target_dir>
+python -m file_pilot.rollback <target_dir>
 
 # 例如：
-python -m file_organizer.rollback D:/Downloads
+python -m file_pilot.rollback D:/Downloads
 ```
 
 会读取最近一次执行 journal，先做回退预检，再按用户确认执行回退。
@@ -76,7 +76,7 @@ python -m file_organizer.rollback D:/Downloads
 ### 启动本地 API
 
 ```bash
-python -m file_organizer.api
+python -m file_pilot.api
 ```
 
 默认：
@@ -87,10 +87,10 @@ python -m file_organizer.api
 
 常用环境变量：
 
-- `FILE_ORGANIZER_API_HOST` / `FILE_ORGANIZER_API_PORT` / `FILE_ORGANIZER_API_BASE_URL`
-- `FILE_ORGANIZER_API_RELOAD=false`（桌面宿主默认关闭 reload，避免 runtime 文件归属漂移）
-- `FILE_ORGANIZER_API_TOKEN=...`（开启后，除健康检查和必要的 `OPTIONS` 外的 `/api/*` 请求都需要带 token）
-- `FILE_ORGANIZER_INSTANCE_ID`（桌面壳用来校验运行时归属）
+- `FILE_PILOT_API_HOST` / `FILE_PILOT_API_PORT` / `FILE_PILOT_API_BASE_URL`
+- `FILE_PILOT_API_RELOAD=false`（桌面宿主默认关闭 reload，避免 runtime 文件归属漂移）
+- `FILE_PILOT_API_TOKEN=...`（开启后，除健康检查和必要的 `OPTIONS` 外的 `/api/*` 请求都需要带 token）
+- `FILE_PILOT_INSTANCE_ID`（桌面壳用来校验运行时归属）
 
 ### 前端工作台
 
@@ -130,11 +130,11 @@ npm test -- src/components/session-launcher.test.tsx
 
 运行时地址解析优先级（见 `frontend/src/lib/runtime.ts`）：
 
-1. `window.__FILE_ORGANIZER_RUNTIME__.base_url`
+1. `window.__FILE_PILOT_RUNTIME__.base_url`
 2. `NEXT_PUBLIC_API_BASE_URL`
 3. 默认 `http://127.0.0.1:8765`
 
-若注入了 `window.__FILE_ORGANIZER_RUNTIME__.api_token`，前端会自动携带该 token 访问受保护接口及 SSE。
+若注入了 `window.__FILE_PILOT_RUNTIME__.api_token`，前端会自动携带该 token 访问受保护接口及 SSE。
 
 ### Tauri 桌面壳
 
@@ -160,10 +160,10 @@ cargo check
 
 桌面壳职责（`desktop/README.md` 概要）：
 
-- 开发态拉起 `python -m file_organizer.api`
-- 打包态拉起随应用分发的 `file_organizer_api.exe`，使用动态空闲端口
+- 开发态拉起 `python -m file_pilot.api`
+- 打包态拉起随应用分发的 `file_pilot_api.exe`，使用动态空闲端口
 - 通过 `output/runtime/backend.json` + `/api/health` 校验后端实例
-- 向前端注入 `window.__FILE_ORGANIZER_RUNTIME__`
+- 向前端注入 `window.__FILE_PILOT_RUNTIME__`
 - 暴露目录选择、批量目录选择、文件夹图标应用/恢复、抠图测试等原生命令
 
 ## 项目结构与大模块
@@ -171,7 +171,7 @@ cargo check
 高层目录（细节可通过文件树自行探索）：
 
 ```text
-file_organizer/
+file_pilot/
   analysis/         扫描分析、文件读取、图片/压缩包摘要
   organize/         整理对话、增量计划、策略模板
   execution/        执行计划、journal、执行报告
@@ -194,8 +194,8 @@ logs/               后端运行日志与调试日志
 `OrganizerSessionService` 是整个产品的状态机与编排中心：
 
 - 入口：
-  - CLI：`file_organizer/cli/session_cli.py` 调用
-  - FastAPI：`file_organizer/api/main.py` 调用
+  - CLI：`file_pilot/cli/session_cli.py` 调用
+  - FastAPI：`file_pilot/api/main.py` 调用
 - 职责：
   - 管理 session 生命周期、阶段流转
   - 协调扫描、整理对话、预检、执行、回退
@@ -204,8 +204,8 @@ logs/               后端运行日志与调试日志
 
 如果需要理解“这次用户操作为什么会进入某个阶段”，先看：
 
-- `file_organizer/app/session_service.py`
-- `file_organizer/app/session_store.py`（持久化）
+- `file_pilot/app/session_service.py`
+- `file_pilot/app/session_store.py`（持久化）
 
 补充：
 
@@ -225,7 +225,7 @@ logs/               后端运行日志与调试日志
 会话不是一次性内存对象，而是持久化状态机：
 
 - 存储位置：`output/sessions`
-- 管理模块：`file_organizer/app/session_store.py`
+- 管理模块：`file_pilot/app/session_store.py`
 - 特点：
   - 每个目标目录同一时间只允许一个可写会话（目录锁也在此目录下）
   - 会话支持恢复、失效标记、放弃、只读历史查看
@@ -253,7 +253,7 @@ logs/               后端运行日志与调试日志
 
 分析服务在：
 
-- `file_organizer/analysis/service.py`
+- `file_pilot/analysis/service.py`
 
 职责：
 
@@ -275,7 +275,7 @@ logs/               后端运行日志与调试日志
 
 整理服务在：
 
-- `file_organizer/organize/service.py`
+- `file_pilot/organize/service.py`
 
 关键点：
 
@@ -301,7 +301,7 @@ logs/               后端运行日志与调试日志
 
 执行服务在：
 
-- `file_organizer/execution/service.py`
+- `file_pilot/execution/service.py`
 
 只接受结构化 `FinalPlan`，转换为真实文件系统动作：
 
@@ -325,7 +325,7 @@ logs/               后端运行日志与调试日志
 
 回退服务在：
 
-- `file_organizer/rollback/service.py`
+- `file_pilot/rollback/service.py`
 
 行为：
 
@@ -341,7 +341,7 @@ logs/               后端运行日志与调试日志
 
 图标工坊模块在：
 
-- `file_organizer/icon_workbench/`
+- `file_pilot/icon_workbench/`
 
 职责：
 
@@ -367,7 +367,7 @@ logs/               后端运行日志与调试日志
 
 FastAPI 主入口：
 
-- `file_organizer/api/main.py`
+- `file_pilot/api/main.py`
 
 核心职责：
 
@@ -380,16 +380,16 @@ FastAPI 主入口：
 
 鉴权：
 
-- 若设置了 `FILE_ORGANIZER_API_TOKEN`，除少量公共端点（健康检查等）外，其余 `/api/*` 需要 token：
+- 若设置了 `FILE_PILOT_API_TOKEN`，除少量公共端点（健康检查等）外，其余 `/api/*` 需要 token：
   - `Authorization: Bearer <token>`
-  - 或 `x-file-organizer-token: <token>`
+  - 或 `x-file-pilot-token: <token>`
   - SSE 场景使用 `?access_token=<token>`
 
 运行时发现机制（桌面/前端/后端共享契约）：
 
 - `output/runtime/backend.json`
-- `window.__FILE_ORGANIZER_RUNTIME__.base_url`
-- `window.__FILE_ORGANIZER_RUNTIME__.api_token`
+- `window.__FILE_PILOT_RUNTIME__.base_url`
+- `window.__FILE_PILOT_RUNTIME__.api_token`
 
 桌面端启动握手不仅仅是“文件存在”，还要校验：
 
@@ -445,7 +445,7 @@ FastAPI 主入口：
 - 宿主应注入：
 
   ```ts
-  window.__FILE_ORGANIZER_RUNTIME__ = {
+  window.__FILE_PILOT_RUNTIME__ = {
     base_url: "http://127.0.0.1:8765",
     api_token: "optional-token",
   };
@@ -462,11 +462,11 @@ FastAPI 主入口：
 
 职责小结：
 
-- 开发态：拉起 `python -m file_organizer.api`
-- 打包态：拉起 `file_organizer_api.exe`，使用动态空闲端口
+- 开发态：拉起 `python -m file_pilot.api`
+- 打包态：拉起 `file_pilot_api.exe`，使用动态空闲端口
 - 等待并校验 `output/runtime/backend.json`
 - 通过 `/api/health` 判定后端健康状态与实例归属
-- 注入 `window.__FILE_ORGANIZER_RUNTIME__`
+- 注入 `window.__FILE_PILOT_RUNTIME__`
 - 提供图标应用/恢复、抠图测试、目录选择等原生命令
 - 保证单实例桌面应用（重复启动时激活已有窗口）
 
@@ -533,7 +533,7 @@ FastAPI 主入口：
 
 很多 `SESSION_STAGE_CONFLICT` 都与此有关。修改阶段流转前，先看：
 
-- `file_organizer/app/session_service.py`
+- `file_pilot/app/session_service.py`
 - 相关测试：`tests/test_session_service.py`、`tests/test_main_flow.py`
 
 ### session_snapshot / stage / 事件名称是跨端契约
@@ -557,8 +557,8 @@ Python 与前端/桌面共享的契约包括：
 
 **只改一端通常会把工作台打坏**。涉及这些字段时，至少同步检查：
 
-- `file_organizer/app/session_service.py`
-- `file_organizer/api/main.py`
+- `file_pilot/app/session_service.py`
+- `file_pilot/api/main.py`
 - `frontend/src/types/session.ts`
 - `frontend/src/lib/use-session.ts`
 - `frontend/src/lib/runtime.ts`
@@ -623,7 +623,7 @@ cargo check
 
 整理主链路开发：
 
-1. 运行 `python -m file_organizer.api`
+1. 运行 `python -m file_pilot.api`
 2. 如需前端联调，在 `frontend/` 运行 `npm run dev`
 3. 修改会话状态机、事件流、`session_snapshot` 或 API schema 时：
    - 同时看 `tests/test_api_*.py`、`tests/test_session_*.py`、`tests/test_main_flow.py`
@@ -645,4 +645,4 @@ cargo check
 3. 桌面无法连接后端时优先检查：
    - `output/runtime/backend.json`
    - `logs/backend/runtime.log`
-   - 前端是否读取了 `window.__FILE_ORGANIZER_RUNTIME__`
+   - 前端是否读取了 `window.__FILE_PILOT_RUNTIME__`

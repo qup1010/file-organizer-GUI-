@@ -6,8 +6,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from file_organizer.organize.models import FinalPlan, PendingPlan, PlanMove
-from file_organizer.organize import service as organizer_service
+from file_pilot.organize.models import FinalPlan, PendingPlan, PlanMove
+from file_pilot.organize import service as organizer_service
 
 
 class StructuredOrganizerServiceTests(unittest.TestCase):
@@ -498,6 +498,61 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
         self.assertIn("directory_renames=目录改名", description)
         self.assertIn("unresolved_adds=新增待确认条目", description)
         self.assertIn("target_dir 只写相对新目录生成位置的目录路径", description)
+        self.assertIn("拿不准的条目只加入 unresolved_adds", description)
+        self.assertIn("不要再为该项提交 move_updates", description)
+
+    def test_build_organizer_tools_description_for_incremental_mode_forbids_new_targets(self):
+        tool = organizer_service.build_organizer_tools(
+            {
+                "organize_mode": "incremental",
+                "target_directories": ["Finance"],
+                "target_slots": [{"slot_id": "D001", "relpath": "Finance", "depth": 0}],
+            }
+        )[0]
+        description = tool["function"]["description"]
+
+        self.assertIn("不能创建新目标目录", description)
+        self.assertIn("target_dir 必须精确等于某个已选目标目录", description)
+        self.assertIn("系统会自动放入待确认区", description)
+        self.assertNotIn("或放入 Review", description)
+
+    def test_retry_and_repair_prompts_keep_review_as_internal_pending_area(self):
+        validation = {
+            "missing": [],
+            "extra": [],
+            "duplicates": [],
+            "order_errors": [],
+            "invalid_lines": [],
+            "path_errors": [],
+            "rename_errors": [],
+            "duplicate_mkdirs": [],
+            "missing_mkdirs": [],
+            "unused_mkdirs": [],
+            "conflicting_targets": [],
+        }
+        planning_context = {
+            "organize_mode": "incremental",
+            "target_directories": ["Finance"],
+            "target_slots": [{"slot_id": "D001", "relpath": "Finance", "depth": 0}],
+        }
+
+        retry = organizer_service.build_command_retry_message(
+            validation,
+            planner_items=[],
+            planning_context=planning_context,
+        )
+        repair = organizer_service._build_repair_messages(
+            "F001 | file | 合同.pdf | 财务合同 | 付款协议",
+            [],
+            validation,
+            planner_items=[],
+            planning_context=planning_context,
+        )[-1]["content"]
+
+        self.assertIn("或交给系统放入待确认区", retry)
+        self.assertIn("或交给系统放入待确认区", repair)
+        self.assertNotIn("或放入 Review", retry)
+        self.assertNotIn("或放入 Review", repair)
 
     def test_run_organizer_cycle_retries_with_full_assistant_message_for_invalid_plan_diff(self):
         initial_messages = [{"role": "user", "content": "请整理"}]
@@ -572,10 +627,10 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
         debug_jsonl = runtime_dir / "backend-debug.jsonl"
         try:
             with mock.patch.object(organizer_service, "create_openai_client", return_value=client), \
-                 mock.patch("file_organizer.shared.config.RUNTIME_DIR", runtime_dir), \
-                 mock.patch("file_organizer.shared.logging_utils.DEBUG_LOG_PATH", debug_jsonl), \
+                 mock.patch("file_pilot.shared.config.RUNTIME_DIR", runtime_dir), \
+                 mock.patch("file_pilot.shared.logging_utils.DEBUG_LOG_PATH", debug_jsonl), \
                  mock.patch(
-                     "file_organizer.shared.config.config_manager.get",
+                     "file_pilot.shared.config.config_manager.get",
                      side_effect=lambda key, default=None: True if key == "DEBUG_MODE" else default,
                  ):
                 organizer_service.chat_one_round(
@@ -613,10 +668,10 @@ class StructuredOrganizerServiceTests(unittest.TestCase):
         debug_jsonl = runtime_dir / "backend-debug.jsonl"
         try:
             with mock.patch.object(organizer_service, "create_openai_client", return_value=client), \
-                 mock.patch("file_organizer.shared.config.RUNTIME_DIR", runtime_dir), \
-                 mock.patch("file_organizer.shared.logging_utils.DEBUG_LOG_PATH", debug_jsonl), \
+                 mock.patch("file_pilot.shared.config.RUNTIME_DIR", runtime_dir), \
+                 mock.patch("file_pilot.shared.logging_utils.DEBUG_LOG_PATH", debug_jsonl), \
                  mock.patch(
-                     "file_organizer.shared.config.config_manager.get",
+                     "file_pilot.shared.config.config_manager.get",
                      side_effect=lambda key, default=None: True if key == "DEBUG_MODE" else default,
                  ), \
                  mock.patch.dict(os.environ, {"ORGANIZER_CHAT_STREAM": "false"}, clear=False):

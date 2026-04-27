@@ -5,8 +5,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from file_organizer.analysis.image_describer import ImageDescriptionResult, describe_image, format_image_description_result
-from file_organizer.analysis.file_reader import read_local_file
+from file_pilot.analysis.image_describer import ImageDescriptionResult, describe_image, format_image_description_result
+from file_pilot.analysis.file_reader import read_local_file
 
 
 class ImageDescriberTests(unittest.TestCase):
@@ -23,8 +23,8 @@ class ImageDescriberTests(unittest.TestCase):
             shutil.rmtree(self.root_dir)
 
     def test_describe_image_fails_in_strict_mode_when_config_missing(self):
-        with mock.patch("file_organizer.analysis.image_describer.get_image_analysis_settings", return_value={"enabled": False}), mock.patch(
-            "file_organizer.analysis.image_describer.append_debug_event"
+        with mock.patch("file_pilot.analysis.image_describer.get_image_analysis_settings", return_value={"enabled": False}), mock.patch(
+            "file_pilot.analysis.image_describer.append_debug_event"
         ) as append_debug_event:
             result = describe_image(self.image_path)
 
@@ -35,7 +35,7 @@ class ImageDescriberTests(unittest.TestCase):
 
     def test_describe_image_fails_when_explicit_vision_config_is_incomplete(self):
         with mock.patch(
-            "file_organizer.analysis.image_describer.get_image_analysis_settings",
+            "file_pilot.analysis.image_describer.get_image_analysis_settings",
             return_value={
                 "enabled": True,
                 "base_url": "",
@@ -43,7 +43,7 @@ class ImageDescriberTests(unittest.TestCase):
                 "model": "",
             },
         ), mock.patch(
-            "file_organizer.analysis.image_describer.create_image_analysis_client",
+            "file_pilot.analysis.image_describer.create_image_analysis_client",
             side_effect=ValueError("缺少必要配置: IMAGE_ANALYSIS_BASE_URL"),
         ):
             result = describe_image(self.image_path)
@@ -64,7 +64,7 @@ class ImageDescriberTests(unittest.TestCase):
         mock_client.chat.completions.create.return_value = response
 
         with mock.patch(
-            "file_organizer.analysis.image_describer.get_image_analysis_settings",
+            "file_pilot.analysis.image_describer.get_image_analysis_settings",
             return_value={
                 "enabled": True,
                 "base_url": "https://vision.example/v1",
@@ -72,9 +72,9 @@ class ImageDescriberTests(unittest.TestCase):
                 "model": "vision-1",
             },
         ), mock.patch(
-            "file_organizer.analysis.image_describer.create_image_analysis_client",
+            "file_pilot.analysis.image_describer.create_image_analysis_client",
             return_value=mock_client,
-        ), mock.patch("file_organizer.analysis.image_describer.append_debug_event") as append_debug_event:
+        ), mock.patch("file_pilot.analysis.image_describer.append_debug_event") as append_debug_event:
             result = describe_image(self.image_path)
 
         self.assertEqual(result.status, "ok")
@@ -104,7 +104,7 @@ class ImageDescriberTests(unittest.TestCase):
         ]
 
         with mock.patch(
-            "file_organizer.analysis.image_describer.get_image_analysis_settings",
+            "file_pilot.analysis.image_describer.get_image_analysis_settings",
             return_value={
                 "enabled": True,
                 "base_url": "http://localhost:8317/v1",
@@ -112,13 +112,13 @@ class ImageDescriberTests(unittest.TestCase):
                 "model": "vision-1",
             },
         ), mock.patch(
-            "file_organizer.analysis.image_describer.create_image_analysis_client",
+            "file_pilot.analysis.image_describer.create_image_analysis_client",
             return_value=mock_client,
         ), mock.patch(
-            "file_organizer.analysis.image_describer.register_vision_image_file",
+            "file_pilot.analysis.image_describer.register_vision_image_file",
             return_value="image-token",
         ), mock.patch(
-            "file_organizer.analysis.image_describer.build_registered_vision_image_url",
+            "file_pilot.analysis.image_describer.build_registered_vision_image_url",
             return_value="http://127.0.0.1:8765/_filepilot/vision-images/image-token",
         ), mock.patch.dict(
             os.environ,
@@ -140,7 +140,7 @@ class ImageDescriberTests(unittest.TestCase):
         mock_client.chat.completions.create.side_effect = RuntimeError("model does not support vision")
 
         with mock.patch(
-            "file_organizer.analysis.image_describer.get_image_analysis_settings",
+            "file_pilot.analysis.image_describer.get_image_analysis_settings",
             return_value={
                 "enabled": True,
                 "base_url": "https://vision.example/v1",
@@ -148,9 +148,9 @@ class ImageDescriberTests(unittest.TestCase):
                 "model": "vision-1",
             },
         ), mock.patch(
-            "file_organizer.analysis.image_describer.create_image_analysis_client",
+            "file_pilot.analysis.image_describer.create_image_analysis_client",
             return_value=mock_client,
-        ), mock.patch("file_organizer.analysis.image_describer.append_debug_event") as append_debug_event:
+        ), mock.patch("file_pilot.analysis.image_describer.append_debug_event") as append_debug_event:
             result = describe_image(self.image_path)
 
         self.assertEqual(result.status, "failed")
@@ -164,7 +164,7 @@ class ImageDescriberTests(unittest.TestCase):
         mock_client.chat.completions.create.return_value = "这是一张聊天截图，主要在讨论付款和交付时间。"
 
         with mock.patch(
-            "file_organizer.analysis.image_describer.get_image_analysis_settings",
+            "file_pilot.analysis.image_describer.get_image_analysis_settings",
             return_value={
                 "enabled": True,
                 "base_url": "https://vision.example/v1",
@@ -172,7 +172,7 @@ class ImageDescriberTests(unittest.TestCase):
                 "model": "vision-1",
             },
         ), mock.patch(
-            "file_organizer.analysis.image_describer.create_image_analysis_client",
+            "file_pilot.analysis.image_describer.create_image_analysis_client",
             return_value=mock_client,
         ):
             result = describe_image(self.image_path)
@@ -187,7 +187,7 @@ class ImageDescriberTests(unittest.TestCase):
         )
 
         with mock.patch(
-            "file_organizer.analysis.image_describer.get_image_analysis_settings",
+            "file_pilot.analysis.image_describer.get_image_analysis_settings",
             return_value={
                 "enabled": True,
                 "base_url": "https://vision.example/v1",
@@ -195,7 +195,7 @@ class ImageDescriberTests(unittest.TestCase):
                 "model": "vision-1",
             },
         ), mock.patch(
-            "file_organizer.analysis.image_describer.create_image_analysis_client",
+            "file_pilot.analysis.image_describer.create_image_analysis_client",
             return_value=mock_client,
         ):
             result = describe_image(self.image_path)
@@ -218,7 +218,7 @@ class ImageDescriberTests(unittest.TestCase):
 
     def test_read_local_file_wraps_image_result_in_stable_status_block(self):
         with mock.patch(
-            "file_organizer.analysis.file_reader.describe_image",
+            "file_pilot.analysis.file_reader.describe_image",
             return_value=ImageDescriptionResult(status="ok", summary="测试图片摘要"),
         ):
             rendered = read_local_file(str(self.image_path))

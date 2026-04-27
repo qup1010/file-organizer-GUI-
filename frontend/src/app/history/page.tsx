@@ -22,7 +22,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn, formatDisplayDate, getFriendlyStage } from "@/lib/utils";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import type { JournalSummary, HistoryItem, SessionSnapshot } from "@/types/session";
+import type { JournalSummary, HistoryItem, SessionSnapshot, RollbackPrecheckSummary } from "@/types/session";
+import { RollbackPreviewDialog } from "./rollback-preview-dialog";
 import { Button } from "@/components/ui/button";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -76,7 +77,7 @@ function summarizeMoveNames(items: { display_name: string }[], limit = 3) {
 }
 
 export default function HistoryPage() {
-  const APP_CONTEXT_EVENT = "file-organizer-context-change";
+  const APP_CONTEXT_EVENT = "file-pilot-context-change";
   const HISTORY_CONTEXT_KEY = "history_header_context";
   const searchParams = useSearchParams();
   const requestedEntryId = searchParams.get("entry_id");
@@ -87,6 +88,7 @@ export default function HistoryPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [rollbackSuccess, setRollbackSuccess] = useState(false);
   const [rollbackConfirmOpen, setRollbackConfirmOpen] = useState(false);
+  const [rollbackPrecheck, setRollbackPrecheck] = useState<RollbackPrecheckSummary | null>(null);
   const requestedEntryHandledRef = useRef<string | null>(null);
   const router = useRouter();
   const {
@@ -210,16 +212,23 @@ export default function HistoryPage() {
     window.dispatchEvent(new Event(APP_CONTEXT_EVENT));
   }, [APP_CONTEXT_EVENT, HISTORY_CONTEXT_KEY, selectedEntry]);
 
-  const handleRollback = async () => {
+  const handleRollback = async (isConfirm: boolean = false) => {
     if (!journal || !selectedSessionId) return;
     setActionLoading(true);
     setError(null);
     try {
-      await api.rollback(selectedSessionId, true);
-      setRollbackConfirmOpen(false);
-      setRollbackSuccess(true);
-      await loadHistory();
-      void loadJournal(selectedSessionId);
+      const response = await api.rollback(selectedSessionId, isConfirm);
+
+      if (!isConfirm && response.rollback_precheck) {
+        setRollbackPrecheck(response.rollback_precheck);
+        setRollbackConfirmOpen(true);
+      } else {
+        setRollbackConfirmOpen(false);
+        setRollbackPrecheck(null);
+        setRollbackSuccess(true);
+        await loadHistory();
+        void loadJournal(selectedSessionId);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "回退过程中发生错误");
     } finally {
@@ -353,7 +362,7 @@ export default function HistoryPage() {
           {!rollbackSuccess && (journal?.status === "completed" || journal?.status === "partial_failure") && (
             <Button
               variant="danger"
-              onClick={() => setRollbackConfirmOpen(true)}
+              onClick={() => void handleRollback(false)}
               disabled={actionLoading}
               loading={actionLoading}
               className="h-7.5 rounded-md px-4 text-[10.5px] font-black"
@@ -666,16 +675,15 @@ export default function HistoryPage() {
         </section>
       </div>
 
-      <ConfirmDialog
+      <RollbackPreviewDialog
         open={rollbackConfirmOpen}
-        title="确认回退这次执行？"
-        description={`这会把本次整理已移动的 ${moveRows.length} 项内容尽量放回原位置${moveRowsSummary ? `。涉及条目：${moveRowsSummary}` : ""}。若目标文件已被占用或发生冲突，部分回退可能失败。`}
-        confirmLabel="确认回退"
-        cancelLabel="取消"
-        tone="danger"
+        precheck={rollbackPrecheck}
         loading={actionLoading}
-        onConfirm={handleRollback}
-        onCancel={() => setRollbackConfirmOpen(false)}
+        onConfirm={() => void handleRollback(true)}
+        onCancel={() => {
+          setRollbackConfirmOpen(false);
+          setRollbackPrecheck(null);
+        }}
       />
       <ConfirmDialog
         open={Boolean(pendingDeleteId)}

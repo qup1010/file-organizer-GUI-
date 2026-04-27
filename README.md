@@ -171,7 +171,7 @@ cargo check
 
 ### 推荐开发流程
 
-1. 先运行 `python -m file_organizer.api`
+1. 先运行 `python -m file_pilot.api`
 2. 前端开发时在 `frontend/` 运行 `npm run dev`
 3. 提交前至少执行相关 `unittest`、`npm run typecheck` 和 `npm run lint`
 4. 如涉及桌面端，再补跑 `cargo check` 或 `npm run tauri:dev`

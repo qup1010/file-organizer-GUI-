@@ -359,6 +359,37 @@ describe("useSession assistant draft", () => {
     });
   });
 
+  it("collapses adjacent duplicate assistant replies from the same snapshot", async () => {
+    getSession.mockResolvedValue({
+      session_id: "session-1",
+      session_snapshot: createSnapshot({
+        messages: [
+          {
+            id: "assistant-first",
+            role: "assistant",
+            content: "方案已更新，请查看右侧预览。",
+          },
+          {
+            id: "assistant-second",
+            role: "assistant",
+            content: "方案已更新，请查看右侧预览。",
+          },
+        ],
+      }),
+    });
+
+    const { result } = renderHook(() => useSession("session-1"));
+
+    await waitFor(() => {
+      expect(result.current.chatMessages).toEqual([
+        expect.objectContaining({
+          id: "assistant-second",
+          content: "方案已更新，请查看右侧预览。",
+        }),
+      ]);
+    });
+  });
+
   it("does not show the local fallback for unrelated plan updates", async () => {
     const { result } = renderHook(() => useSession("session-1"));
 

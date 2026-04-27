@@ -18,7 +18,7 @@ const WORKSPACE_CONTEXT_KEY = "workspace_header_context";
 const SETTINGS_CONTEXT_KEY = "settings_header_context";
 const HISTORY_CONTEXT_KEY = "history_header_context";
 const ICONS_CONTEXT_KEY = "icons_header_context";
-const APP_CONTEXT_EVENT = "file-organizer-context-change";
+const APP_CONTEXT_EVENT = "file-pilot-context-change";
 const ACTIVE_WORKSPACE_ROUTE_KEY = "workspace_active_route";
 
 function cn(...inputs: ClassValue[]) {
@@ -255,19 +255,17 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-surface text-on-surface font-sans">
       <div className="premium-bg" aria-hidden="true" />
-      <header 
+      <header
         data-tauri-drag-region
         className="z-50 grid h-[48px] shrink-0 grid-cols-[minmax(180px,1fr)_auto_auto] items-center border-b border-on-surface/6 bg-surface-container-lowest px-2 backdrop-blur sm:grid-cols-[minmax(220px,1fr)_auto_minmax(118px,1fr)] sm:px-3 xl:grid-cols-[minmax(320px,1fr)_auto_minmax(180px,1fr)]"
       >
         <div data-tauri-drag-region className="flex min-w-0 items-center gap-3 pr-3 select-none">
-          <div className="flex shrink-0 items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-[7px] bg-primary/10 ring-1 ring-primary/20">
-              <img src="/app-icon.png" alt="FilePilot" className="h-[14px] w-[14px] object-contain" />
-            </div>
-           
-            <div className="flex items-center tracking-[-0.03em] pointer-events-none">
-              <span className="text-[13.5px] font-black text-on-surface">File</span>
-              <span className="ml-0.5 text-[13.5px] font-black text-primary">Pilot</span>
+          <div className="flex shrink-0 items-center gap-2.5">
+            <img src="/app-icon.png" alt="FilePilot" className="h-5 w-5 object-contain active:scale-95 transition-transform" />
+            <div className="flex items-baseline tracking-[-0.04em] pointer-events-none select-none">
+              <span className="text-[14.5px] font-black text-on-surface">File</span>
+              <span className="ml-0.5 text-[15.5px] font-black text-primary">Pilot</span>
+              <span className="ml-0.5 h-1 w-1 rounded-full bg-primary" />
             </div>
 
             <div className="ml-1 h-4 w-px rounded-full bg-on-surface/12" />

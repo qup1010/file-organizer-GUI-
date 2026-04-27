@@ -3,7 +3,7 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from file_organizer.analysis.archive_reader import read_archive_index
+from file_pilot.analysis.archive_reader import read_archive_index
 
 
 class ArchiveReaderTests(unittest.TestCase):

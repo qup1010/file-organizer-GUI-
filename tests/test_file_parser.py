@@ -4,8 +4,8 @@ import unittest
 import zipfile
 from unittest import mock
 
-from file_organizer.analysis.file_reader import list_local_files, read_local_file
-from file_organizer.analysis.image_describer import ImageDescriptionResult
+from file_pilot.analysis.file_reader import list_local_files, read_local_file
+from file_pilot.analysis.image_describer import ImageDescriptionResult
 
 
 class FileParserDirectoryListingTests(unittest.TestCase):
@@ -98,7 +98,7 @@ class FileReaderEncodingTests(unittest.TestCase):
 
     def test_read_local_file_routes_images_to_isolated_summary(self):
         with mock.patch(
-            "file_organizer.analysis.file_reader.describe_image",
+            "file_pilot.analysis.file_reader.describe_image",
             return_value=ImageDescriptionResult(
                 status="ok",
                 summary="这是一张聊天截图，主要在讨论付款安排。",

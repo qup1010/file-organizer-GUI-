@@ -12,7 +12,7 @@ export function RuntimeStatus() {
     const config = readRuntimeConfig();
     setBaseUrl(config.base_url?.trim() || getApiBaseUrl());
     setSource(
-      typeof window !== "undefined" && window.__FILE_ORGANIZER_RUNTIME__
+      typeof window !== "undefined" && window.__FILE_PILOT_RUNTIME__
         ? "桌面应用注入"
         : process.env.NEXT_PUBLIC_API_BASE_URL
           ? "环境变量"

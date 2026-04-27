@@ -1,4 +1,4 @@
-﻿from file_organizer.debug.compat_probe import main
+﻿from file_pilot.debug.compat_probe import main
 
 
 if __name__ == "__main__":

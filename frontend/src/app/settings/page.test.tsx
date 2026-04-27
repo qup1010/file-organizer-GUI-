@@ -218,11 +218,12 @@ describe("SettingsPage preset flow", () => {
   });
 
 
-  it("shows a reminder banner when the text model is not configured", async () => {
+  it("does not show a cross-page reminder banner inside settings", async () => {
     render(<SettingsPage />);
 
-    expect(await screen.findByText("当前还没有可用的文本模型")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: /去配置文本模型/i }).length).toBeGreaterThan(0);
+    expect(await screen.findByText("请先点击 + 创建一个预设")).toBeInTheDocument();
+    expect(screen.queryByText("当前还没有可用的文本模型")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /去配置文本模型/i })).not.toBeInTheDocument();
   });
 
   it("opens the create preset dialog from the add button", async () => {

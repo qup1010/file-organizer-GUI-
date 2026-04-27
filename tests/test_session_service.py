@@ -5,11 +5,11 @@ import json
 from pathlib import Path
 from unittest import mock
 
-from file_organizer.app.models import OrganizerSession, PendingPlanPayload, PlanSnapshotPayload, TaskState
-from file_organizer.app.session_service import OrganizerSessionService
-from file_organizer.app.session_store import SessionStore
-from file_organizer.organize.models import PendingPlan, PlanMove
-from file_organizer.shared.logging_utils import close_backend_logging, setup_backend_logging
+from file_pilot.app.models import OrganizerSession, PendingPlanPayload, PlanSnapshotPayload, TaskState
+from file_pilot.app.session_service import OrganizerSessionService
+from file_pilot.app.session_store import SessionStore
+from file_pilot.organize.models import PendingPlan, PlanMove
+from file_pilot.shared.logging_utils import close_backend_logging, setup_backend_logging
 
 
 class ImmediateScanner:
@@ -543,7 +543,7 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         )
 
         with mock.patch(
-            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            "file_pilot.app.session_service.organize_service.run_organizer_cycle",
             return_value=(
                 "已生成增量方案",
                 {
@@ -595,7 +595,7 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         )
 
         with mock.patch(
-            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            "file_pilot.app.session_service.organize_service.run_organizer_cycle",
             return_value=(
                 "已生成增量方案",
                 {
@@ -816,10 +816,10 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         assert session is not None
 
         with mock.patch(
-            "file_organizer.app.session_service.analysis_service.run_analysis_cycle",
+            "file_pilot.app.session_service.analysis_service.run_analysis_cycle",
             return_value=None,
         ), mock.patch(
-            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            "file_pilot.app.session_service.organize_service.run_organizer_cycle",
         ) as organizer_cycle_mock:
             service.start_scan(session.session_id)
 
@@ -857,10 +857,10 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         assert session is not None
 
         with mock.patch(
-            "file_organizer.app.session_service.analysis_service.run_analysis_cycle",
+            "file_pilot.app.session_service.analysis_service.run_analysis_cycle",
             return_value=None,
         ), mock.patch(
-            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            "file_pilot.app.session_service.organize_service.run_organizer_cycle",
         ) as organizer_cycle_mock:
             service.start_scan(session.session_id)
 
@@ -892,10 +892,10 @@ class OrganizerSessionServiceTests(unittest.TestCase):
             return "a.txt | 文档 | A"
 
         with mock.patch(
-            "file_organizer.app.session_service.analysis_service.run_analysis_cycle",
+            "file_pilot.app.session_service.analysis_service.run_analysis_cycle",
             side_effect=fake_run_analysis_cycle,
         ), mock.patch(
-            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            "file_pilot.app.session_service.organize_service.run_organizer_cycle",
             return_value=("", None),
         ):
             service.start_scan(session.session_id)
@@ -923,10 +923,10 @@ class OrganizerSessionServiceTests(unittest.TestCase):
             return "report.pdf | 文档 | A"
 
         with mock.patch(
-            "file_organizer.app.session_service.analysis_service.run_analysis_cycle",
+            "file_pilot.app.session_service.analysis_service.run_analysis_cycle",
             side_effect=fake_run_analysis_cycle,
         ), mock.patch(
-            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            "file_pilot.app.session_service.organize_service.run_organizer_cycle",
             return_value=("", None),
         ):
             service.start_scan(session.session_id)
@@ -961,10 +961,10 @@ class OrganizerSessionServiceTests(unittest.TestCase):
             return "report.pdf | 文档 | A"
 
         with mock.patch(
-            "file_organizer.app.session_service.analysis_service.run_analysis_cycle",
+            "file_pilot.app.session_service.analysis_service.run_analysis_cycle",
             side_effect=fake_run_analysis_cycle,
         ), mock.patch(
-            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            "file_pilot.app.session_service.organize_service.run_organizer_cycle",
             return_value=("", None),
         ):
             service.start_scan(session.session_id)
@@ -990,10 +990,10 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         assert session is not None
 
         with mock.patch(
-            "file_organizer.app.session_service.analysis_service.run_analysis_cycle",
+            "file_pilot.app.session_service.analysis_service.run_analysis_cycle",
             return_value="a.txt | 待判断 | 分析未覆盖，需手动确认",
         ), mock.patch(
-            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            "file_pilot.app.session_service.organize_service.run_organizer_cycle",
         ) as organizer_cycle_mock:
             service.start_scan(session.session_id)
 
@@ -1023,10 +1023,10 @@ class OrganizerSessionServiceTests(unittest.TestCase):
             return "report.pdf | 文档 | A"
 
         with mock.patch(
-            "file_organizer.app.session_service.analysis_service.run_analysis_cycle",
+            "file_pilot.app.session_service.analysis_service.run_analysis_cycle",
             side_effect=fake_run_analysis_cycle,
         ), mock.patch(
-            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            "file_pilot.app.session_service.organize_service.run_organizer_cycle",
         ) as organizer_cycle_mock:
             service.start_scan(session.session_id)
 
@@ -1053,13 +1053,13 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         )
 
         with mock.patch(
-            "file_organizer.app.session_service.analysis_service.run_analysis_cycle",
+            "file_pilot.app.session_service.analysis_service.run_analysis_cycle",
             return_value="a.txt | 文档 | A",
         ), mock.patch(
-            "file_organizer.app.session_service.organize_service.build_initial_messages",
+            "file_pilot.app.session_service.organize_service.build_initial_messages",
             return_value=[{"role": "system", "content": "scan"}],
         ), mock.patch(
-            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            "file_pilot.app.session_service.organize_service.run_organizer_cycle",
             return_value=("已规划", {"pending_plan": pending, "is_valid": False, "diff_summary": ["planned"]}),
         ):
             service.start_scan(session.session_id)
@@ -1085,10 +1085,10 @@ class OrganizerSessionServiceTests(unittest.TestCase):
             return "report.pdf | 文档 | A"
 
         with mock.patch(
-            "file_organizer.app.session_service.analysis_service.run_analysis_cycle",
+            "file_pilot.app.session_service.analysis_service.run_analysis_cycle",
             side_effect=fake_run_analysis_cycle,
         ), mock.patch(
-            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            "file_pilot.app.session_service.organize_service.run_organizer_cycle",
             return_value=("", None),
         ):
             service.start_scan(session.session_id)
@@ -1123,7 +1123,7 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         )
 
         with mock.patch(
-            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            "file_pilot.app.session_service.organize_service.run_organizer_cycle",
             return_value=(
                 "已更新计划",
                 {
@@ -1182,7 +1182,7 @@ class OrganizerSessionServiceTests(unittest.TestCase):
             )
 
         with mock.patch(
-            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            "file_pilot.app.session_service.organize_service.run_organizer_cycle",
             side_effect=fake_cycle,
         ):
             result = self.service.submit_user_intent(session.session_id, "放到文档")
@@ -1241,7 +1241,7 @@ class OrganizerSessionServiceTests(unittest.TestCase):
             )
 
         with mock.patch(
-            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            "file_pilot.app.session_service.organize_service.run_organizer_cycle",
             side_effect=fake_cycle,
         ):
             self.service.submit_user_intent(session.session_id, "放到文档")
@@ -1295,7 +1295,7 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         ]
 
         with mock.patch(
-            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            "file_pilot.app.session_service.organize_service.run_organizer_cycle",
             return_value=(
                 "已更新计划",
                 {
@@ -1388,13 +1388,13 @@ class OrganizerSessionServiceTests(unittest.TestCase):
             return "a.txt | 文档 | A"
 
         with mock.patch(
-            "file_organizer.app.session_service.analysis_service.run_analysis_cycle",
+            "file_pilot.app.session_service.analysis_service.run_analysis_cycle",
             side_effect=fake_scan_runner,
         ), mock.patch(
-            "file_organizer.app.session_service.organize_service.build_initial_messages",
+            "file_pilot.app.session_service.organize_service.build_initial_messages",
             return_value=[{"role": "system", "content": "scan"}],
         ), mock.patch(
-            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            "file_pilot.app.session_service.organize_service.run_organizer_cycle",
             return_value=("已规划", {"pending_plan": pending, "is_valid": False, "diff_summary": ["planned"]}),
         ):
             service.start_scan(session.session_id)
@@ -1426,16 +1426,16 @@ class OrganizerSessionServiceTests(unittest.TestCase):
             return ("已规划", {"pending_plan": pending, "is_valid": True, "diff_summary": ["planned"]})
 
         with mock.patch(
-            "file_organizer.app.session_service.analysis_service.run_analysis_cycle",
+            "file_pilot.app.session_service.analysis_service.run_analysis_cycle",
             return_value="a.txt | 文档 | A",
         ), mock.patch(
-            "file_organizer.app.session_service.analysis_service.run_analysis_cycle_for_entries",
+            "file_pilot.app.session_service.analysis_service.run_analysis_cycle_for_entries",
             return_value="loose.txt | 文档 | 单文件说明",
         ), mock.patch(
-            "file_organizer.app.session_service.organize_service.build_initial_messages",
+            "file_pilot.app.session_service.organize_service.build_initial_messages",
             return_value=[{"role": "system", "content": "scan"}],
         ), mock.patch(
-            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            "file_pilot.app.session_service.organize_service.run_organizer_cycle",
             side_effect=fake_plan_cycle,
         ):
             service.start_scan(session.session_id)
@@ -1470,17 +1470,17 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         session = created.session
         assert session is not None
         real_build_initial_messages = __import__(
-            "file_organizer.organize.service", fromlist=["build_initial_messages"]
+            "file_pilot.organize.service", fromlist=["build_initial_messages"]
         ).build_initial_messages
 
         with mock.patch(
-            "file_organizer.app.session_service.analysis_service.run_analysis_cycle",
+            "file_pilot.app.session_service.analysis_service.run_analysis_cycle",
             return_value="a.txt | 文档 | A",
         ), mock.patch(
-            "file_organizer.app.session_service.organize_service.build_initial_messages",
+            "file_pilot.app.session_service.organize_service.build_initial_messages",
             side_effect=real_build_initial_messages,
         ) as build_messages_mock, mock.patch(
-            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            "file_pilot.app.session_service.organize_service.run_organizer_cycle",
             return_value=("已规划", {"pending_plan": PendingPlan(summary="planned"), "is_valid": False, "diff_summary": ["planned"]}),
         ):
             service.start_scan(session.session_id)
@@ -1502,7 +1502,7 @@ class OrganizerSessionServiceTests(unittest.TestCase):
             raise RuntimeError("scanner boom")
 
         with mock.patch(
-            "file_organizer.app.session_service.analysis_service.run_analysis_cycle",
+            "file_pilot.app.session_service.analysis_service.run_analysis_cycle",
             side_effect=broken_analysis,
         ):
             service.start_scan(session.session_id)
@@ -1525,22 +1525,22 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         assert session is not None
 
         with mock.patch(
-            "file_organizer.app.session_service.analysis_service.run_analysis_cycle",
+            "file_pilot.app.session_service.analysis_service.run_analysis_cycle",
             return_value="a.txt | 文档 | A",
         ), mock.patch(
-            "file_organizer.app.session_service.organize_service.build_initial_messages",
+            "file_pilot.app.session_service.organize_service.build_initial_messages",
             return_value=[{"role": "system", "content": "scan"}],
         ), mock.patch(
-            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            "file_pilot.app.session_service.organize_service.run_organizer_cycle",
             side_effect=RuntimeError("planner boom"),
         ), mock.patch(
-            "file_organizer.shared.logging_utils.DEBUG_LOG_PATH",
+            "file_pilot.shared.logging_utils.DEBUG_LOG_PATH",
             debug_path,
         ), mock.patch(
-            "file_organizer.shared.logging_utils.is_debug_logging_enabled",
+            "file_pilot.shared.logging_utils.is_debug_logging_enabled",
             return_value=True,
         ), mock.patch(
-            "file_organizer.app.session_orchestrator.logger.exception",
+            "file_pilot.app.session_orchestrator.logger.exception",
         ) as logger_exception:
             service.start_scan(session.session_id)
 
@@ -1580,13 +1580,13 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         assert session is not None
 
         with mock.patch(
-            "file_organizer.app.session_service.analysis_service.run_analysis_cycle",
+            "file_pilot.app.session_service.analysis_service.run_analysis_cycle",
             return_value="a.txt | 文档 | A",
         ), mock.patch(
-            "file_organizer.app.session_service.organize_service.build_initial_messages",
+            "file_pilot.app.session_service.organize_service.build_initial_messages",
             return_value=[{"role": "system", "content": "scan"}],
         ), mock.patch(
-            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            "file_pilot.app.session_service.organize_service.run_organizer_cycle",
         ) as organizer_cycle_mock:
             organizer_cycle_mock.return_value = (
                 "已生成方案",
@@ -1625,13 +1625,13 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         assert session is not None
 
         with mock.patch(
-            "file_organizer.app.session_service.analysis_service.run_analysis_cycle",
+            "file_pilot.app.session_service.analysis_service.run_analysis_cycle",
             return_value="invoice.pdf | 财务票据 | 发票",
         ), mock.patch(
-            "file_organizer.app.session_service.analysis_service.run_analysis_cycle_for_entries",
+            "file_pilot.app.session_service.analysis_service.run_analysis_cycle_for_entries",
             return_value="invoice.pdf | 财务票据 | 发票",
         ), mock.patch(
-            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            "file_pilot.app.session_service.organize_service.run_organizer_cycle",
             return_value=(
                 "已生成归入方案",
                 {
@@ -1671,13 +1671,13 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         assert session is not None
 
         with mock.patch(
-            "file_organizer.app.session_service.analysis_service.run_analysis_cycle_for_entries",
-            return_value="plan.md | 技术设计 | 架构设计文档",
+            "file_pilot.app.session_service.analysis_service.run_analysis_cycle_for_entry_context",
+            return_value="plan.md | file | 技术设计 | 架构设计文档",
         ), mock.patch(
-            "file_organizer.app.session_service.organize_service.build_initial_messages",
+            "file_pilot.app.session_service.organize_service.build_initial_messages",
             return_value=[{"role": "system", "content": "scan"}],
         ), mock.patch(
-            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            "file_pilot.app.session_service.organize_service.run_organizer_cycle",
             return_value=(
                 "已生成方案",
                 {
@@ -2007,7 +2007,7 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         )
 
         with mock.patch(
-            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            "file_pilot.app.session_service.organize_service.run_organizer_cycle",
             return_value=(
                 "已改为 Docs",
                 {
@@ -2104,7 +2104,7 @@ class OrganizerSessionServiceTests(unittest.TestCase):
         )
 
         with mock.patch(
-            "file_organizer.app.session_service.organize_service.run_organizer_cycle",
+            "file_pilot.app.session_service.organize_service.run_organizer_cycle",
             return_value=(
                 "已改为 Docs",
                 {

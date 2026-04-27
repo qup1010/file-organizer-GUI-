@@ -4,8 +4,8 @@ import unittest
 import json
 from pathlib import Path
 
-from file_organizer.app.session_service import OrganizerSessionService
-from file_organizer.app.session_store import SessionStore
+from file_pilot.app.session_service import OrganizerSessionService
+from file_pilot.app.session_store import SessionStore
 
 
 class HistoryAppServiceTests(unittest.TestCase):

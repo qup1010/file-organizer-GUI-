@@ -44,7 +44,7 @@
 
 对应文件：
 
-- [models.py](/D:/code/projects/active/FilePilot/file_organizer/app/models.py)
+- [models.py](/D:/code/projects/active/FilePilot/file_pilot/app/models.py)
 
 ### 2. 服务边界已经拆分
 
@@ -59,7 +59,7 @@
 
 对应目录：
 
-- [file_organizer/app](/D:/code/projects/active/FilePilot/file_organizer/app)
+- [file_pilot/app](/D:/code/projects/active/FilePilot/file_pilot/app)
 
 ### 3. 结构化领域模型已经接入主链
 
@@ -72,7 +72,7 @@
 
 对应文件：
 
-- [domain/models.py](/D:/code/projects/active/FilePilot/file_organizer/domain/models.py)
+- [domain/models.py](/D:/code/projects/active/FilePilot/file_pilot/domain/models.py)
 
 ### 4. 增量链路已改成目标目录导向
 

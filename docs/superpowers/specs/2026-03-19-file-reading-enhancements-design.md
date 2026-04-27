@@ -76,7 +76,7 @@
 
 新增独立模块：
 
-- `file_organizer/analysis/image_describer.py`
+- `file_pilot/analysis/image_describer.py`
 
 建议职责：
 

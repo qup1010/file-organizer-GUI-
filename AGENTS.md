@@ -23,12 +23,12 @@
 
 ## 目录约定
 
-- `file_organizer/analysis`：扫描分析、文件读取、摘要能力
-- `file_organizer/organize`：整理对话、增量计划、确认逻辑
-- `file_organizer/execution`：执行计划、日志、报告
-- `file_organizer/rollback`：最近一次执行回退
-- `file_organizer/app`：桌面工作台会话服务
-- `file_organizer/api`：FastAPI 本地 API 与运行时发现
+- `file_pilot/analysis`：扫描分析、文件读取、摘要能力
+- `file_pilot/organize`：整理对话、增量计划、确认逻辑
+- `file_pilot/execution`：执行计划、日志、报告
+- `file_pilot/rollback`：最近一次执行回退
+- `file_pilot/app`：桌面工作台会话服务
+- `file_pilot/api`：FastAPI 本地 API 与运行时发现
 - `frontend/`：Next.js 工作台前端
 - `desktop/`：Tauri 宿主
 
@@ -63,7 +63,7 @@ pip install -r requirements.txt
 ### 启动本地 API
 
 ```powershell
-python -m file_organizer.api
+python -m file_pilot.api
 ```
 
 - 默认地址：`http://127.0.0.1:8765`
@@ -124,7 +124,7 @@ cargo check
 
 ### 1. API / 工作台开发工作流
 
-1. 启动 `python -m file_organizer.api`。
+1. 启动 `python -m file_pilot.api`。
 2. 在 `frontend/` 运行 `npm run dev`。
 3. 如涉及会话快照、事件流或阶段推进，优先同步验证：
    - `tests/test_api_*.py`
@@ -135,8 +135,8 @@ cargo check
 
 1. 确保 `frontend/` 与 `desktop/` 依赖已安装。
 2. 在 `desktop/` 运行 `npm run tauri:dev`。
-3. Tauri 会负责拉起 `python -m file_organizer.api`。
-4. 前端优先读取 `window.__FILE_ORGANIZER_RUNTIME__.base_url`。
+3. Tauri 会负责拉起 `python -m file_pilot.api`。
+4. 前端优先读取 `window.__FILE_PILOT_RUNTIME__.base_url`。
 5. 如联调异常，优先检查 `output/runtime/backend.json` 是否生成。
 
 ### 3. 回退验证工作流
@@ -166,7 +166,7 @@ cargo check
 - 改动 placement 相关逻辑时，保持“设置页配默认，任务页可覆盖，Review 默认跟随新目录根”的规则一致
 - 改动运行时发现机制时，保持以下契约稳定：
   - `output/runtime/backend.json`
-  - `window.__FILE_ORGANIZER_RUNTIME__.base_url`
+  - `window.__FILE_PILOT_RUNTIME__.base_url`
 - 涉及 Windows 路径时，优先保持现有写法和兼容性，不要假设仅在 Unix 环境运行。
 
 ## 提交前最小验证
@@ -175,5 +175,5 @@ cargo check
 - 前端改动：运行 `npm run typecheck`
 - Tauri / Rust 改动：运行 `cargo check`
 - 涉及端到端主链路时，至少手动验证以下其一：
-  - `python -m file_organizer.api`
+  - `python -m file_pilot.api`
   - `npm run tauri:dev`

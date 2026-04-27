@@ -13,10 +13,10 @@
 ### Task 1: 收口后端模型与服务边界
 
 **Files:**
-- Modify: `file_organizer/icon_workbench/models.py`
-- Modify: `file_organizer/icon_workbench/service.py`
-- Modify: `file_organizer/icon_workbench/prompts.py`
-- Delete: `file_organizer/icon_workbench/chat_agent.py`
+- Modify: `file_pilot/icon_workbench/models.py`
+- Modify: `file_pilot/icon_workbench/service.py`
+- Modify: `file_pilot/icon_workbench/prompts.py`
+- Delete: `file_pilot/icon_workbench/chat_agent.py`
 
 - [ ] 删除 `IconWorkbenchSession` 中的对话字段与相关 dataclass，保留旧字段兼容读取但不再输出。
 - [ ] 移除 `IconWorkbenchService` 中的 `chat_agent` 依赖与 `send_message` / `confirm_pending_action` / `dismiss_pending_action` / pending-action 辅助方法。
@@ -26,7 +26,7 @@
 ### Task 2: 收口图标工坊 API 与类型
 
 **Files:**
-- Modify: `file_organizer/api/main.py`
+- Modify: `file_pilot/api/main.py`
 - Modify: `frontend/src/lib/icon-workbench-api.ts`
 - Modify: `frontend/src/types/icon-workbench.ts`
 

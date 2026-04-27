@@ -3,12 +3,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { AlertCircle, FolderOpen, LoaderCircle, Sparkles, Palette, FolderPlus, Plus, X } from "lucide-react";
-import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ErrorAlert } from "@/components/ui/error-alert";
+import { ModelConfigBanner } from "@/components/ui/model-config-banner";
 import { createApiClient } from "@/lib/api";
 import { createIconWorkbenchApiClient } from "@/lib/icon-workbench-api";
 import { createIconWorkbenchEventStream, type IconWorkbenchEventStream } from "@/lib/icon-workbench-sse";
@@ -40,7 +40,7 @@ import {
 import { useBackgroundRemoval } from "./use-background-removal";
 import { useIconTemplates } from "./use-icon-templates";
 
-const APP_CONTEXT_EVENT = "file-organizer-context-change";
+const APP_CONTEXT_EVENT = "file-pilot-context-change";
 const ICONS_CONTEXT_KEY = "icons_header_context";
 const ICONS_WORKSPACE_STATE_KEY = "icons_workspace_state";
 type IconWorkbenchStreamStatus = "connecting" | "connected" | "reconnecting" | "offline";
@@ -54,6 +54,7 @@ interface PersistedIconsWorkspaceState {
 interface NoticeState {
   message: string;
   detail: string | null;
+  actionPath?: string | null;
 }
 
 export default function IconWorkbenchV2() {
@@ -67,7 +68,6 @@ export default function IconWorkbenchV2() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<NoticeState | null>(null);
   const [actionLabel, setActionLabel] = useState<string | null>(null);
-  const [lastAppliedFolderPath, setLastAppliedFolderPath] = useState<string | null>(null);
   const [generateProgress, setGenerateProgress] = useState<GenerateFlowProgress | null>(null);
 
   const [expandedFolderId, setExpandedFolderId] = useState<string | null>(null);
@@ -112,7 +112,7 @@ export default function IconWorkbenchV2() {
     }
   }, []);
 
-  const showNotice = useCallback((message: string | null, detail?: string | null) => {
+  const showNotice = useCallback((message: string | null, detail?: string | null, actionPath?: string | null) => {
     clearNoticeTimers();
     setIsNoticeFading(false);
     if (!message) {
@@ -122,6 +122,7 @@ export default function IconWorkbenchV2() {
     setNotice({
       message,
       detail: detail?.trim() || null,
+      actionPath: actionPath?.trim() || null,
     });
   }, [clearNoticeTimers]);
 
@@ -393,11 +394,11 @@ export default function IconWorkbenchV2() {
       try {
         const nextSession = await iconApi.selectVersion(session.session_id, folderId, version.version_id);
         applySession(nextSession);
-        showNotice(`「${folder.folder_name}」图标已更新`);
+        showNotice(`「${folder.folder_name}」图标已更新`, null, folder.folder_path);
       } catch {
         const syncedSession = await iconApi.scanSession(session.session_id);
         applySession(syncedSession);
-        showNotice(`「${folder.folder_name}」图标已应用，工作区状态已重新同步。`);
+        showNotice(`「${folder.folder_name}」图标已应用，工作区状态已重新同步。`, null, folder.folder_path);
       }
     } catch (err) { setError(err instanceof Error ? err.message : "应用失败"); } finally { setActiveProcessingId(null); setIsApplyingId(null); }
   };
@@ -437,7 +438,12 @@ export default function IconWorkbenchV2() {
 
   const handleApplyBatch = async () => {
     if (!session) return;
+    if (!desktopReady) {
+      setError("批量应用图标需要在桌面版中使用。");
+      return;
+    }
     hasUserInteractedRef.current = true;
+    setError(null);
     setBatchApplyLoading(true);
     try {
       const prep = await iconApi.prepareApplyReady(session.session_id, allFolderIds);
@@ -453,8 +459,11 @@ export default function IconWorkbenchV2() {
       const nextSession = await reportClientAction("apply_icons", results, prep.skipped_items);
       if (nextSession) {
         applySession(nextSession);
-        showNotice(nextSession.last_client_action?.summary.message ?? "批量应用已完成");
+        const appliedFolderPath = results.find((result) => result.status === "applied" && result.folder_path)?.folder_path;
+        showNotice(nextSession.last_client_action?.summary.message ?? "批量应用已完成", null, appliedFolderPath ?? null);
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "批量应用失败");
     } finally {
       setBatchApplyLoading(false);
     }
@@ -472,15 +481,18 @@ export default function IconWorkbenchV2() {
   
   const statusRail = (error || shouldShowNotice || generationConfigBlockedReason || (streamStatus !== "connected" && session)) ? (
     <div className="flex flex-col">
-      {(error || generationConfigBlockedReason) && (
-        <div className={cn("flex h-8 items-center justify-between gap-4 border-b px-5", error ? "bg-error/5 text-error" : "bg-warning/5 text-warning")}>
-          <div className="flex items-center gap-2">
+      {error ? (
+        <div className="flex h-8 items-center justify-between gap-4 border-b bg-error/5 px-5 text-error">
+          <div className="flex min-w-0 items-center gap-2">
             <AlertCircle className="h-3 w-3 shrink-0" />
-            <p className="text-[11px] font-bold truncate">{error || generationConfigBlockedReason}</p>
+            <p className="truncate text-[11px] font-bold">{error}</p>
           </div>
-          {generationConfigBlockedReason && <Link href="/settings" className="h-5 rounded bg-warning/10 px-2 text-[9px] font-black uppercase text-warning hover:bg-warning/20 flex items-center">去设置</Link>}
         </div>
-      )}
+      ) : generationConfigBlockedReason ? (
+        <div className="border-b border-on-surface/8 bg-surface px-5 py-3">
+          <ModelConfigBanner />
+        </div>
+      ) : null}
       {streamStatus !== "connected" && session && (
         <div className={cn("flex h-7 items-center justify-between border-b px-5 bg-on-surface/[0.02]")}>
           <div className="flex items-center gap-2">
@@ -497,6 +509,15 @@ export default function IconWorkbenchV2() {
             {notice?.message}
             {notice?.detail ? <span className="ml-2 text-ui-muted/60">{notice.detail}</span> : null}
           </p>
+          {desktopReady && notice?.actionPath ? (
+            <button
+              onClick={() => openDirectoryWithTauri(notice.actionPath || "")}
+              className="flex h-5 shrink-0 items-center gap-1 rounded bg-primary/10 px-2 text-[9px] font-black uppercase text-primary hover:bg-primary/20"
+            >
+              <FolderOpen className="h-3 w-3" />
+              打开查看
+            </button>
+          ) : null}
           <button onClick={() => showNotice(null)} className="text-ui-muted/30 hover:text-on-surface" title="忽略通知"><X className="h-3 w-3" /></button>
         </div>
       )}
@@ -536,8 +557,8 @@ export default function IconWorkbenchV2() {
   const isLoading = (!templatesInitialized && templatesLoading) || restoringSession;
 
   return (
-    <div className="flex-1 min-h-0 overflow-hidden bg-surface">
-      <div className="flex h-full min-h-0 flex-col overflow-hidden antialiased">
+    <div className="flex-1 min-h-0 flex flex-col overflow-hidden bg-surface">
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden antialiased">
         <AnimatePresence mode="wait">
           {isLoading ? (
             <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-1 items-center justify-center bg-surface">
@@ -552,22 +573,71 @@ export default function IconWorkbenchV2() {
               {statusRail}
               {processingBanner}
               <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-                <IconWorkbenchFolderList folders={session?.folders || []} expandedFolderId={expandedFolderId} onToggleExpand={setExpandedFolderId} onSelectVersion={async (fid, vid) => applySession(await iconApi.selectVersion(session!.session_id, fid, vid))} onZoom={setPreviewVersion} onApplyVersion={handleApplyVersion} onRegenerate={(fid) => void runGenerateFlow([fid])} onRestore={(fid) => { const f = session?.folders.find(i => i.folder_id === fid); if (f) { setFolderToRestore(f); setRestoreConfirmOpen(true); } }} onRemoveTarget={handleRemoveTarget} onRemoveBg={handleRemoveBg} onDeleteVersion={handleDeleteVersion} processingBgVersionIds={processingBgVersionIds} baseUrl={baseUrl} apiToken={apiToken} isApplyingId={isApplyingId} activeProcessingId={activeProcessingId} desktopReady={desktopReady} hasSelectedStyle={hasSelectedStyle} generateBlockedReason={generationConfigBlockedReason} isProcessing={isBusy} processingFolderId={generateProgress?.currentFolderId ?? null} onAddTargets={handleChooseTargets} isTargetDropActive={isTargetDropActive} onTargetDrop={handleTargetDrop} onTargetDragOver={(e)=> {e.preventDefault(); setIsTargetDropActive(true)}} onTargetDragLeave={()=>setIsTargetDropActive(false)} dropZoneRef={targetDropZoneRef} />
+                <IconWorkbenchFolderList
+                  folders={session?.folders || []}
+                  expandedFolderId={expandedFolderId}
+                  onToggleExpand={setExpandedFolderId}
+                  onSelectVersion={async (fid, vid) => applySession(await iconApi.selectVersion(session!.session_id, fid, vid))}
+                  onZoom={setPreviewVersion}
+                  onApplyVersion={handleApplyVersion}
+                  onRegenerate={(fid) => void runGenerateFlow([fid])}
+                  onRestore={(fid) => {
+                    const f = session?.folders.find((i) => i.folder_id === fid);
+                    if (f) {
+                      setFolderToRestore(f);
+                      setRestoreConfirmOpen(true);
+                    }
+                  }}
+                  onRemoveTarget={handleRemoveTarget}
+                  onRemoveBg={handleRemoveBg}
+                  onDeleteVersion={handleDeleteVersion}
+                  processingBgVersionIds={processingBgVersionIds}
+                  baseUrl={baseUrl}
+                  apiToken={apiToken}
+                  isApplyingId={isApplyingId}
+                  activeProcessingId={activeProcessingId}
+                  desktopReady={desktopReady}
+                  hasSelectedStyle={hasSelectedStyle}
+                  generateBlockedReason={generationConfigBlockedReason}
+                  isProcessing={isBusy}
+                  processingFolderId={generateProgress?.currentFolderId ?? null}
+                  onAddTargets={handleChooseTargets}
+                  isTargetDropActive={isTargetDropActive}
+                  onTargetDrop={handleTargetDrop}
+                  onTargetDragOver={(e) => {
+                    e.preventDefault();
+                    setIsTargetDropActive(true);
+                  }}
+                  onTargetDragLeave={() => setIsTargetDropActive(false)}
+                  dropZoneRef={targetDropZoneRef}
+                />
               </div>
+
+              <IconWorkbenchFooterBar
+                targetCount={targetCount}
+                isGenerating={isGeneratingFlow}
+                generateProgressHint={generatePresentation?.detail || null}
+                isApplying={batchApplyLoading}
+                onGenerate={() => void runGenerateFlow(allFolderIds)}
+                onApplyBatch={() => void handleApplyBatch()}
+                canApplyBatch={canApplyBatch && desktopReady}
+                onRemoveBgBatch={handleRemoveBgBatch}
+                canRemoveBgBatch={canRemoveBgBatch}
+                isRemovingBgBatch={isRemovingBgBatch}
+                removeBgBatchProgress={removeBgBatchProgress}
+                selectedTemplateName={selectedTemplate?.name || null}
+                generateBlockedReason={generateBlockedReason}
+              />
             </motion.div>
           )}
         </AnimatePresence>
       </div>
 
-      {hasTargets && (hasSelectedStyle || canApplyBatch || canRemoveBgBatch) && (
-        <IconWorkbenchFooterBar targetCount={targetCount} isGenerating={isGeneratingFlow} generateProgressHint={generatePresentation?.detail || null} isApplying={batchApplyLoading} onGenerate={() => void runGenerateFlow(allFolderIds)} onApplyBatch={() => void handleApplyBatch()} canApplyBatch={canApplyBatch} onRemoveBgBatch={handleRemoveBgBatch} canRemoveBgBatch={canRemoveBgBatch} isRemovingBgBatch={isRemovingBgBatch} removeBgBatchProgress={removeBgBatchProgress} selectedTemplateName={selectedTemplate?.name || null} generateBlockedReason={generateBlockedReason} />
-      )}
-
       <IconWorkbenchStylePanel isOpen={stylePanelOpen} onClose={() => setStylePanelOpen(false)} templates={templates} selectedTemplateId={selectedTemplateId} onSelect={setSelectedTemplateId} onRequestManageTemplate={(id) => { setSelectedTemplateId(id); setStylePanelOpen(false); setTemplateDrawerOpen(true); }} />
       <IconWorkbenchTemplateDrawer open={templateDrawerOpen} templates={templates} templatesLoading={templatesLoading} selectedTemplate={selectedTemplate} templateNameDraft={templateNameDraft} templateDescriptionDraft={templateDescriptionDraft} templatePromptDraft={templatePromptDraft} templateActionLoading={templateActionLoading} onClose={() => setTemplateDrawerOpen(false)} onSelectTemplate={setSelectedTemplateId} onTemplateNameChange={setTemplateNameDraft} onTemplateDescriptionChange={setTemplateDescriptionDraft} onTemplatePromptChange={setTemplatePromptDraft} onReloadTemplates={() => void reloadTemplates(selectedTemplateId)} onCreateTemplate={createTemplate} onUpdateTemplate={updateTemplate} onDeleteTemplate={deleteTemplate} />
       
       {previewVersion && (
-        <IconWorkbenchPreviewModal src={buildImageSrc(previewVersion, baseUrl, apiToken)} title={`v${previewVersion.version_number}`} subtitle={selectedTemplate?.name || "预览"} localImagePath={previewVersion.image_path} folderName="预览" onOpenFolder={openDirectoryWithTauri} onClose={() => setPreviewVersion(null)} onApply={() => handleApplyVersion(previewFolder!.folder_id, previewVersion)} onRegenerate={() => runGenerateFlow([previewFolder!.folder_id])} regenerateDisabled={!!generationConfigBlockedReason || isBusy} isApplying={isApplyingId === previewVersion.version_id} imageModelName={workbenchConfig?.image_model.model || "默认模型"} isApplied={previewFolder?.applied_version_id === previewVersion.version_id} isCurrentVersion={previewFolder?.current_version_id === previewVersion.version_id} />
+        <IconWorkbenchPreviewModal src={buildImageSrc(previewVersion, baseUrl, apiToken)} title={`v${previewVersion.version_number}`} subtitle={selectedTemplate?.name || "预览"} localImagePath={previewVersion.image_path} folderName={previewFolder?.folder_name || "预览"} folderPath={previewFolder?.folder_path || ""} onOpenFolder={openDirectoryWithTauri} onClose={() => setPreviewVersion(null)} onApply={() => previewFolder && handleApplyVersion(previewFolder.folder_id, previewVersion)} onRegenerate={() => previewFolder && runGenerateFlow([previewFolder.folder_id])} regenerateDisabled={!!generationConfigBlockedReason || isBusy || !previewFolder} isApplying={isApplyingId === previewVersion.version_id} imageModelName={workbenchConfig?.image_model.model || "默认模型"} isApplied={previewFolder?.applied_version_id === previewVersion.version_id} isCurrentVersion={previewFolder?.current_version_id === previewVersion.version_id} />
       )}
 
       <ConfirmDialog open={restoreConfirmOpen} title="恢复上一次图标状态？" description={`确定要将「${folderToRestore?.folder_name}」恢复到进入前状态吗？`} onClose={() => setRestoreConfirmOpen(false)} onConfirm={() => { if(folderToRestore) handleRestoreIcon(folderToRestore); setRestoreConfirmOpen(false); }} />

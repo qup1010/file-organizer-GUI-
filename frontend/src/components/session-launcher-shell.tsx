@@ -4,13 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Activity,
-  AlertTriangle,
   Check,
   CheckCircle2,
   FileText,
   FolderOpen,
   History,
   Layers3,
+  ListTree,
   Plus,
   Loader2,
   Sparkles,
@@ -67,6 +67,7 @@ import type {
   TargetProfileDirectory,
 } from "@/types/session";
 import { ErrorAlert } from "@/components/ui/error-alert";
+import { ModelConfigBanner } from "@/components/ui/model-config-banner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -110,7 +111,27 @@ type LaunchRequestState = {
   display_path: string;
 };
 
+type LauncherDraftState = {
+  version: 1;
+  step?: 1 | 2 | 3;
+  strategy?: SessionStrategySelection;
+  sources?: SessionSourceSelection[];
+  sourceImportGroups?: SourceImportGroup[];
+  sourceDraftType?: SourceDraftType;
+  sourceDraftPath?: string;
+  newDirectoryRoot?: string;
+  reviewRoot?: string;
+  reviewFollowsNewRoot?: boolean;
+  showPlacementOverrides?: boolean;
+  manualTargetDirectories?: TargetDirectoryDraft[];
+  targetDirectoryDraft?: string;
+  selectedTargetProfileId?: string;
+  showManualInput?: boolean;
+  showManualTargetInput?: boolean;
+};
+
 const IMPORT_GROUP_PREVIEW_LIMIT = 5;
+const LAUNCHER_DRAFT_KEY = "file_pilot_launcher_draft";
 
 function createImportGroupId(): string {
   return `import-group:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
@@ -161,6 +182,75 @@ function dedupeSources(items: SessionSourceSelection[]): SessionSourceSelection[
     seen.set(key, normalized);
   }
   return Array.from(seen.values());
+}
+
+function sourceDisplayName(item: Pick<SessionSourceSelection, "path">): string {
+  return item.path.split(/[\\/]/).pop() || item.path;
+}
+
+function compareSourceForDisplay(a: SessionSourceSelection, b: SessionSourceSelection): number {
+  if (a.source_type !== b.source_type) {
+    return a.source_type === "directory" ? -1 : 1;
+  }
+  return sourceDisplayName(a).localeCompare(sourceDisplayName(b), "zh-Hans-CN", {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
+function sortSourcesForDisplay(items: SessionSourceSelection[]): SessionSourceSelection[] {
+  return [...items].sort(compareSourceForDisplay);
+}
+
+function readLauncherDraft(): LauncherDraftState | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const raw = window.localStorage.getItem(LAUNCHER_DRAFT_KEY);
+  if (!raw) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(raw) as LauncherDraftState;
+    return parsed?.version === 1 ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function sanitizeLauncherDraft(draft: LauncherDraftState | null): LauncherDraftState | null {
+  if (!draft) {
+    return null;
+  }
+  const sources = dedupeSources(draft.sources || []);
+  const sourceKeys = new Set(sources.map((item) => sourceSelectionKey(item)));
+  return {
+    ...draft,
+    step: draft.step === 2 || draft.step === 3 ? draft.step : 1,
+    sources,
+    sourceImportGroups: (draft.sourceImportGroups || [])
+      .map((group) => ({
+        ...group,
+        item_keys: group.item_keys.filter((key) => sourceKeys.has(key)),
+        expanded: Boolean(group.expanded),
+      }))
+      .filter((group) => group.item_keys.length > 0),
+    sourceDraftType: draft.sourceDraftType === "file" ? "file" : "directory",
+    sourceDraftPath: draft.sourceDraftPath || "",
+    manualTargetDirectories: (draft.manualTargetDirectories || []).filter((item) => item.path.trim()),
+    targetDirectoryDraft: draft.targetDirectoryDraft || "",
+    selectedTargetProfileId: draft.selectedTargetProfileId || "",
+    showManualInput: Boolean(draft.showManualInput),
+    showManualTargetInput: Boolean(draft.showManualTargetInput),
+    showPlacementOverrides: Boolean(draft.showPlacementOverrides),
+  };
+}
+
+function clearLauncherDraft() {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.removeItem(LAUNCHER_DRAFT_KEY);
 }
 
 function dedupeTargetDirectories(items: TargetProfileDirectory[]): TargetProfileDirectory[] {
@@ -306,23 +396,30 @@ function placementDefaults(
 export function SessionLauncherShell() {
   const router = useRouter();
   const apiBaseUrl = getApiBaseUrl();
+  const launcherDraftRef = useRef<LauncherDraftState | null | undefined>(undefined);
+  const [draftHydrated, setDraftHydrated] = useState(false);
 
-  const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [strategy, setStrategy] = useState<SessionStrategySelection>(DEFAULT_STRATEGY_SELECTION);
+  if (launcherDraftRef.current === undefined && typeof window !== "undefined") {
+    launcherDraftRef.current = sanitizeLauncherDraft(readLauncherDraft());
+  }
+  const launcherDraft = launcherDraftRef.current || null;
+
+  const [step, setStep] = useState<1 | 2 | 3>(launcherDraft?.step || 1);
+  const [strategy, setStrategy] = useState<SessionStrategySelection>(launcherDraft?.strategy || DEFAULT_STRATEGY_SELECTION);
   const [launchConfig, setLaunchConfig] = useState<LaunchStrategyConfig | null>(null);
-  const [sources, setSources] = useState<SessionSourceSelection[]>([]);
-  const [sourceImportGroups, setSourceImportGroups] = useState<SourceImportGroup[]>([]);
+  const [sources, setSources] = useState<SessionSourceSelection[]>(launcherDraft?.sources || []);
+  const [sourceImportGroups, setSourceImportGroups] = useState<SourceImportGroup[]>(launcherDraft?.sourceImportGroups || []);
   const [sourceFeedback, setSourceFeedback] = useState<SourceFeedback | null>(null);
-  const [sourceDraftType, setSourceDraftType] = useState<SourceDraftType>("directory");
-  const [sourceDraftPath, setSourceDraftPath] = useState("");
-  const [newDirectoryRoot, setNewDirectoryRoot] = useState("");
-  const [reviewRoot, setReviewRoot] = useState("");
-  const [reviewFollowsNewRoot, setReviewFollowsNewRoot] = useState(true);
-  const [showPlacementOverrides, setShowPlacementOverrides] = useState(false);
+  const [sourceDraftType, setSourceDraftType] = useState<SourceDraftType>(launcherDraft?.sourceDraftType || "directory");
+  const [sourceDraftPath, setSourceDraftPath] = useState(launcherDraft?.sourceDraftPath || "");
+  const [newDirectoryRoot, setNewDirectoryRoot] = useState(launcherDraft?.newDirectoryRoot || "");
+  const [reviewRoot, setReviewRoot] = useState(launcherDraft?.reviewRoot || "");
+  const [reviewFollowsNewRoot, setReviewFollowsNewRoot] = useState(launcherDraft?.reviewFollowsNewRoot ?? true);
+  const [showPlacementOverrides, setShowPlacementOverrides] = useState(Boolean(launcherDraft?.showPlacementOverrides));
   const [advancedSettingsDialogOpen, setAdvancedSettingsDialogOpen] = useState(false);
-  const [manualTargetDirectories, setManualTargetDirectories] = useState<TargetDirectoryDraft[]>([]);
-  const [targetDirectoryDraft, setTargetDirectoryDraft] = useState("");
-  const [selectedTargetProfileId, setSelectedTargetProfileId] = useState("");
+  const [manualTargetDirectories, setManualTargetDirectories] = useState<TargetDirectoryDraft[]>(launcherDraft?.manualTargetDirectories || []);
+  const [targetDirectoryDraft, setTargetDirectoryDraft] = useState(launcherDraft?.targetDirectoryDraft || "");
+  const [selectedTargetProfileId, setSelectedTargetProfileId] = useState(launcherDraft?.selectedTargetProfileId || "");
   const [profileNameDraft, setProfileNameDraft] = useState("");
   const [targetProfiles, setTargetProfiles] = useState<TargetProfile[]>([]);
   const [targetProfilesLoading, setTargetProfilesLoading] = useState(false);
@@ -330,8 +427,8 @@ export function SessionLauncherShell() {
   const [loading, setLoading] = useState(false);
   const [launchTransitionOpen, setLaunchTransitionOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showManualInput, setShowManualInput] = useState(false);
-  const [showManualTargetInput, setShowManualTargetInput] = useState(false);
+  const [showManualInput, setShowManualInput] = useState(Boolean(launcherDraft?.showManualInput));
+  const [showManualTargetInput, setShowManualTargetInput] = useState(Boolean(launcherDraft?.showManualTargetInput));
   const [resumePrompt, setResumePrompt] = useState<{ sessionId: string; snapshot: SessionSnapshot; launch: LaunchRequestState } | null>(null);
   const [commonDirs, setCommonDirs] = useState<{ label: string; path: string }[]>([]);
   const [isDropActive, setIsDropActive] = useState(false);
@@ -411,15 +508,30 @@ export function SessionLauncherShell() {
     () => new Map(sources.map((item) => [sourceSelectionKey(item), item])),
     [sources],
   );
+  const sourceStats = useMemo(() => {
+    const directoryCount = sources.filter((item) => item.source_type === "directory").length;
+    return {
+      total: sources.length,
+      directoryCount,
+      fileCount: sources.length - directoryCount,
+    };
+  }, [sources]);
+  const displaySources = useMemo(() => sortSourcesForDisplay(sources), [sources]);
   const sourceImportGroupViews = useMemo(
     () =>
       sourceImportGroups
-        .map((group) => ({
-          ...group,
-          items: group.item_keys
+        .map((group) => {
+          const items = sortSourcesForDisplay(
+            group.item_keys
             .map((key) => sourceKeyMap.get(key))
             .filter((item): item is SessionSourceSelection => Boolean(item)),
-        }))
+          );
+          return {
+            ...group,
+            item_keys: items.map((item) => sourceSelectionKey(item)),
+            items,
+          };
+        })
         .filter((group) => group.items.length > 0),
     [sourceImportGroups, sourceKeyMap],
   );
@@ -507,6 +619,53 @@ export function SessionLauncherShell() {
     : null;
 
   useEffect(() => {
+    setDraftHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!draftHydrated || typeof window === "undefined") {
+      return;
+    }
+    const draft: LauncherDraftState = {
+      version: 1,
+      step,
+      strategy,
+      sources,
+      sourceImportGroups: pruneImportGroups(sourceImportGroups, sources),
+      sourceDraftType,
+      sourceDraftPath,
+      newDirectoryRoot,
+      reviewRoot,
+      reviewFollowsNewRoot,
+      showPlacementOverrides,
+      manualTargetDirectories,
+      targetDirectoryDraft,
+      selectedTargetProfileId,
+      showManualInput,
+      showManualTargetInput,
+    };
+    window.localStorage.setItem(LAUNCHER_DRAFT_KEY, JSON.stringify(draft));
+  }, [
+    draftHydrated,
+    manualTargetDirectories,
+    newDirectoryRoot,
+    pruneImportGroups,
+    reviewFollowsNewRoot,
+    reviewRoot,
+    selectedTargetProfileId,
+    showManualInput,
+    showManualTargetInput,
+    showPlacementOverrides,
+    sourceDraftPath,
+    sourceDraftType,
+    sourceImportGroups,
+    sources,
+    step,
+    strategy,
+    targetDirectoryDraft,
+  ]);
+
+  useEffect(() => {
     let cancelled = false;
 
     async function loadLaunchPreferences() {
@@ -514,15 +673,23 @@ export function SessionLauncherShell() {
         const api = createApiClient(apiBaseUrl, getApiToken());
         const data = await api.getSettings();
         if (cancelled) return;
-        setStrategy(getLaunchStrategyFromConfig(data.global_config));
+        if (!launcherDraft?.strategy) {
+          setStrategy(getLaunchStrategyFromConfig(data.global_config));
+        }
         setLaunchConfig((data.global_config || {}) as LaunchStrategyConfig);
-        setReviewFollowsNewRoot(data.global_config?.LAUNCH_REVIEW_FOLLOWS_NEW_ROOT !== false);
+        if (launcherDraft?.reviewFollowsNewRoot === undefined) {
+          setReviewFollowsNewRoot(data.global_config?.LAUNCH_REVIEW_FOLLOWS_NEW_ROOT !== false);
+        }
         setTextModelConfigured(Boolean(data.status?.text_configured));
       } catch {
         if (!cancelled) {
-          setStrategy(DEFAULT_STRATEGY_SELECTION);
+          if (!launcherDraft?.strategy) {
+            setStrategy(DEFAULT_STRATEGY_SELECTION);
+          }
           setLaunchConfig(null);
-          setReviewFollowsNewRoot(true);
+          if (launcherDraft?.reviewFollowsNewRoot === undefined) {
+            setReviewFollowsNewRoot(true);
+          }
           setTextModelConfigured(true);
         }
       }
@@ -532,7 +699,7 @@ export function SessionLauncherShell() {
     return () => {
       cancelled = true;
     };
-  }, [apiBaseUrl]);
+  }, [apiBaseUrl, launcherDraft?.reviewFollowsNewRoot, launcherDraft?.strategy]);
 
   useEffect(() => {
     setIsDesktopEnvironment(isTauriDesktop());
@@ -1129,6 +1296,7 @@ export function SessionLauncherShell() {
         return;
       }
       if (!response.session_id) throw new Error("没有成功创建整理会话，请再试一次。");
+      clearLauncherDraft();
       router.push(`/workspace?session_id=${response.session_id}&dir=${encodeURIComponent(launchRequest.display_path || firstSourcePath(launchRequest.sources))}&auto_scan=1`);
     } catch (err: any) {
       setLaunchTransitionOpen(false);
@@ -1153,6 +1321,7 @@ export function SessionLauncherShell() {
       const response = await startFreshSession(api, resumePrompt.sessionId, resumePrompt.snapshot.stage, resumePrompt.launch);
       setResumePrompt(null);
       if (!response.session_id) throw new Error("没有成功重新开始，请再试一次。");
+      clearLauncherDraft();
       router.push(`/workspace?session_id=${response.session_id}&dir=${encodeURIComponent(resumePrompt.launch.display_path || firstSourcePath(resumePrompt.launch.sources))}&auto_scan=1`);
     } catch (err: any) {
       setLaunchTransitionOpen(false);
@@ -1272,28 +1441,7 @@ export function SessionLauncherShell() {
             >
 
 
-            {!textModelConfigured ? (
-              <div className="flex items-center justify-between gap-4 rounded-[8px] border border-warning/18 bg-warning-container/18 px-5 py-4">
-                <div className="flex min-w-0 items-start gap-3">
-                  <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-warning/12 text-warning">
-                    <AlertTriangle className="h-4.5 w-4.5" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[14px] font-black tracking-tight text-on-surface">AI 文本模型尚未配置</p>
-                    <p className="mt-1 text-[12px] font-medium leading-6 text-ui-muted">
-                      未配置文本模型时，系统无法稳定完成用途分析和整理规划。建议先前往“设置 &gt; 文本模型”完成配置。
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => router.push("/settings")}
-                  className="shrink-0 rounded-[6px] border border-warning/15 bg-surface px-4 py-2 text-[12px] font-black text-on-surface transition-colors hover:border-warning/30 hover:text-warning"
-                >
-                  去配置文本模型
-                </button>
-              </div>
-            ) : null}
+            {!textModelConfigured ? <ModelConfigBanner /> : null}
 
             <AnimatePresence>
               {error ? (
@@ -1499,102 +1647,70 @@ export function SessionLauncherShell() {
                           </div>
                       </motion.div>
                       ) : (
-                        <div className="mt-2 space-y-3">
-                          <div className="grid gap-2">
-                            {(() => {
-                              const renderedGroupIds = new Set<string>();
-                              return sources.map((item) => {
-                                const key = sourceSelectionKey(item);
-                                const group = sourceImportGroupByKey.get(key);
-                                if (!group) {
-                                  return renderSourceRow(item);
-                                }
-                                if (renderedGroupIds.has(group.group_id)) {
-                                  return null;
-                                }
-                                const firstVisibleKey = group.item_keys.find((candidate) => sourceKeyMap.has(candidate));
-                                if (firstVisibleKey !== key) {
-                                  return null;
-                                }
-                                renderedGroupIds.add(group.group_id);
-                                const previewItems = group.expanded ? group.items : group.items.slice(0, IMPORT_GROUP_PREVIEW_LIMIT);
-                                const remainingCount = group.items.length - previewItems.length;
-                                return (
-                                  <div key={group.group_id} className="rounded-xl border border-primary/20 bg-primary/[0.04] p-3 text-on-surface/80">
-                                    <div className="flex items-start justify-between gap-3">
-                                      <div className="min-w-0">
-                                        <div className="flex items-center gap-2">
-                                          <Layers3 className="h-4 w-4 text-primary/70" />
-                                          <p className="text-[13px] font-black tracking-tight text-on-surface">
-                                            已从 {group.source_path.split(/[\\/]/).pop()} 导入 {group.items.length} 项
-                                          </p>
-                                        </div>
-                                        <p className="mt-1 font-mono text-[10px] font-bold text-ui-muted opacity-40 uppercase tracking-widest">
-                                          批量导入 · {group.source_path}
-                                        </p>
-                                      </div>
-                                      <div className="flex shrink-0 items-center gap-1.5">
-                                        {remainingCount > 0 ? (
-                                          <button
-                                            type="button"
-                                            disabled={loading}
-                                            onClick={() => toggleImportGroupExpanded(group.group_id)}
-                                            className="rounded-[6px] px-2 py-1 text-[10.5px] font-bold text-primary transition-colors hover:bg-primary/8"
-                                          >
-                                            {group.expanded ? "收起" : `展开其余 ${remainingCount} 项`}
-                                          </button>
-                                        ) : null}
-                                        <button
-                                          type="button"
-                                          disabled={loading}
-                                          onClick={() => removeImportGroup(group.group_id)}
-                                          className="rounded-[6px] px-2 py-1 text-[10.5px] font-bold text-error transition-colors hover:bg-error/10"
-                                        >
-                                          移除整组
-                                        </button>
-                                      </div>
-                                    </div>
-                                    <div className="mt-3 grid gap-2">
-                                      {previewItems.map((groupItem) => renderSourceRow(groupItem, { nested: true }))}
-                                    </div>
-                                  </div>
-                                );
-                              });
-                            })()}
+                        <div ref={sourceDropZoneRef} className="mt-2 space-y-3">
+                          <div className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-on-surface/8 bg-surface-container-lowest px-3 py-2">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] bg-primary/10 text-primary">
+                                <Layers3 className="h-3.5 w-3.5" />
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-[12px] font-black tracking-tight text-on-surface">
+                                  已加入 {sourceStats.total} 项
+                                </p>
+                                <p className="text-[10.5px] font-medium text-ui-muted/60">
+                                  文件夹已优先显示，方便继续选择是否导入里面的项
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-[10.5px] font-black">
+                              <span className="rounded-full border border-on-surface/8 bg-surface px-2 py-1 text-on-surface/65">
+                                文件夹 {sourceStats.directoryCount}
+                              </span>
+                              <span className="rounded-full border border-on-surface/8 bg-surface px-2 py-1 text-on-surface/65">
+                                文件 {sourceStats.fileCount}
+                              </span>
+                            </div>
                           </div>
 
                           <motion.div
-                            ref={sourceDropZoneRef}
                             animate={{
                               scale: isDropActive ? 1.01 : 1,
                             }}
                             className={cn(
-                              "flex flex-col items-center justify-center gap-2 rounded-[12px] border-2 border-dashed py-5 transition-all duration-300 text-on-surface group/add-more",
+                              "flex flex-col items-center justify-center gap-2 rounded-[10px] border border-dashed px-4 py-4 text-on-surface transition-all duration-300 group/add-more",
                               isDropActive 
-                                ? "border-primary/25 bg-primary/5 text-primary"
-                                : "border-on-surface/8 bg-on-surface/[0.015]"
+                                ? "border-primary/45 bg-primary/8 text-primary ring-1 ring-primary/15"
+                                : isDraggingGlobal
+                                  ? "border-primary/30 bg-primary/[0.025]"
+                                  : "border-on-surface/8 bg-on-surface/[0.015]"
                             )}
                           >
-                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-on-surface/[0.03] text-on-surface/20 group-hover/add-more:bg-primary/10 group-hover/add-more:text-primary transition-colors">
-                              <Plus className="h-5 w-5" />
-                            </div>
-                            <p className="text-[14px] font-bold text-on-surface/60 group-hover/add-more:text-on-surface transition-colors">
-                              还可以继续补充更多来源
-                            </p>
-                            <div className="flex flex-col items-center gap-2">
+                            <div className="flex flex-wrap items-center justify-center gap-3">
+                              <div className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-on-surface/[0.03] text-on-surface/25 transition-colors group-hover/add-more:bg-primary/10 group-hover/add-more:text-primary">
+                                <Plus className="h-4.5 w-4.5" />
+                              </div>
+                              <div className="text-center sm:text-left">
+                                <p className="text-[13px] font-black text-on-surface/70 transition-colors group-hover/add-more:text-on-surface">
+                                  {isDropActive ? "松手即可继续加入来源" : "继续拖入文件或文件夹"}
+                                </p>
+                                <p className="text-[10.5px] font-medium text-ui-muted/50">
+                                  添加入口会保持在列表上方，已加入项可在下方窗口中滑动查看
+                                </p>
+                              </div>
                               {isDesktopEnvironment ? (
                                 <button
                                   type="button"
                                   onClick={() => void handleImportDirectoryEntries()}
-                                  className="rounded-[8px] bg-primary/8 px-3 py-1.5 text-[12px] font-black text-primary hover:bg-primary/12"
+                                  disabled={loading}
+                                  className="rounded-[7px] bg-primary/8 px-3 py-1.5 text-[12px] font-black text-primary hover:bg-primary/12 disabled:opacity-40"
                                 >
                                   整理文件夹里的内容
                                 </button>
                               ) : null}
                               <div className="flex flex-wrap items-center justify-center gap-2 text-[12px] font-bold text-on-surface/55">
-                                <button type="button" onClick={() => void handleChooseDirectories()} className="rounded-[6px] px-2.5 py-1 text-on-surface/65 hover:bg-on-surface/[0.04] hover:text-on-surface">把文件夹当作一个项目移动</button>
+                                <button type="button" disabled={loading} onClick={() => void handleChooseDirectories()} className="rounded-[6px] px-2.5 py-1 text-on-surface/65 hover:bg-on-surface/[0.04] hover:text-on-surface disabled:opacity-40">把文件夹当作一个项目移动</button>
                                 <span className="opacity-20">/</span>
-                                <button type="button" onClick={() => void handleChooseFiles()} className="rounded-[6px] px-2.5 py-1 text-on-surface/65 hover:bg-on-surface/[0.04] hover:text-on-surface">添加文件</button>
+                                <button type="button" disabled={loading} onClick={() => void handleChooseFiles()} className="rounded-[6px] px-2.5 py-1 text-on-surface/65 hover:bg-on-surface/[0.04] hover:text-on-surface disabled:opacity-40">添加文件</button>
                               </div>
                             </div>
                             <button
@@ -1605,6 +1721,84 @@ export function SessionLauncherShell() {
                               [ 手填路径 ]
                             </button>
                           </motion.div>
+
+                          <div className="overflow-hidden rounded-[10px] border border-on-surface/8 bg-surface-container-lowest">
+                            <div className="flex items-center justify-between border-b border-on-surface/6 px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <span className="flex h-6 w-6 items-center justify-center rounded-[6px] bg-on-surface/5 text-primary">
+                                  <ListTree className="h-3.5 w-3.5" />
+                                </span>
+                                <span className="text-[11px] font-black tracking-widest text-ui-muted">已加入来源</span>
+                              </div>
+                              <span className="text-[10.5px] font-bold text-ui-muted/55">
+                                文件夹 {sourceStats.directoryCount} · 文件 {sourceStats.fileCount}
+                              </span>
+                            </div>
+                            <div className="max-h-[42vh] min-h-[180px] overflow-y-auto p-2 scrollbar-thin">
+                              <div className="grid gap-2">
+                                {(() => {
+                                  const renderedGroupIds = new Set<string>();
+                                  return displaySources.map((item) => {
+                                    const key = sourceSelectionKey(item);
+                                    const group = sourceImportGroupByKey.get(key);
+                                    if (!group) {
+                                      return renderSourceRow(item);
+                                    }
+                                    if (renderedGroupIds.has(group.group_id)) {
+                                      return null;
+                                    }
+                                    const firstVisibleKey = group.item_keys.find((candidate) => sourceKeyMap.has(candidate));
+                                    if (firstVisibleKey !== key) {
+                                      return null;
+                                    }
+                                    renderedGroupIds.add(group.group_id);
+                                    const previewItems = group.expanded ? group.items : group.items.slice(0, IMPORT_GROUP_PREVIEW_LIMIT);
+                                    const remainingCount = group.items.length - previewItems.length;
+                                    return (
+                                      <div key={group.group_id} className="rounded-xl border border-primary/20 bg-primary/[0.04] p-3 text-on-surface/80">
+                                        <div className="flex items-start justify-between gap-3">
+                                          <div className="min-w-0">
+                                            <div className="flex items-center gap-2">
+                                              <Layers3 className="h-4 w-4 text-primary/70" />
+                                              <p className="text-[13px] font-black tracking-tight text-on-surface">
+                                                已从 {group.source_path.split(/[\\/]/).pop()} 导入 {group.items.length} 项
+                                              </p>
+                                            </div>
+                                            <p className="mt-1 truncate font-mono text-[10px] font-bold text-ui-muted opacity-40 uppercase tracking-widest">
+                                              批量导入 · {group.source_path}
+                                            </p>
+                                          </div>
+                                          <div className="flex shrink-0 items-center gap-1.5">
+                                            {remainingCount > 0 ? (
+                                              <button
+                                                type="button"
+                                                disabled={loading}
+                                                onClick={() => toggleImportGroupExpanded(group.group_id)}
+                                                className="rounded-[6px] px-2 py-1 text-[10.5px] font-bold text-primary transition-colors hover:bg-primary/8"
+                                              >
+                                                {group.expanded ? "收起" : `展开其余 ${remainingCount} 项`}
+                                              </button>
+                                            ) : null}
+                                            <button
+                                              type="button"
+                                              disabled={loading}
+                                              onClick={() => removeImportGroup(group.group_id)}
+                                              className="rounded-[6px] px-2 py-1 text-[10.5px] font-bold text-error transition-colors hover:bg-error/10"
+                                            >
+                                              移除整组
+                                            </button>
+                                          </div>
+                                        </div>
+                                        <div className="mt-3 grid gap-2">
+                                          {previewItems.map((groupItem) => renderSourceRow(groupItem, { nested: true }))}
+                                        </div>
+                                      </div>
+                                    );
+                                  });
+                                })()}
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       )}
 

@@ -1,8 +1,8 @@
 import unittest
 
-from file_organizer.app.task_planner_adapter import TaskPlannerAdapter
-from file_organizer.domain.models import MappingEntry, OrganizeTask, SourceRef, TargetSlot
-from file_organizer.organize.models import PendingPlan, PlanMove
+from file_pilot.app.task_planner_adapter import TaskPlannerAdapter
+from file_pilot.domain.models import MappingEntry, OrganizeTask, SourceRef, TargetSlot
+from file_pilot.organize.models import PendingPlan, PlanMove
 
 
 class TaskPlannerAdapterTests(unittest.TestCase):

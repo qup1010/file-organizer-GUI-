@@ -20,59 +20,97 @@
         "normal": [
           {
             "id": "projects",
-            "labels": { "zh": "项目资料", "en": "Projects" },
-            "categoryLabels": { "zh": "项目", "en": "Project" }
+            "labels": {
+              "zh": "项目资料",
+              "en": "Projects"
+            },
+            "categoryLabels": {
+              "zh": "项目",
+              "en": "Project"
+            }
           },
           {
             "id": "finance",
-            "labels": { "zh": "财务票据", "en": "Finance" },
-            "categoryLabels": { "zh": "财务", "en": "Finance" }
+            "labels": {
+              "zh": "财务票据",
+              "en": "Finance"
+            },
+            "categoryLabels": {
+              "zh": "财务",
+              "en": "Finance"
+            }
           },
           {
             "id": "study",
-            "labels": { "zh": "学习资料", "en": "Study" },
-            "categoryLabels": { "zh": "学习", "en": "Study" }
+            "labels": {
+              "zh": "学习资料",
+              "en": "Study"
+            },
+            "categoryLabels": {
+              "zh": "学习",
+              "en": "Study"
+            }
           },
           {
             "id": "installers",
-            "labels": { "zh": "安装程序", "en": "Installers" },
-            "categoryLabels": { "zh": "安装", "en": "Installers" }
-          },
-          {
-            "id": "review",
-            "labels": { "zh": "待确认", "en": "Review" },
-            "categoryLabels": { "zh": "待确认", "en": "Review" }
+            "labels": {
+              "zh": "安装程序",
+              "en": "Installers"
+            },
+            "categoryLabels": {
+              "zh": "安装",
+              "en": "Installers"
+            }
           }
         ],
         "minimal": [
           {
             "id": "docs",
-            "labels": { "zh": "文档", "en": "Docs" },
-            "categoryLabels": { "zh": "文档", "en": "Docs" }
+            "labels": {
+              "zh": "文档",
+              "en": "Docs"
+            },
+            "categoryLabels": {
+              "zh": "文档",
+              "en": "Docs"
+            }
           },
           {
             "id": "media",
-            "labels": { "zh": "媒体", "en": "Media" },
-            "categoryLabels": { "zh": "媒体", "en": "Media" }
+            "labels": {
+              "zh": "媒体",
+              "en": "Media"
+            },
+            "categoryLabels": {
+              "zh": "媒体",
+              "en": "Media"
+            }
           },
           {
             "id": "installers",
-            "labels": { "zh": "安装程序", "en": "Installers" },
-            "categoryLabels": { "zh": "安装", "en": "Installers" }
+            "labels": {
+              "zh": "安装程序",
+              "en": "Installers"
+            },
+            "categoryLabels": {
+              "zh": "安装",
+              "en": "Installers"
+            }
           },
           {
             "id": "archives",
-            "labels": { "zh": "归档", "en": "Archives" },
-            "categoryLabels": { "zh": "归档", "en": "Archives" }
-          },
-          {
-            "id": "review",
-            "labels": { "zh": "待确认", "en": "Review" },
-            "categoryLabels": { "zh": "待确认", "en": "Review" }
+            "labels": {
+              "zh": "归档",
+              "en": "Archives"
+            },
+            "categoryLabels": {
+              "zh": "归档",
+              "en": "Archives"
+            }
           }
         ]
       },
-      "promptFragment": "场景重点：这是一个混合下载目录或零散收纳目录。\n优先目标：快速把杂乱文件按实际用途归到清晰的大类，而不是过度细分。\n优先考虑的目录语义：项目资料、财务票据、学习资料、安装程序、截图记录、媒体素材、历史归档、待确认。"
+      "promptFragment": "场景重点：这是一个混合下载目录或零散收纳目录。\n优先目标：快速把杂乱文件按实际用途归到清晰的大类，而不是过度细分。\n优先考虑的目录语义：项目资料、财务票据、学习资料、安装程序、截图记录、媒体素材、历史归档。"
     },
     {
       "id": "project_workspace",
@@ -87,59 +125,97 @@
         "normal": [
           {
             "id": "projects",
-            "labels": { "zh": "项目资料", "en": "Projects" },
-            "categoryLabels": { "zh": "项目", "en": "Project" }
+            "labels": {
+              "zh": "项目资料",
+              "en": "Projects"
+            },
+            "categoryLabels": {
+              "zh": "项目",
+              "en": "Project"
+            }
           },
           {
             "id": "docs",
-            "labels": { "zh": "项目文档", "en": "Docs" },
-            "categoryLabels": { "zh": "文档", "en": "Docs" }
+            "labels": {
+              "zh": "项目文档",
+              "en": "Docs"
+            },
+            "categoryLabels": {
+              "zh": "文档",
+              "en": "Docs"
+            }
           },
           {
             "id": "deliverables",
-            "labels": { "zh": "交付物", "en": "Deliverables" },
-            "categoryLabels": { "zh": "交付", "en": "Deliverable" }
+            "labels": {
+              "zh": "交付物",
+              "en": "Deliverables"
+            },
+            "categoryLabels": {
+              "zh": "交付",
+              "en": "Deliverable"
+            }
           },
           {
             "id": "assets",
-            "labels": { "zh": "素材资源", "en": "Assets" },
-            "categoryLabels": { "zh": "素材", "en": "Assets" }
-          },
-          {
-            "id": "review",
-            "labels": { "zh": "待确认", "en": "Review" },
-            "categoryLabels": { "zh": "待确认", "en": "Review" }
+            "labels": {
+              "zh": "素材资源",
+              "en": "Assets"
+            },
+            "categoryLabels": {
+              "zh": "素材",
+              "en": "Assets"
+            }
           }
         ],
         "minimal": [
           {
             "id": "projects",
-            "labels": { "zh": "项目", "en": "Projects" },
-            "categoryLabels": { "zh": "项目", "en": "Project" }
+            "labels": {
+              "zh": "项目",
+              "en": "Projects"
+            },
+            "categoryLabels": {
+              "zh": "项目",
+              "en": "Project"
+            }
           },
           {
             "id": "docs",
-            "labels": { "zh": "文档", "en": "Docs" },
-            "categoryLabels": { "zh": "文档", "en": "Docs" }
+            "labels": {
+              "zh": "文档",
+              "en": "Docs"
+            },
+            "categoryLabels": {
+              "zh": "文档",
+              "en": "Docs"
+            }
           },
           {
             "id": "assets",
-            "labels": { "zh": "素材", "en": "Assets" },
-            "categoryLabels": { "zh": "素材", "en": "Assets" }
+            "labels": {
+              "zh": "素材",
+              "en": "Assets"
+            },
+            "categoryLabels": {
+              "zh": "素材",
+              "en": "Assets"
+            }
           },
           {
             "id": "archives",
-            "labels": { "zh": "归档", "en": "Archives" },
-            "categoryLabels": { "zh": "归档", "en": "Archives" }
-          },
-          {
-            "id": "review",
-            "labels": { "zh": "待确认", "en": "Review" },
-            "categoryLabels": { "zh": "待确认", "en": "Review" }
+            "labels": {
+              "zh": "归档",
+              "en": "Archives"
+            },
+            "categoryLabels": {
+              "zh": "归档",
+              "en": "Archives"
+            }
           }
         ]
       },
-      "promptFragment": "场景重点：这是一个项目工作目录，可能同时包含代码、文档、设计稿、导出物和素材。\n优先目标：尽量按项目语义和交付流程整理，不要把同一项目相关文件按扩展名拆散。\n优先考虑的目录语义：Projects、Docs、Deliverables、Assets、Archives、Review。"
+      "promptFragment": "场景重点：这是一个项目工作目录，可能同时包含代码、文档、设计稿、导出物和素材。\n优先目标：尽量按项目语义和交付流程整理，不要把同一项目相关文件按扩展名拆散。\n优先考虑的目录语义：Projects、Docs、Deliverables、Assets、Archives。"
     },
     {
       "id": "study_materials",
@@ -154,59 +230,97 @@
         "normal": [
           {
             "id": "courses",
-            "labels": { "zh": "课程资料", "en": "Courses" },
-            "categoryLabels": { "zh": "课程", "en": "Courses" }
+            "labels": {
+              "zh": "课程资料",
+              "en": "Courses"
+            },
+            "categoryLabels": {
+              "zh": "课程",
+              "en": "Courses"
+            }
           },
           {
             "id": "notes",
-            "labels": { "zh": "笔记讲义", "en": "Notes" },
-            "categoryLabels": { "zh": "笔记", "en": "Notes" }
+            "labels": {
+              "zh": "笔记讲义",
+              "en": "Notes"
+            },
+            "categoryLabels": {
+              "zh": "笔记",
+              "en": "Notes"
+            }
           },
           {
             "id": "assignments",
-            "labels": { "zh": "作业练习", "en": "Assignments" },
-            "categoryLabels": { "zh": "作业", "en": "Assignments" }
+            "labels": {
+              "zh": "作业练习",
+              "en": "Assignments"
+            },
+            "categoryLabels": {
+              "zh": "作业",
+              "en": "Assignments"
+            }
           },
           {
             "id": "reference",
-            "labels": { "zh": "参考资料", "en": "Reference" },
-            "categoryLabels": { "zh": "参考", "en": "Reference" }
-          },
-          {
-            "id": "review",
-            "labels": { "zh": "待确认", "en": "Review" },
-            "categoryLabels": { "zh": "待确认", "en": "Review" }
+            "labels": {
+              "zh": "参考资料",
+              "en": "Reference"
+            },
+            "categoryLabels": {
+              "zh": "参考",
+              "en": "Reference"
+            }
           }
         ],
         "minimal": [
           {
             "id": "study",
-            "labels": { "zh": "学习", "en": "Study" },
-            "categoryLabels": { "zh": "学习", "en": "Study" }
+            "labels": {
+              "zh": "学习",
+              "en": "Study"
+            },
+            "categoryLabels": {
+              "zh": "学习",
+              "en": "Study"
+            }
           },
           {
             "id": "notes",
-            "labels": { "zh": "笔记", "en": "Notes" },
-            "categoryLabels": { "zh": "笔记", "en": "Notes" }
+            "labels": {
+              "zh": "笔记",
+              "en": "Notes"
+            },
+            "categoryLabels": {
+              "zh": "笔记",
+              "en": "Notes"
+            }
           },
           {
             "id": "reference",
-            "labels": { "zh": "参考", "en": "Reference" },
-            "categoryLabels": { "zh": "参考", "en": "Reference" }
+            "labels": {
+              "zh": "参考",
+              "en": "Reference"
+            },
+            "categoryLabels": {
+              "zh": "参考",
+              "en": "Reference"
+            }
           },
           {
             "id": "archives",
-            "labels": { "zh": "归档", "en": "Archives" },
-            "categoryLabels": { "zh": "归档", "en": "Archives" }
-          },
-          {
-            "id": "review",
-            "labels": { "zh": "待确认", "en": "Review" },
-            "categoryLabels": { "zh": "待确认", "en": "Review" }
+            "labels": {
+              "zh": "归档",
+              "en": "Archives"
+            },
+            "categoryLabels": {
+              "zh": "归档",
+              "en": "Archives"
+            }
           }
         ]
       },
-      "promptFragment": "场景重点：这是一个学习资料目录，通常包含课件、讲义、笔记、作业、截图和参考材料。\n优先目标：按学习用途整理，让课程资料、笔记、作业和参考材料彼此分离。\n优先考虑的目录语义：课程资料、笔记讲义、作业练习、参考资料、学习截图、待确认。"
+      "promptFragment": "场景重点：这是一个学习资料目录，通常包含课件、讲义、笔记、作业、截图和参考材料。\n优先目标：按学习用途整理，让课程资料、笔记、作业和参考材料彼此分离。\n优先考虑的目录语义：课程资料、笔记讲义、作业练习、参考资料、学习截图。"
     },
     {
       "id": "office_admin",
@@ -221,54 +335,86 @@
         "normal": [
           {
             "id": "finance",
-            "labels": { "zh": "财务票据", "en": "Finance" },
-            "categoryLabels": { "zh": "财务", "en": "Finance" }
+            "labels": {
+              "zh": "财务票据",
+              "en": "Finance"
+            },
+            "categoryLabels": {
+              "zh": "财务",
+              "en": "Finance"
+            }
           },
           {
             "id": "contracts",
-            "labels": { "zh": "合同协议", "en": "Contracts" },
-            "categoryLabels": { "zh": "合同", "en": "Contracts" }
+            "labels": {
+              "zh": "合同协议",
+              "en": "Contracts"
+            },
+            "categoryLabels": {
+              "zh": "合同",
+              "en": "Contracts"
+            }
           },
           {
             "id": "reports",
-            "labels": { "zh": "报告报表", "en": "Reports" },
-            "categoryLabels": { "zh": "报表", "en": "Reports" }
+            "labels": {
+              "zh": "报告报表",
+              "en": "Reports"
+            },
+            "categoryLabels": {
+              "zh": "报表",
+              "en": "Reports"
+            }
           },
           {
             "id": "forms",
-            "labels": { "zh": "流程表单", "en": "Forms" },
-            "categoryLabels": { "zh": "表单", "en": "Forms" }
-          },
-          {
-            "id": "review",
-            "labels": { "zh": "待确认", "en": "Review" },
-            "categoryLabels": { "zh": "待确认", "en": "Review" }
+            "labels": {
+              "zh": "流程表单",
+              "en": "Forms"
+            },
+            "categoryLabels": {
+              "zh": "表单",
+              "en": "Forms"
+            }
           }
         ],
         "minimal": [
           {
             "id": "docs",
-            "labels": { "zh": "文档", "en": "Docs" },
-            "categoryLabels": { "zh": "文档", "en": "Docs" }
+            "labels": {
+              "zh": "文档",
+              "en": "Docs"
+            },
+            "categoryLabels": {
+              "zh": "文档",
+              "en": "Docs"
+            }
           },
           {
             "id": "finance",
-            "labels": { "zh": "财务", "en": "Finance" },
-            "categoryLabels": { "zh": "财务", "en": "Finance" }
+            "labels": {
+              "zh": "财务",
+              "en": "Finance"
+            },
+            "categoryLabels": {
+              "zh": "财务",
+              "en": "Finance"
+            }
           },
           {
             "id": "archives",
-            "labels": { "zh": "归档", "en": "Archives" },
-            "categoryLabels": { "zh": "归档", "en": "Archives" }
-          },
-          {
-            "id": "review",
-            "labels": { "zh": "待确认", "en": "Review" },
-            "categoryLabels": { "zh": "待确认", "en": "Review" }
+            "labels": {
+              "zh": "归档",
+              "en": "Archives"
+            },
+            "categoryLabels": {
+              "zh": "归档",
+              "en": "Archives"
+            }
           }
         ]
       },
-      "promptFragment": "场景重点：这是一个办公事务目录，常见内容包括合同、发票、通知、报表、流程文档和表格。\n优先目标：优先保证财务、合同和正式文档的可检索性与稳定性。\n优先考虑的目录语义：Finance、Contracts、Reports、Forms、Archives、Review。\n遇到票据、合同、付款或报销相关内容时，优先按财务/合同语义归类。"
+      "promptFragment": "场景重点：这是一个办公事务目录，常见内容包括合同、发票、通知、报表、流程文档和表格。\n优先目标：优先保证财务、合同和正式文档的可检索性与稳定性。\n优先考虑的目录语义：Finance、Contracts、Reports、Forms、Archives。\n遇到票据、合同、付款或报销相关内容时，优先按财务/合同语义归类。"
     },
     {
       "id": "personal_archive",
@@ -283,54 +429,86 @@
         "normal": [
           {
             "id": "identity",
-            "labels": { "zh": "证件资料", "en": "Identity" },
-            "categoryLabels": { "zh": "证件", "en": "Identity" }
+            "labels": {
+              "zh": "证件资料",
+              "en": "Identity"
+            },
+            "categoryLabels": {
+              "zh": "证件",
+              "en": "Identity"
+            }
           },
           {
             "id": "bills",
-            "labels": { "zh": "账单票据", "en": "Bills" },
-            "categoryLabels": { "zh": "账单", "en": "Bills" }
+            "labels": {
+              "zh": "账单票据",
+              "en": "Bills"
+            },
+            "categoryLabels": {
+              "zh": "账单",
+              "en": "Bills"
+            }
           },
           {
             "id": "life",
-            "labels": { "zh": "生活记录", "en": "Life" },
-            "categoryLabels": { "zh": "生活", "en": "Life" }
+            "labels": {
+              "zh": "生活记录",
+              "en": "Life"
+            },
+            "categoryLabels": {
+              "zh": "生活",
+              "en": "Life"
+            }
           },
           {
             "id": "archives",
-            "labels": { "zh": "历史归档", "en": "Archives" },
-            "categoryLabels": { "zh": "归档", "en": "Archives" }
-          },
-          {
-            "id": "review",
-            "labels": { "zh": "待确认", "en": "Review" },
-            "categoryLabels": { "zh": "待确认", "en": "Review" }
+            "labels": {
+              "zh": "历史归档",
+              "en": "Archives"
+            },
+            "categoryLabels": {
+              "zh": "归档",
+              "en": "Archives"
+            }
           }
         ],
         "minimal": [
           {
             "id": "personal",
-            "labels": { "zh": "个人资料", "en": "Personal" },
-            "categoryLabels": { "zh": "个人", "en": "Personal" }
+            "labels": {
+              "zh": "个人资料",
+              "en": "Personal"
+            },
+            "categoryLabels": {
+              "zh": "个人",
+              "en": "Personal"
+            }
           },
           {
             "id": "bills",
-            "labels": { "zh": "账单", "en": "Bills" },
-            "categoryLabels": { "zh": "账单", "en": "Bills" }
+            "labels": {
+              "zh": "账单",
+              "en": "Bills"
+            },
+            "categoryLabels": {
+              "zh": "账单",
+              "en": "Bills"
+            }
           },
           {
             "id": "archives",
-            "labels": { "zh": "归档", "en": "Archives" },
-            "categoryLabels": { "zh": "归档", "en": "Archives" }
-          },
-          {
-            "id": "review",
-            "labels": { "zh": "待确认", "en": "Review" },
-            "categoryLabels": { "zh": "待确认", "en": "Review" }
+            "labels": {
+              "zh": "归档",
+              "en": "Archives"
+            },
+            "categoryLabels": {
+              "zh": "归档",
+              "en": "Archives"
+            }
           }
         ]
       },
-      "promptFragment": "场景重点：这是一个个人资料与生活记录目录，常见内容包括证件扫描件、账单、申请材料、聊天导出、生活记录和历史留档。\n优先目标：优先按资料用途和长期检索需求整理，而不是只按文件格式拆分。\n优先考虑的目录语义：证件资料、账单票据、生活记录、历史归档、待确认。"
+      "promptFragment": "场景重点：这是一个个人资料与生活记录目录，常见内容包括证件扫描件、账单、申请材料、聊天导出、生活记录和历史留档。\n优先目标：优先按资料用途和长期检索需求整理，而不是只按文件格式拆分。\n优先考虑的目录语义：证件资料、账单票据、生活记录、历史归档。"
     },
     {
       "id": "media_assets",
@@ -345,59 +523,97 @@
         "normal": [
           {
             "id": "shots",
-            "labels": { "zh": "截图记录", "en": "Screenshots" },
-            "categoryLabels": { "zh": "截图", "en": "Shots" }
+            "labels": {
+              "zh": "截图记录",
+              "en": "Screenshots"
+            },
+            "categoryLabels": {
+              "zh": "截图",
+              "en": "Shots"
+            }
           },
           {
             "id": "images",
-            "labels": { "zh": "图片素材", "en": "Images" },
-            "categoryLabels": { "zh": "图片", "en": "Images" }
+            "labels": {
+              "zh": "图片素材",
+              "en": "Images"
+            },
+            "categoryLabels": {
+              "zh": "图片",
+              "en": "Images"
+            }
           },
           {
             "id": "video_audio",
-            "labels": { "zh": "视频音频", "en": "Video-Audio" },
-            "categoryLabels": { "zh": "影音", "en": "Media" }
+            "labels": {
+              "zh": "视频音频",
+              "en": "Video-Audio"
+            },
+            "categoryLabels": {
+              "zh": "影音",
+              "en": "Media"
+            }
           },
           {
             "id": "design",
-            "labels": { "zh": "设计源文件", "en": "Design" },
-            "categoryLabels": { "zh": "设计", "en": "Design" }
-          },
-          {
-            "id": "review",
-            "labels": { "zh": "待确认", "en": "Review" },
-            "categoryLabels": { "zh": "待确认", "en": "Review" }
+            "labels": {
+              "zh": "设计源文件",
+              "en": "Design"
+            },
+            "categoryLabels": {
+              "zh": "设计",
+              "en": "Design"
+            }
           }
         ],
         "minimal": [
           {
             "id": "shots",
-            "labels": { "zh": "截图", "en": "Shots" },
-            "categoryLabels": { "zh": "截图", "en": "Shots" }
+            "labels": {
+              "zh": "截图",
+              "en": "Shots"
+            },
+            "categoryLabels": {
+              "zh": "截图",
+              "en": "Shots"
+            }
           },
           {
             "id": "media",
-            "labels": { "zh": "媒体", "en": "Media" },
-            "categoryLabels": { "zh": "媒体", "en": "Media" }
+            "labels": {
+              "zh": "媒体",
+              "en": "Media"
+            },
+            "categoryLabels": {
+              "zh": "媒体",
+              "en": "Media"
+            }
           },
           {
             "id": "design",
-            "labels": { "zh": "设计", "en": "Design" },
-            "categoryLabels": { "zh": "设计", "en": "Design" }
+            "labels": {
+              "zh": "设计",
+              "en": "Design"
+            },
+            "categoryLabels": {
+              "zh": "设计",
+              "en": "Design"
+            }
           },
           {
             "id": "archives",
-            "labels": { "zh": "归档", "en": "Archives" },
-            "categoryLabels": { "zh": "归档", "en": "Archives" }
-          },
-          {
-            "id": "review",
-            "labels": { "zh": "待确认", "en": "Review" },
-            "categoryLabels": { "zh": "待确认", "en": "Review" }
+            "labels": {
+              "zh": "归档",
+              "en": "Archives"
+            },
+            "categoryLabels": {
+              "zh": "归档",
+              "en": "Archives"
+            }
           }
         ]
       },
-      "promptFragment": "场景重点：这是一个媒体与创作素材目录，通常包含截图、照片、视频、音频、设计稿、导出图和零散创作资源。\n优先目标：按素材用途和创作流程整理，不要把同一批创作资产仅按扩展名拆散。\n优先考虑的目录语义：Screenshots、Images、Video-Audio、Design、Archives、Review。"
+      "promptFragment": "场景重点：这是一个媒体与创作素材目录，通常包含截图、照片、视频、音频、设计稿、导出图和零散创作资源。\n优先目标：按素材用途和创作流程整理，不要把同一批创作资产仅按扩展名拆散。\n优先考虑的目录语义：Screenshots、Images、Video-Audio、Design、Archives。"
     }
   ],
   "languages": [

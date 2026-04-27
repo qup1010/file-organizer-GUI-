@@ -19,7 +19,7 @@
 
 ## 非目标
 
-- 不改动前端读取运行时的方式，仍以 `window.__FILE_ORGANIZER_RUNTIME__` 和 `output/runtime/backend.json` 为准。
+- 不改动前端读取运行时的方式，仍以 `window.__FILE_PILOT_RUNTIME__` 和 `output/runtime/backend.json` 为准。
 - 不调整开发态联调默认端口，开发态仍优先保持 `8765`，避免影响现有工作流。
 - 不在本次改动中处理窗口尺寸记忆、托盘、CSP 收紧等其他桌面体验项。
 
@@ -38,7 +38,7 @@
 2. 等待运行时文件生成，并读取 `base_url`。
 3. 请求 `/api/health`，确认后端就绪。
 4. 关闭桌面应用。
-5. 确认 `file_organizer_api.exe` 已退出。
+5. 确认 `file_pilot_api.exe` 已退出。
 6. 再次启动桌面应用。
 7. 再次确认运行时文件和健康检查成功。
 
@@ -57,8 +57,8 @@
 后端启动前增加端口选择逻辑：
 
 - 开发态：继续使用 `8765`，保持调试稳定。
-- 安装包态：如果未显式指定 `FILE_ORGANIZER_API_PORT`，则在启动前选择一个本机空闲端口。
-- 同步生成正确的 `FILE_ORGANIZER_API_BASE_URL`，让后端写入 `backend.json` 后仍可被前端和宿主发现。
+- 安装包态：如果未显式指定 `FILE_PILOT_API_PORT`，则在启动前选择一个本机空闲端口。
+- 同步生成正确的 `FILE_PILOT_API_BASE_URL`，让后端写入 `backend.json` 后仍可被前端和宿主发现。
 
 端口选择以“绑定 `127.0.0.1:0` 取得系统分配端口”为基础，只在桌面宿主决定端口，不改 FastAPI 的运行时契约。
 

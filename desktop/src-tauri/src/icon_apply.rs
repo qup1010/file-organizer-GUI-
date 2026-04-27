@@ -11,7 +11,7 @@ use serde_json::Value;
 
 use crate::desktop_ini;
 
-const ICON_FILE_NAME: &str = "file-organizer-icon.ico";
+const ICON_FILE_NAME: &str = "file-pilot-icon.ico";
 const BACKUP_MANIFEST_FILE_NAME: &str = "manifest.json";
 const BACKUP_MANAGED_ICON_FILE_NAME: &str = "managed-icon.bin";
 const BACKUP_ORIGINAL_ICON_FILE_NAME: &str = "original-icon.bin";
@@ -146,7 +146,7 @@ fn ensure_windows() -> Result<(), String> {
 }
 
 fn load_configured_save_mode() -> String {
-    let project_root = std::env::var_os("FILE_ORGANIZER_PROJECT_ROOT")
+    let project_root = std::env::var_os("FILE_PILOT_PROJECT_ROOT")
         .map(PathBuf::from)
         .or_else(|| {
             Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -419,7 +419,7 @@ fn load_backup_manifest(folder_path: &str) -> Result<(PathBuf, IconBackupManifes
 fn backup_root_dir() -> Result<PathBuf, String> {
     let appdata = std::env::var_os("APPDATA")
         .ok_or_else(|| "未找到 APPDATA，无法创建图标备份。".to_string())?;
-    Ok(PathBuf::from(appdata).join("FileOrganizer"))
+    Ok(PathBuf::from(appdata).join("FilePilot"))
 }
 
 fn managed_icons_dir() -> Result<PathBuf, String> {

@@ -15,6 +15,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { createApiClient } from "@/lib/api";
 import { getApiBaseUrl, getApiToken } from "@/lib/runtime";
+import { notifyWorkspaceWhenAway, requestWorkspaceNotificationPermission } from "@/lib/workspace-notifications";
 import { MinimalScanningView } from "./workspace/minimal-scanning-view";
 import { PrecheckView } from "./workspace/precheck-view";
 import { CompletionView } from "./workspace/completion-view";
@@ -25,6 +26,7 @@ import { PreviewFilter, PreviewFocusRequest, PreviewPanel } from "./workspace/pr
 const DEFAULT_LEFT_WIDTH = 50;
 const SCAN_PREVIEW_GRACE_MS = 1200;
 const COMPACT_WORKSPACE_BREAKPOINT = 1100;
+type InitialAutoPlanUiState = "idle" | "pending" | "revealing" | "done";
 
 function getSessionIdFromWorkspaceRoute(route: string | null): string | null {
   if (!route?.startsWith("/workspace")) {
@@ -43,7 +45,7 @@ function summarizeItemNames(names: string[], limit = 3): string {
 }
 
 export default function WorkspaceClient() {
-  const APP_CONTEXT_EVENT = "file-organizer-context-change";
+  const APP_CONTEXT_EVENT = "file-pilot-context-change";
   const WORKSPACE_CONTEXT_KEY = "workspace_header_context";
   const ACTIVE_WORKSPACE_ROUTE_KEY = "workspace_active_route";
   const searchParams = useSearchParams();
@@ -107,6 +109,7 @@ export default function WorkspaceClient() {
   const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
   const [executeConfirmOpen, setExecuteConfirmOpen] = useState(false);
   const [scanAbortConfirmOpen, setScanAbortConfirmOpen] = useState(false);
+  const [scanAborting, setScanAborting] = useState(false);
   const [showExitMenu, setShowExitMenu] = useState(false);
   const [dividerLeft, setDividerLeft] = useState<number | null>(null);
   const [previewFocusRequest, setPreviewFocusRequest] = useState<PreviewFocusRequest | null>(null);
@@ -114,6 +117,8 @@ export default function WorkspaceClient() {
   const [isCompactLayout, setIsCompactLayout] = useState(false);
   const [compactConversationOpen, setCompactConversationOpen] = useState(false);
   const [isChatCollapsed, setIsChatCollapsed] = useState(false);
+  const [initialAutoPlanUiState, setInitialAutoPlanUiState] = useState<InitialAutoPlanUiState>("idle");
+  const [initialAutoPlanRevealMessageId, setInitialAutoPlanRevealMessageId] = useState<string | null>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const dividerRef = React.useRef<HTMLDivElement>(null);
   const leftPaneRef = React.useRef<HTMLElement>(null);
@@ -123,9 +128,17 @@ export default function WorkspaceClient() {
   const isResizing = React.useRef(false);
   const scanPreviewTimerRef = React.useRef<number | null>(null);
   const autoScanRequestedRef = React.useRef(false);
+  const taskNotificationRef = React.useRef({
+    initialized: false,
+    wasScanning: false,
+    wasPlanning: false,
+    lastPlanStartedAt: null as string | null,
+  });
 
   React.useEffect(() => {
     autoScanRequestedRef.current = false;
+    setInitialAutoPlanUiState("idle");
+    setInitialAutoPlanRevealMessageId(null);
   }, [sessionIdParam]);
 
   React.useEffect(() => {
@@ -220,6 +233,28 @@ export default function WorkspaceClient() {
   const isPlanSyncing = plannerStatus.isRunning;
   const canRunPrecheck = deriveCanRunPrecheck(stage, plan.readiness, isPlanSyncing);
   const progressPercent = scanner.total_count > 0 ? (scanner.processed_count / scanner.total_count) * 100 : 0;
+  const isHiddenInitialAutoPlanning = Boolean(
+    stageView.isPlanningConversation &&
+    plannerStatus.isRunning &&
+    scanner.status !== "idle" &&
+    scanner.total_count > 0 &&
+    !snapshot?.assistant_message &&
+    Number(snapshot?.plan_snapshot?.stats?.move_count || 0) === 0,
+  );
+  const initialAutoPlanHasResult = Boolean(
+    snapshot?.assistant_message ||
+    Number(snapshot?.plan_snapshot?.stats?.move_count || 0) > 0 ||
+    Number(snapshot?.plan_snapshot?.stats?.unresolved_count || 0) > 0 ||
+    Number(snapshot?.plan_snapshot?.stats?.directory_count || 0) > 0
+  );
+  const isInitialAutoPlanLikelyPending = Boolean(
+    stageView.isPlanningConversation &&
+    !initialAutoPlanHasResult &&
+    scanner.total_count > 0 &&
+    scanner.status !== "idle" &&
+    initialAutoPlanUiState !== "done",
+  );
+  const shouldHoldInitialAutoPlanUi = initialAutoPlanUiState === "pending" || isHiddenInitialAutoPlanning || isInitialAutoPlanLikelyPending;
   const showConversationPane = !isCompactLayout || compactConversationOpen;
   const showPreviewPane = !isCompactLayout || !compactConversationOpen;
   const effectiveComposerMode = isReadOnly ? "hidden" : composerMode;
@@ -247,13 +282,13 @@ export default function WorkspaceClient() {
       return "下一步先读取目录，确认这次要整理的项目。";
     }
     if (stageView.isScanning) {
-      return "正在只读分析文件，完成后会显示整理建议。";
+      return "正在只读分析文件。文件较多时可能需要几分钟，可以先最小化，完成后会通知你。";
     }
     if (stageView.isTargetSelection) {
       return "先选择可归入的目标目录，剩余项目会作为本次待整理对象。";
     }
     if (stageView.isPlanning) {
-      return isPlanSyncing ? "正在按你的要求更新方案。" : "可以继续调整要求，确认后再做移动前检查。";
+      return isPlanSyncing ? "正在按你的要求更新方案；文件较多时可以先最小化等待通知。" : "可以继续调整要求，确认后再做移动前检查。";
     }
     if (stageView.isAwaitingPrecheck) {
       return canRunPrecheck ? "方案已就绪，建议先做一次移动前安全检查。" : "方案还在更新，完成后即可检查。";
@@ -283,7 +318,7 @@ export default function WorkspaceClient() {
     }
     setScanPreviewHoldUntil(Date.now() + SCAN_PREVIEW_GRACE_MS);
   }, []);
-  const shouldShowScanningPreview = stageView.isScanning || (
+  const shouldShowScanningPreview = stageView.isScanning || shouldHoldInitialAutoPlanUi || (
     scanPreviewHoldUntil !== null &&
     stageView.isPlanningConversation &&
     scanner.status !== "idle" &&
@@ -351,8 +386,11 @@ export default function WorkspaceClient() {
     if (isReadOnly || !messageInput.trim() || isBusy || isComposerLocked) {
       return;
     }
+    void requestWorkspaceNotificationPermission();
     const content = messageInput;
     setMessageInput("");
+    setInitialAutoPlanUiState("done");
+    setInitialAutoPlanRevealMessageId(null);
     await sendMessage(content);
   };
 
@@ -380,19 +418,48 @@ export default function WorkspaceClient() {
   };
 
   const handleConfirmAbortScan = async () => {
-    const success = await abandonSession();
-    if (success) {
-      if (typeof window !== "undefined") {
-        window.localStorage.removeItem(ACTIVE_WORKSPACE_ROUTE_KEY);
+    setScanAborting(true);
+    try {
+      const success = await abandonSession();
+      if (success) {
+        if (typeof window !== "undefined") {
+          window.localStorage.removeItem(ACTIVE_WORKSPACE_ROUTE_KEY);
+        }
+        setScanAbortConfirmOpen(false);
+        router.push("/");
       }
-      setScanAbortConfirmOpen(false);
-      router.push("/");
+    } finally {
+      setScanAborting(false);
     }
   };
   const handleStartScan = React.useCallback(() => {
+    void requestWorkspaceNotificationPermission();
     beginScanPreviewHold();
     void scan();
   }, [beginScanPreviewHold, scan]);
+
+  const handleOpenConversation = React.useCallback(() => {
+    setInitialAutoPlanUiState("done");
+    setInitialAutoPlanRevealMessageId(null);
+    setIsChatCollapsed(false);
+    setCompactConversationOpen(true);
+  }, []);
+
+  const handleCloseConversation = React.useCallback(() => {
+    setIsChatCollapsed(true);
+    setCompactConversationOpen(false);
+  }, []);
+
+  const handleToggleCompactConversation = React.useCallback(() => {
+    setCompactConversationOpen((current) => {
+      const next = !current;
+      if (next) {
+        setInitialAutoPlanUiState("done");
+        setInitialAutoPlanRevealMessageId(null);
+      }
+      return next;
+    });
+  }, []);
 
   React.useEffect(() => {
     if (!autoStartScan || isReadOnly || !sessionIdParam || !snapshot || loading) {
@@ -407,6 +474,73 @@ export default function WorkspaceClient() {
     autoScanRequestedRef.current = true;
     handleStartScan();
   }, [autoStartScan, handleStartScan, isReadOnly, loading, sessionIdParam, snapshot, stageView.isDraftLike]);
+
+  React.useEffect(() => {
+    taskNotificationRef.current = {
+      initialized: false,
+      wasScanning: false,
+      wasPlanning: false,
+      lastPlanStartedAt: null,
+    };
+  }, [sessionIdParam]);
+
+  React.useEffect(() => {
+    if (!snapshot || !sessionIdParam) {
+      return;
+    }
+
+    const current = taskNotificationRef.current;
+    const isScanningNow = stageView.isScanning || isHiddenInitialAutoPlanning;
+    const isPlanningNow = plannerStatus.isRunning;
+    const planStartedAt = snapshot.planner_progress?.started_at || null;
+
+    if (!current.initialized) {
+      taskNotificationRef.current = {
+        initialized: true,
+        wasScanning: isScanningNow,
+        wasPlanning: isPlanningNow,
+        lastPlanStartedAt: planStartedAt,
+      };
+      return;
+    }
+
+    if (current.wasScanning && !isScanningNow && !isPlanningNow) {
+      const totalCount = Number(snapshot.scanner_progress?.total_count || 0);
+      const processedCount = Number(snapshot.scanner_progress?.processed_count || 0);
+      const countLabel = totalCount > 0 ? `已读取 ${processedCount || totalCount}/${totalCount} 项。` : "已完成目录读取。";
+      notifyWorkspaceWhenAway(
+        "FilePilot 方案已准备好",
+        `${countLabel}可以回到工作台查看整理建议。`,
+        `filepilot-scan-${sessionIdParam}`,
+      );
+    }
+
+    if (current.wasPlanning && !isPlanningNow && current.lastPlanStartedAt && !current.wasScanning) {
+      const moveCount = Number(snapshot.plan_snapshot?.stats?.move_count || 0);
+      const unresolvedCount = Number(snapshot.plan_snapshot?.stats?.unresolved_count || 0);
+      const detail = unresolvedCount > 0
+        ? `方案已更新，仍有 ${unresolvedCount} 项需要确认。`
+        : `方案已更新，已规划 ${moveCount} 项，可以进行移动风险检查。`;
+      notifyWorkspaceWhenAway(
+        "FilePilot 方案已更新",
+        detail,
+        `filepilot-plan-${sessionIdParam}-${current.lastPlanStartedAt}`,
+      );
+    }
+
+    taskNotificationRef.current = {
+      initialized: true,
+      wasScanning: isScanningNow,
+      wasPlanning: isPlanningNow,
+      lastPlanStartedAt: planStartedAt,
+    };
+  }, [
+    plannerStatus.isRunning,
+    isHiddenInitialAutoPlanning,
+    sessionIdParam,
+    snapshot,
+    stageView.isScanning,
+  ]);
 
   const statusNotice = useMemo<ConversationNotice | null>(() => {
     if (streamStatus === "offline") {
@@ -490,7 +624,14 @@ export default function WorkspaceClient() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey || e.altKey) && e.key === "b") {
         e.preventDefault();
-        setIsChatCollapsed((prev) => !prev);
+        setIsChatCollapsed((prev) => {
+          const next = !prev;
+          if (!next) {
+            setInitialAutoPlanUiState("done");
+            setInitialAutoPlanRevealMessageId(null);
+          }
+          return next;
+        });
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -502,6 +643,49 @@ export default function WorkspaceClient() {
       beginScanPreviewHold();
     }
   }, [beginScanPreviewHold, stageView]);
+
+  React.useEffect(() => {
+    const shouldEnterInitialAutoPlan = (
+      stageView.isScanning &&
+      scanner.total_count > 0 &&
+      !initialAutoPlanHasResult
+    ) || isInitialAutoPlanLikelyPending || isHiddenInitialAutoPlanning;
+
+    if (shouldEnterInitialAutoPlan) {
+      if (initialAutoPlanUiState !== "pending") {
+        setInitialAutoPlanUiState("pending");
+        setInitialAutoPlanRevealMessageId(null);
+      }
+      setIsChatCollapsed(true);
+      setCompactConversationOpen(false);
+      return;
+    }
+
+    if (
+      stageView.isPlanningConversation &&
+      initialAutoPlanUiState === "pending" &&
+      !plannerStatus.isRunning &&
+      initialAutoPlanHasResult
+    ) {
+      const finalAssistantMessage = [...chatMessages].reverse().find((message) => message.role === "assistant" && message.content?.trim());
+      setInitialAutoPlanUiState("revealing");
+      setInitialAutoPlanRevealMessageId(snapshot?.assistant_message?.id || finalAssistantMessage?.id || null);
+      setIsChatCollapsed(false);
+      setCompactConversationOpen(true);
+    }
+  }, [
+    chatMessages,
+    initialAutoPlanHasResult,
+    initialAutoPlanUiState,
+    isInitialAutoPlanLikelyPending,
+    isHiddenInitialAutoPlanning,
+    plannerStatus.isRunning,
+    scanner.status,
+    scanner.total_count,
+    snapshot?.assistant_message?.id,
+    stageView.isPlanningConversation,
+    stageView.isScanning,
+  ]);
 
   React.useEffect(() => {
     if (typeof window === "undefined") {
@@ -596,6 +780,9 @@ export default function WorkspaceClient() {
   React.useEffect(() => {
     if (stageView.isScanning || stageView.isReadyToExecute || stageView.isCompleted) {
       setIsChatCollapsed(true);
+    } else if (stageView.isPlanningConversation && shouldHoldInitialAutoPlanUi) {
+      setIsChatCollapsed(true);
+      setCompactConversationOpen(false);
     } else if (stageView.isDraftLike || stageView.isTargetSelection || stageView.isPlanningConversation || stageView.isRecovery) {
       setIsChatCollapsed(false);
     }
@@ -607,6 +794,7 @@ export default function WorkspaceClient() {
     stageView.isRecovery,
     stageView.isScanning,
     stageView.isTargetSelection,
+    shouldHoldInitialAutoPlanUi,
   ]);
 
   React.useEffect(() => {
@@ -649,9 +837,10 @@ export default function WorkspaceClient() {
                 <MinimalScanningView
                   scanner={scanner}
                   progressPercent={progressPercent}
-                  onAbort={() => setScanAbortConfirmOpen(true)}
-                  aborting={loading}
+                  onAbort={isHiddenInitialAutoPlanning ? undefined : () => setScanAbortConfirmOpen(true)}
+                  aborting={scanAborting}
                   isModelConfigured={isTextModelConfigured}
+                  hiddenAutoPlanning={isHiddenInitialAutoPlanning}
                 />
               );
             }
@@ -725,6 +914,7 @@ export default function WorkspaceClient() {
                   loading={loading}
                   onConfirm={(selectedTargetDirs) => {
                     if (!isReadOnly) {
+                      void requestWorkspaceNotificationPermission();
                       void confirmTargetDirectories(selectedTargetDirs);
                     }
                   }}
@@ -864,6 +1054,7 @@ export default function WorkspaceClient() {
       isComposerLocked={isComposerLocked}
       composerStatus={composerStatus}
       plannerStatus={plannerStatus}
+      revealMessageId={initialAutoPlanUiState === "revealing" ? initialAutoPlanRevealMessageId : null}
       stage={stage}
       messageInput={messageInput}
       setMessageInput={setMessageInput}
@@ -906,7 +1097,7 @@ export default function WorkspaceClient() {
         {!isCompactLayout && (
            <button
            type="button"
-           onClick={() => setIsChatCollapsed(true)}
+           onClick={handleCloseConversation}
            className="flex h-6 w-6 items-center justify-center rounded-[4px] text-on-surface/30 transition-all hover:bg-on-surface/10 hover:text-on-surface"
            title="收起聊天区 (Alt+B)"
          >
@@ -933,7 +1124,7 @@ export default function WorkspaceClient() {
         <div className="absolute right-3 top-3 z-30 flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setCompactConversationOpen((current) => !current)}
+            onClick={handleToggleCompactConversation}
             className="inline-flex items-center gap-1.5 rounded-[8px] border border-on-surface/20 bg-surface/95 px-3 py-1.5 text-[11px] font-bold text-on-surface-variant backdrop-blur transition-colors hover:bg-surface-container-low hover:text-on-surface"
           >
             <Layers className="h-3.5 w-3.5" />
@@ -964,8 +1155,8 @@ export default function WorkspaceClient() {
                   exit={{ width: 0, opacity: 0 }}
                   transition={{ ease: [0.4, 0, 0.2, 1], duration: 0.35 }}
                   className={cn(
-                    "relative flex h-full min-h-0 flex-col bg-surface-container-lowest overflow-hidden min-w-0",
-                    isCompactLayout ? "" : "border-r border-on-surface/6",
+                    "relative flex h-full min-h-0 flex-col bg-surface-container-low overflow-hidden min-w-0",
+                    isCompactLayout ? "" : "",
                   )}
                 >
                   <div className="flex flex-col h-full min-w-[360px]">
@@ -980,7 +1171,7 @@ export default function WorkspaceClient() {
               <div className="z-50 flex h-full w-[38px] flex-col items-center bg-surface-container-lowest border-r border-on-surface/8 py-3 gap-6 animate-in slide-in-from-left duration-300">
                  <button
                   type="button"
-                  onClick={() => setIsChatCollapsed(false)}
+                  onClick={handleOpenConversation}
                   className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-white transition-all hover:scale-105 active:scale-95"
                   title="展开聊天区 (Alt+B)"
                 >
@@ -1012,8 +1203,8 @@ export default function WorkspaceClient() {
                   className={cn(
                     "w-[1px] h-full transition-all duration-300",
                     isResizingState
-                      ? "bg-on-surface text-surface"
-                      : "text-ui-muted hover:text-on-surface hover:bg-on-surface/5",
+                      ? "bg-primary/20"
+                      : "bg-transparent",
                   )}
                 />
                 <div
@@ -1034,7 +1225,7 @@ export default function WorkspaceClient() {
               <section
                 ref={rightPaneRef as any}
                 style={{ width: !isCompactLayout && showConversationPane && !isChatCollapsed ? `${100 - leftWidth}%` : "100%" }}
-                className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-surface-container-lowest/30"
+                className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-surface"
               >
                 <div className="flex-1 min-h-0 w-full overflow-hidden flex flex-col">{renderPreviewContent()}</div>
               </section>
@@ -1060,9 +1251,13 @@ export default function WorkspaceClient() {
         confirmLabel="停止扫描"
         cancelLabel="继续扫描"
         tone="danger"
-        loading={loading}
+        loading={scanAborting}
         onConfirm={handleConfirmAbortScan}
-        onCancel={() => setScanAbortConfirmOpen(false)}
+        onCancel={() => {
+          if (!scanAborting) {
+            setScanAbortConfirmOpen(false);
+          }
+        }}
       />
       <ConfirmDialog
         open={executeConfirmOpen}

@@ -7,14 +7,14 @@ from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
 
-from file_organizer.icon_workbench.models import (
+from file_pilot.icon_workbench.models import (
     IconAnalysisResult,
     IconPreviewVersion,
     IconWorkbenchConfig,
     ModelConfig,
 )
-from file_organizer.icon_workbench.service import IconWorkbenchService
-from file_organizer.icon_workbench.store import IconWorkbenchStore
+from file_pilot.icon_workbench.service import IconWorkbenchService
+from file_pilot.icon_workbench.store import IconWorkbenchStore
 
 
 class StubTextClient:
@@ -107,7 +107,7 @@ class IconWorkbenchServiceTests(unittest.TestCase):
         (self.beta_dir / "src" / "main.py").write_text("print('ok')", encoding="utf-8")
 
         self.text_model_patch = patch(
-            "file_organizer.icon_workbench.config.IconWorkbenchConfigStore._global_text_model",
+            "file_pilot.icon_workbench.config.IconWorkbenchConfigStore._global_text_model",
             return_value=ModelConfig(
                 base_url="https://text.example/v1",
                 api_key="text-key",

@@ -8,7 +8,7 @@ from urllib import error as urllib_error
 
 from fastapi.testclient import TestClient
 
-from file_organizer.api.main import create_app
+from file_pilot.api.main import create_app
 
 
 class ApiConfigTests(unittest.TestCase):
@@ -107,7 +107,7 @@ class ApiConfigTests(unittest.TestCase):
             },
         }
         with mock.patch(
-            "file_organizer.shared.config_manager.config_manager.service.get_settings_snapshot",
+            "file_pilot.shared.config_manager.config_manager.service.get_settings_snapshot",
             return_value=snapshot,
         ):
             response = self.client.get("/api/settings")
@@ -148,7 +148,7 @@ class ApiConfigTests(unittest.TestCase):
         }
         expected_snapshot = {"status": {"text_configured": True}}
         with mock.patch(
-            "file_organizer.shared.config_manager.config_manager.service.update_settings",
+            "file_pilot.shared.config_manager.config_manager.service.update_settings",
             return_value=expected_snapshot,
         ) as update_mock:
             response = self.client.patch("/api/settings", json=payload)
@@ -159,7 +159,7 @@ class ApiConfigTests(unittest.TestCase):
 
     def test_get_runtime_family_returns_live_runtime_config(self):
         with mock.patch(
-            "file_organizer.shared.config_manager.config_manager.service.get_runtime_family_config",
+            "file_pilot.shared.config_manager.config_manager.service.get_runtime_family_config",
             return_value={
                 "name": "BRIA RMBG 2.0",
                 "model_id": "briaai/BRIA-RMBG-2.0",
@@ -177,12 +177,12 @@ class ApiConfigTests(unittest.TestCase):
 
     def test_settings_preset_routes_forward_to_unified_service(self):
         with mock.patch(
-            "file_organizer.shared.config_manager.config_manager.service.add_preset",
+            "file_pilot.shared.config_manager.config_manager.service.add_preset",
             return_value="preset-2",
         ) as add_mock, mock.patch(
-            "file_organizer.shared.config_manager.config_manager.service.activate_preset",
+            "file_pilot.shared.config_manager.config_manager.service.activate_preset",
         ) as activate_mock, mock.patch(
-            "file_organizer.shared.config_manager.config_manager.service.delete_preset",
+            "file_pilot.shared.config_manager.config_manager.service.delete_preset",
         ) as delete_mock:
             created = self.client.post(
                 "/api/settings/presets/text",
@@ -231,7 +231,7 @@ class ApiConfigTests(unittest.TestCase):
             "status": {"text_configured": True, "vision_configured": False, "icon_image_configured": False},
         }
         with mock.patch(
-            "file_organizer.shared.config_manager.config_manager.get_config_payload",
+            "file_pilot.shared.config_manager.config_manager.get_config_payload",
             return_value=legacy_payload,
         ):
             response = self.client.get("/api/utils/config")
@@ -444,7 +444,7 @@ class ApiConfigTests(unittest.TestCase):
         mock_client = mock.Mock()
         mock_client.chat.completions.create.return_value = mock.Mock()
         with mock.patch("openai.OpenAI", return_value=mock_client) as openai_mock, mock.patch(
-            "file_organizer.shared.config_manager.config_manager.service.get_runtime_family_config",
+            "file_pilot.shared.config_manager.config_manager.service.get_runtime_family_config",
             return_value={
                 "name": "默认文本模型",
                 "base_url": "https://text.example/v1",
