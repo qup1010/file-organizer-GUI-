@@ -14,7 +14,7 @@ from file_pilot.shared.settings_service import ICON_IMAGE_FAMILY, TEXT_FAMILY, V
 def get_adapter_for_runtime(runtime: dict[str, Any] | ModelRuntimeConfig, *, client: Any = None) -> OpenAICompatibleAdapter:
     config = runtime if isinstance(runtime, ModelRuntimeConfig) else ModelRuntimeConfig.from_mapping(runtime)
     if config.provider != OPENAI_COMPATIBLE_PROVIDER or config.api_format != OPENAI_CHAT_COMPLETIONS_FORMAT:
-        raise ValueError(f"暂不支持的模型接口格�? {config.provider}/{config.api_format}")
+        raise ValueError(f"暂不支持的模型接口格式: {config.provider}/{config.api_format}")
     return OpenAICompatibleAdapter(config, client=client)
 
 
