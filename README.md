@@ -8,18 +8,21 @@
   <p>
     <img src="https://img.shields.io/badge/Platform-Windows-0078D4?style=flat-square" alt="Platform Windows" />
     <img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.11+" />
+    <img src="https://img.shields.io/badge/FastAPI-Local_API-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI Local API" />
+    <img src="https://img.shields.io/badge/Next.js-15-111827?style=flat-square&logo=nextdotjs&logoColor=white" alt="Next.js 15" />
     <img src="https://img.shields.io/badge/Tauri-v2-24C8DB?style=flat-square&logo=tauri&logoColor=white" alt="Tauri v2" />
-    <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=111827" alt="React 19" />
     <img src="https://img.shields.io/badge/License-MIT-84cc16?style=flat-square" alt="MIT License" />
   </p>
 
   <p>
     <a href="#项目简介">项目简介</a> |
-    <a href="#主要功能">主要功能</a> |
+    <a href="#当前能力">当前能力</a> |
     <a href="#界面截图">界面截图</a> |
+    <a href="#项目结构">项目结构</a> |
     <a href="#快速开始">快速开始</a> |
-    <a href="#使用提醒">使用提醒</a> |
-    <a href="#限制说明">限制说明</a> |
+    <a href="#开发与验证">开发与验证</a> |
+    <a href="#运行时契约">运行时契约</a> |
+    <a href="#使用提醒">使用提醒</a>
   </p>
 
 </div>
@@ -28,137 +31,130 @@
 
 ## 项目简介
 
-FilePilot 用于整理本地目录：先扫描和分析，再生成整理方案，确认后执行，并支持查看历史和回退最近一次执行。
+FilePilot 是一个运行在本地 Windows 环境中的文件整理工作台。它把“扫描目录、AI 分析、生成整理方案、执行前预检、确认执行、写入日志、必要时回退”串成一条完整链路，并提供桌面工作台与本地 API 两层能力。
 
-适合这些场景：
+当前仓库包含三部分：
 
-- 下载目录、桌面、素材目录长期堆积，需要重新归类和整理
+- `file_pilot/`：FastAPI 本地服务、整理会话、扫描分析、执行与回退能力
+- `frontend/`：Next.js 工作台前端
+- `desktop/`：Tauri 桌面宿主
 
-## 主要功能
+## 当前能力
 
-- 扫描目录并生成整理方案
-- 支持 `初次整理` 与 `增量归档` 两种整理模式
-- 执行前预检，确认风险和冲突
-- 执行文件移动
-- 保存执行历史，并支持最近一次执行回退
-- 为文件夹生成、应用和恢复图标
+### 文件整理主链路
 
-## 设计理念：建筑式工作台 (Architectural Workbench)
+- 启动页支持多文件、多文件夹、混合来源
+- 启动时先收集来源，再决定去向
+- 去向支持两种模式：
+  - 归入已有目录
+  - 生成新的分类结构
+- 支持全局默认 placement：
+  - `new_directory_root`
+  - `review_root`
+- 支持单次任务覆盖 placement
+- 扫描目录并生成 AI 整理方案
+- 进入执行前预检，检查冲突和风险
+- 输入大写 `YES` 后执行
+- 写入执行日志并保留历史
+- 支持最近一次执行回退
 
-FilePilot 并非传统的“网页式”应用，其设计遵循桌面端生产力工具的逻辑：
+### 任务模式
 
-- **高密度布局**：最大化利用屏幕空间，移除冗余的修饰性元素，让用户一眼看到更多任务信息。
-- **结构化环境**：界面像建筑平面图一样精确、冷静，通过色阶分区（Surface-based）而非硬边框来划分功能块。
-- **低疲劳交互**：采用中文 UI 优先的系统字体栈，并为路径、日志、代码保留等宽字体，确保长时间使用的视觉舒适度。
-- **任务中心**：避免“官网式”大图与营销文案，首屏即工具，操作即反馈。
+#### 生成新结构
 
-详情请参考 [DESIGN.md](./DESIGN.md)。
+- 面向首次整理的杂乱目录
+- 允许生成新的分类目录结构
+- `Review` 默认跟随 `new_directory_root/Review`
+
+#### 归入已有目录
+
+- 面向已有结构的增量归档
+- 支持从已保存的目标目录配置中选择，也支持在当前任务中手动指定目标目录
+- 目标目录需要显式授权，不会自动把父目录授权扩展到所有子目录
+- 拿不准的条目会进入 `Review`
+
+### 其他工作台能力
+
+- 历史记录浏览与最近一次回退入口
+- 设置页统一维护模型配置、启动默认值与部分调试配置
+- 图标工坊：扫描文件夹、生成文件夹图标、应用或恢复图标
+
+## 设计理念
+
+FilePilot 的界面遵循 `Desktop Architectural Workbench` 思路：稳定框架优先、信息密度优先、操作反馈优先，而不是网页式或营销式布局。详细规范见 [DESIGN.md](./DESIGN.md)。
 
 ## 界面截图
 
 ![FilePilot Screenshot](./docs/assets/filepilot-screenshot.png)
 
+## 项目结构
 
+```text
+file_pilot/
+  analysis/        扫描分析、文件读取、摘要与视觉相关能力
+  api/             FastAPI 本地 API、运行时发现
+  app/             会话服务、状态编排、目标目录配置
+  execution/       执行计划、执行日志、结果报告
+  icon_workbench/  图标工坊服务
+  organize/        整理对话、提示词、计划约束
+  rollback/        最近一次执行回退
+frontend/          Next.js 工作台前端
+desktop/           Tauri 桌面宿主
+tests/             Python 单元测试与集成测试
+docs/              设计、规格、现状记录与补充文档
+```
 
 ## 快速开始
 
-### 安装方式
+### 1. 安装 Python 依赖
 
-前往 GitHub Releases 下载桌面安装包，安装后直接运行。
+```powershell
+pip install -r requirements.txt
+```
 
-### 首次使用
+### 2. 启动本地 API
 
-1. 打开应用
-2. 在设置中填写模型服务和 API Key
-3. 选择要整理的目录
-4. 先查看整理方案和预检结果
-5. 确认无误后再执行整理
+```powershell
+python -m file_pilot.api
+```
 
-## 使用提醒
+默认地址：
 
-- 只对适合整理的目录使用，例如下载目录、桌面、素材暂存目录
-- 不要直接对系统目录、开发环境目录、同步盘根目录或正在频繁变化的工作目录执行整理
-- 第一次使用时，建议先拿测试目录或低风险目录试跑
-- 执行前先检查整理方案和预检结果，再决定是否继续
+- `http://127.0.0.1:8765`
 
-## 整理模式
+启动后会写入运行时文件：
 
-### 初次整理
+- `output/runtime/backend.json`
 
-- 面向首次整理的杂乱目录
-- 作用范围是当前目录的一层条目
-- 允许新建目录并生成新的整理结构
-- 扫描完成后会自动进入规划阶段
+### 3. 启动前端工作台
 
-### 增量归档
+```powershell
+Set-Location frontend
+npm install
+npm run dev
+```
 
-- 面向已经有基础结构的目录，处理后续新增的零散内容
-- 用户需要在启动页或设置页显式选择目标目录配置
-- 每个可投递目标目录都需要单独保存路径，父目录不会自动授权子目录
-- 增量模式下不允许新建目标目录、不允许目录改名、不允许投递到未显式配置的目录
-- 拿不准的条目会进入 Review
+### 4. 启动桌面壳
 
-### 当前语义边界
+```powershell
+Set-Location desktop
+npm install
+npm run tauri:dev
+```
 
-- 两种模式都仍以“当前目录一层条目”为可执行移动对象
-- 即使在增量模式中，深层目录下的文件也不会被拆成独立计划项
-- 增量模式限制的是“显式目标目录集合”，不是“递归整理范围”
+桌面联调时，Tauri 会负责拉起本地 `python -m file_pilot.api`，前端优先读取运行时注入值而不是写死端口。
 
-## 限制说明
-
-- 目前只支持 Windows 环境
-- 需要用户自行配置模型服务和 API Key
-- 文件分析结果会受到模型能力和接口稳定性影响
-- 图标生成功能依赖额外模型配置
-- 建议整理的目录文件数不超过600（需要视具体模型和上下文窗口而定）, 并且需要能够稳定使用`tool_call` , 推荐接入较强的文本模型。
-
-## 本次改动记录
-
-### 会话与 API
-
-- 会话策略保留 `organize_mode` 和兼容字段 `destination_index_depth`
-- 会话阶段保留 `selecting_incremental_scope` 作为旧会话兼容阶段
-- `session_snapshot` 新增 `incremental_selection`
-- 新增接口 `POST /api/sessions/{session_id}/incremental-selection`
-  - 兼容旧接口：`POST /api/sessions/{session_id}/confirm-targets`
-
-### 扫描与规划
-
-- `initial` 模式保持当前层扫描后自动规划
-- `incremental` 模式使用显式目标目录配置，扫描后直接进入规划
-- 增量模式会生成：
-  - 当前规划范围条目
-  - 显式目标目录列表
-- 规划输入统一升级为：
-  - `item_id | entry_type | display_name | source_relpath | suggested_purpose | summary`
-- 提示词和计划校验已按模式分流：
-  - `initial`：要求覆盖当前规划范围，可新建目录
-  - `incremental`：只能投递到显式配置的目标目录或 Review，禁止目录改名和新建目标目录
-
-### 前端工作台
-
-- 启动页支持“生成新的分类结构 / 归入现有目录”模式切换
-- 归入现有目录时必须选择已保存目标目录配置，或手动添加目标目录
-- 设置页支持维护多个目标目录配置
-- 工作台保留增量候选选择视图作为旧会话兼容入口
-
-### 当前验证结果
-
-- 已通过：
-  - `python -m unittest tests.test_structured_organizer_service -v`
-  - `python -m unittest tests.test_api_sessions -v`
-  - `python -m unittest tests.test_session_service -v`
-  - `Set-Location frontend; npm run typecheck`
-  - `Set-Location frontend; npm run lint`
-
-## 开发
-
-项目统一入口和常用命令保留在这里；更细的桌面宿主与前端约定分别见 [desktop/README.md](desktop/README.md) 和 [frontend/README.md](frontend/README.md)。
+## 开发与验证
 
 ### 常用命令
 
 ```powershell
 python -m unittest discover -s tests -p "test_*.py"
+
+python -m unittest tests.test_session_service -v
+python -m unittest tests.test_api_runtime -v
+python -m unittest tests.test_api_sessions -v
+python -m unittest tests.test_rollback_service -v
 
 Set-Location frontend
 npm run typecheck
@@ -169,13 +165,62 @@ Set-Location ..\desktop\src-tauri
 cargo check
 ```
 
-### 推荐开发流程
+### 推荐工作流
 
-1. 先运行 `python -m file_pilot.api`
-2. 前端开发时在 `frontend/` 运行 `npm run dev`
-3. 提交前至少执行相关 `unittest`、`npm run typecheck` 和 `npm run lint`
-4. 如涉及桌面端，再补跑 `cargo check` 或 `npm run tauri:dev`
+#### API / 工作台开发
 
+1. 运行 `python -m file_pilot.api`
+2. 在 `frontend/` 运行 `npm run dev`
+3. 如果改动会话快照、事件流或阶段推进，优先回归：
+   - `tests/test_api_*.py`
+   - `tests/test_session_*.py`
+   - `tests/test_api_sessions.py`
+
+#### 桌面联调
+
+1. 确保 `frontend/` 与 `desktop/` 依赖已安装
+2. 在 `desktop/` 运行 `npm run tauri:dev`
+3. 确认前端读取的是 `window.__FILE_PILOT_RUNTIME__.base_url`
+4. 如联调异常，先检查 `output/runtime/backend.json`
+
+#### 回退验证
+
+1. 先完成一次真实整理执行并生成 journal
+2. 通过桌面工作台或 API 触发回退预检
+3. 确认预检无误后再执行回退
+4. 修改回退逻辑时，至少回归 `tests/test_rollback_service.py`
+
+## 运行时契约
+
+以下契约是当前前后端与桌面壳之间的稳定接口，改动时需要同步检查相关实现和类型定义：
+
+- 后端运行时文件：`output/runtime/backend.json`
+- 前端运行时入口：`window.__FILE_PILOT_RUNTIME__.base_url`
+- 健康检查接口：`GET /api/health`
+
+桌面壳可向前端注入：
+
+```ts
+window.__FILE_PILOT_RUNTIME__ = {
+  base_url: "http://127.0.0.1:8765",
+  api_token: "optional-token",
+};
+```
+
+## 子项目文档
+
+- 前端工作台说明见 [frontend/README.md](./frontend/README.md)
+- Tauri 桌面宿主说明见 [desktop/README.md](./desktop/README.md)
+- 更细的规格、设计与阶段性记录见 [docs/](./docs/)
+
+## 使用提醒
+
+- 更适合整理下载目录、桌面、素材暂存目录等“容易堆积、但允许重新归类”的位置
+- 不建议直接作用于系统目录、开发环境目录、同步盘根目录或频繁变化的工作目录
+- 第一次使用建议先拿测试目录试跑
+- 执行前务必查看整理方案与预检结果
+- 文件分析质量会受到模型能力、接口稳定性与上下文窗口影响
+- 当前主要面向 Windows 环境
 
 ## License
 
