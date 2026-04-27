@@ -90,6 +90,7 @@ interface ConversationPanelProps {
     phase: string | null;
     isRunning: boolean;
   } | null;
+  revealMessageId?: string | null;
 }
 
 
@@ -112,17 +113,55 @@ export function ConversationPanel({
   scanner,
   progressPercent = 0,
   plannerStatus,
+  revealMessageId = null,
 }: ConversationPanelProps) {
   const stageView = getSessionStageView(stage);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isPinnedToBottom, setIsPinnedToBottom] = useState(true);
+  const [revealingMessage, setRevealingMessage] = useState<{ id: string | null; visibleLength: number }>({
+    id: null,
+    visibleLength: 0,
+  });
+
+  const revealMessageContent = React.useMemo(() => {
+    if (!revealMessageId) {
+      return "";
+    }
+    return messages.find((message) => message.id === revealMessageId)?.content || "";
+  }, [messages, revealMessageId]);
+
+  useEffect(() => {
+    if (!revealMessageId || !revealMessageContent) {
+      setRevealingMessage((current) => current.id ? { id: null, visibleLength: 0 } : current);
+      return;
+    }
+
+    setRevealingMessage({ id: revealMessageId, visibleLength: 0 });
+    const chunkSize = Math.max(1, Math.ceil(revealMessageContent.length / 90));
+    const timer = window.setInterval(() => {
+      setRevealingMessage((current) => {
+        if (current.id !== revealMessageId) {
+          return current;
+        }
+        const nextLength = Math.min(revealMessageContent.length, current.visibleLength + chunkSize);
+        if (nextLength >= revealMessageContent.length) {
+          window.clearInterval(timer);
+        }
+        return { id: revealMessageId, visibleLength: nextLength };
+      });
+    }, 22);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [revealMessageContent, revealMessageId]);
 
   useEffect(() => {
     if (!isPinnedToBottom) return;
     const container = scrollContainerRef.current;
     if (!container) return;
     container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
-  }, [messages, assistantDraft, isPinnedToBottom]);
+  }, [messages, assistantDraft, revealingMessage.visibleLength, isPinnedToBottom]);
 
   const handleScroll = () => {
     const container = scrollContainerRef.current;
@@ -278,6 +317,10 @@ export function ConversationPanel({
             const isGrouped = prevMessage && prevMessage.role === message.role;
             const isSystemLog = isAssistant && !message.content?.trim();
             const isFirstVisibleMessage = !messages.slice(0, idx).some(m => m.role !== "assistant" || m.content?.trim());
+            const isRevealingMessage = isAssistant && revealingMessage.id === message.id && revealingMessage.visibleLength < (message.content?.length || 0);
+            const visibleContent = isRevealingMessage
+              ? message.content.slice(0, Math.max(1, revealingMessage.visibleLength))
+              : message.content;
 
             if (isSystemLog) {
               return (
@@ -308,7 +351,7 @@ export function ConversationPanel({
                     isAssistant ? "col-start-2 items-start justify-self-start" : "col-start-1 items-end justify-self-end",
                   )}
                 >
-                  {message.content && (
+                  {visibleContent && (
                     <div
                       className={cn(
                         "transition-all leading-relaxed",
@@ -317,7 +360,19 @@ export function ConversationPanel({
                           : "rounded-lg bg-on-surface/[0.03] px-3.5 py-2.5 text-[13px] text-on-surface/80"
                       )}
                     >
-                      {isAssistant ? <MarkdownProse content={message.content} density="compact" /> : <span>{message.content}</span>}
+                      {isAssistant ? (
+                        <div className="relative">
+                          <MarkdownProse content={visibleContent} density="compact" />
+                          {isRevealingMessage && (
+                            <motion.span
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: [0.2, 1, 0.2] }}
+                              transition={{ repeat: Infinity, duration: 0.8 }}
+                              className="ml-1 inline-block h-4 w-1.5 translate-y-0.5 rounded-sm bg-primary/40"
+                            />
+                          )}
+                        </div>
+                      ) : <span>{visibleContent}</span>}
                     </div>
                   )}
                 </div>
