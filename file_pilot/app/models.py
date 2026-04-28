@@ -738,3 +738,4 @@ class SessionMutationResult:
     assistant_message: dict | None = None
     changed: bool = True
     warnings: list[str] = field(default_factory=list)
+    rollback_precheck: dict | None = None

@@ -505,6 +505,34 @@ class SessionApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.json()["detail"], "SESSION_NOT_FOUND")
 
+    def test_rollback_endpoint_returns_precheck_when_confirmation_is_false(self):
+        (self.target_dir / "a.txt").write_text("hello", encoding="utf-8")
+        created = self.client.post(
+            "/api/sessions",
+            json={"target_dir": str(self.target_dir), "resume_if_exists": False},
+        ).json()
+        session = self.store.load(created["session_id"])
+        assert session is not None
+        session.stage = "ready_to_execute"
+        session.pending_plan = {
+            "directories": ["Docs"],
+            "moves": [{"source": "a.txt", "target": "Docs/a.txt"}],
+            "unresolved_items": [],
+            "summary": "move to docs",
+        }
+        self.store.save(session)
+
+        execute = self.client.post(f"/api/sessions/{session.session_id}/execute", json={"confirm": True})
+        self.assertEqual(execute.status_code, 200)
+
+        rollback = self.client.post(f"/api/sessions/{session.session_id}/rollback", json={"confirm": False})
+
+        self.assertEqual(rollback.status_code, 200)
+        payload = rollback.json()
+        self.assertIn("rollback_precheck", payload)
+        self.assertTrue(payload["rollback_precheck"]["can_execute"])
+        self.assertEqual(len(payload["rollback_precheck"]["actions"]), 2)
+
     def test_rollback_endpoint_accepts_execution_id_from_history(self):
         (self.target_dir / "a.txt").write_text("hello", encoding="utf-8")
         created = self.client.post(

@@ -14,6 +14,7 @@ import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { createApiClient } from "@/lib/api";
+import { localizeSessionLastError } from "@/lib/user-facing-copy";
 import { getApiBaseUrl, getApiToken } from "@/lib/runtime";
 import { notifyWorkspaceWhenAway, requestWorkspaceNotificationPermission } from "@/lib/workspace-notifications";
 import { MinimalScanningView } from "./workspace/minimal-scanning-view";
@@ -67,6 +68,7 @@ export default function WorkspaceClient() {
     plannerStatus,
     composerStatus,
     chatError,
+    chatErrorCode,
     streamStatus,
     composerMode,
     isComposerLocked,
@@ -176,13 +178,13 @@ export default function WorkspaceClient() {
   }, []);
 
   React.useEffect(() => {
-    if (chatError?.includes("SESSION_NOT_FOUND")) {
+    if (chatErrorCode === "SESSION_NOT_FOUND") {
       if (typeof window !== "undefined") {
         window.localStorage.removeItem(ACTIVE_WORKSPACE_ROUTE_KEY);
       }
       router.push("/");
     }
-  }, [chatError, router]);
+  }, [chatErrorCode, router]);
 
   const saveWidth = React.useCallback((width: number) => {
     localStorage.setItem("workspace_sidebar_width", width.toString());
@@ -595,7 +597,7 @@ export default function WorkspaceClient() {
       return {
         tone: "danger",
         title: "任务已中断",
-        description: snapshot?.last_error || "建议重新扫描一次，确认目录状态后再继续。",
+        description: snapshot?.last_error ? localizeSessionLastError(snapshot.last_error) : "建议重新扫描一次，确认目录状态后再继续。",
         primaryAction: {
           label: "重新扫描",
           onClick: () => void refreshPlan(),

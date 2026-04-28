@@ -1,4 +1,5 @@
 import { waitForRuntimeConfig } from "@/lib/runtime";
+import { createUserFacingRequestError } from "@/lib/user-facing-copy";
 import type {
   ApplyReadyPreparation,
   IconTemplate,
@@ -43,7 +44,7 @@ async function requestJson<T>(
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Request failed (${response.status} ${response.statusText}): ${errorText}`);
+    throw createUserFacingRequestError(response.status, response.statusText, errorText);
   }
 
   return (await response.json()) as T;

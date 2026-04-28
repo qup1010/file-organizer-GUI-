@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { createApiClient } from "@/lib/api";
 import { getApiBaseUrl, getApiToken, isTauriDesktop, waitForRuntimeConfig } from "@/lib/runtime";
+import { getUserFacingErrorCode, localizeSessionLastError, localizeUserFacingError } from "@/lib/user-facing-copy";
 import { getSessionStageView } from "@/lib/session-view-model";
 import { createSessionEventStream, type SessionEventStream } from "@/lib/sse";
 import type {
@@ -303,6 +304,7 @@ export function useSession(sessionId: string | null) {
   const [journalLoading, setJournalLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
+  const [chatErrorCode, setChatErrorCode] = useState<string | null>(null);
   const [assistantDraft, setAssistantDraft] = useState("");
   const [assistantRuntime, setAssistantRuntime] = useState<AssistantRuntimeStatus | null>(null);
   const [streamStatus, setStreamStatus] = useState<StreamStatus>("offline");
@@ -322,6 +324,12 @@ export function useSession(sessionId: string | null) {
     setAssistantDraft("");
     setAssistantRuntime(null);
     setChatError(null);
+    setChatErrorCode(null);
+  }
+
+  function applyChatError(error: unknown, fallback: string) {
+    setChatError(localizeUserFacingError(error, fallback));
+    setChatErrorCode(getUserFacingErrorCode(error));
   }
 
   const clearOfflineTimer = useCallback(() => {
@@ -399,6 +407,7 @@ export function useSession(sessionId: string | null) {
       setSnapshot(event.session_snapshot);
       if (event.session_snapshot.stage !== "interrupted" && event.event_type !== "session.error") {
         setChatError(null);
+        setChatErrorCode(null);
       }
     }
 
@@ -406,9 +415,11 @@ export function useSession(sessionId: string | null) {
       setAssistantRuntime(null);
       const snapshotError = event.session_snapshot?.last_error;
       if (snapshotError) {
-        setChatError(snapshotError);
+        setChatError(localizeSessionLastError(snapshotError));
+        setChatErrorCode(null);
       } else if (event.event_type === "session.error") {
         setChatError("会话处理失败");
+        setChatErrorCode(null);
       }
     } else if (event.event_type === "scan.completed") {
       setAssistantRuntime((current) => (current?.phase === "scan" ? null : current));
@@ -416,6 +427,7 @@ export function useSession(sessionId: string | null) {
       setAssistantRuntime((current) => (current?.phase === "plan" ? null : current));
     } else {
       setChatError(null);
+      setChatErrorCode(null);
     }
 
     const shouldShowToolOnlyFallback =
@@ -491,7 +503,7 @@ export function useSession(sessionId: string | null) {
         }
       } catch (err) {
         if (!cancelled) {
-          setChatError(err instanceof Error ? err.message : "读取会话失败");
+          applyChatError(err, "读取任务失败，请稍后再试。");
         }
       } finally {
         if (!cancelled) {
@@ -604,7 +616,7 @@ export function useSession(sessionId: string | null) {
     try {
       await refreshSnapshot();
     } catch (err) {
-      setChatError(err instanceof Error ? err.message : "重新连接后仍无法同步当前任务。");
+      applyChatError(err, "重新连接后仍无法同步当前任务。");
     }
   }
 
@@ -644,7 +656,7 @@ export function useSession(sessionId: string | null) {
         setSnapshot(previousSnapshot);
       }
       setAssistantRuntime(null);
-      setChatError(err instanceof Error ? err.message : "发送调整意见失败，请重试。");
+      applyChatError(err, "发送调整意见失败，请重试。");
     } finally {
       setLoading(false);
     }
@@ -667,7 +679,7 @@ export function useSession(sessionId: string | null) {
       setSnapshot(response.session_snapshot);
     } catch (err) {
       setAssistantRuntime(null);
-      setChatError(err instanceof Error ? err.message : "启动扫描失败，请重试。");
+      applyChatError(err, "启动扫描失败，请重试。");
     } finally {
       setLoading(false);
     }
@@ -684,7 +696,7 @@ export function useSession(sessionId: string | null) {
       const response = await api.refreshSession(sessionId);
       setSnapshot(response.session_snapshot);
     } catch (err) {
-      setChatError(err instanceof Error ? err.message : "刷新当前任务失败，请重试。");
+      applyChatError(err, "刷新当前任务失败，请重试。");
     } finally {
       setLoading(false);
     }
@@ -712,7 +724,7 @@ export function useSession(sessionId: string | null) {
       setAssistantDraft("");
     } catch (err) {
       setAssistantRuntime(null);
-      setChatError(err instanceof Error ? err.message : "确认目标目录失败，请重试。");
+      applyChatError(err, "确认目标目录失败，请重试。");
     } finally {
       setLoading(false);
     }
@@ -728,7 +740,7 @@ export function useSession(sessionId: string | null) {
       const response = await api.runPrecheck(sessionId);
       setSnapshot(response.session_snapshot);
     } catch (err) {
-      setChatError(err instanceof Error ? err.message : "安全检查失败，请重试。");
+      applyChatError(err, "执行检查失败，请重试。");
     } finally {
       setLoading(false);
     }
@@ -744,7 +756,7 @@ export function useSession(sessionId: string | null) {
       const response = await api.returnToPlanning(sessionId);
       setSnapshot(response.session_snapshot);
     } catch (err) {
-      setChatError(err instanceof Error ? err.message : "返回方案阶段失败，请重试。");
+      applyChatError(err, "返回方案调整阶段失败，请重试。");
     } finally {
       setLoading(false);
     }
@@ -762,7 +774,7 @@ export function useSession(sessionId: string | null) {
       setSnapshot(response.session_snapshot);
       return true;
     } catch (err) {
-      setChatError(err instanceof Error ? err.message : "执行整理失败，请重试。");
+      applyChatError(err, "执行整理失败，请重试。");
       return false;
     } finally {
       setLoading(false);
@@ -780,7 +792,7 @@ export function useSession(sessionId: string | null) {
       const response = await api.rollback(sessionId, true);
       setSnapshot(response.session_snapshot);
     } catch (err) {
-      setChatError(err instanceof Error ? err.message : "执行回退失败，请重试。");
+      applyChatError(err, "执行回退失败，请重试。");
     } finally {
       setLoading(false);
     }
@@ -796,7 +808,7 @@ export function useSession(sessionId: string | null) {
       const response = await api.cleanupEmptyDirs(sessionId);
       setSnapshot(response.session_snapshot);
     } catch (err) {
-      setChatError(err instanceof Error ? err.message : "清理空目录失败，请重试。");
+      applyChatError(err, "清理空目录失败，请重试。");
     } finally {
       setLoading(false);
     }
@@ -812,7 +824,7 @@ export function useSession(sessionId: string | null) {
       resetConversationTransientState();
       return true;
     } catch (err) {
-      setChatError(err instanceof Error ? err.message : "结束当前任务失败，请重试。");
+      applyChatError(err, "结束当前任务失败，请重试。");
       return false;
     } finally {
       setLoading(false);
@@ -835,7 +847,7 @@ export function useSession(sessionId: string | null) {
       setJournalLoading(true);
       setJournal(await api.getJournal(sessionId));
     } catch (err) {
-      setChatError(err instanceof Error ? err.message : "读取执行记录失败。");
+      applyChatError(err, "读取执行记录失败。");
     } finally {
       setJournalLoading(false);
     }
@@ -851,7 +863,7 @@ export function useSession(sessionId: string | null) {
       const response = await api.updateItem(sessionId, payload);
       setSnapshot(response.session_snapshot);
     } catch (err) {
-      setChatError(err instanceof Error ? err.message : "更新条目去向失败，请重试。");
+      applyChatError(err, "更新条目去向失败，请重试。");
     } finally {
       setLoading(false);
     }
@@ -870,6 +882,7 @@ export function useSession(sessionId: string | null) {
     plannerStatus,
     composerStatus,
     chatError,
+    chatErrorCode,
     streamStatus,
     composerMode,
     isComposerLocked,

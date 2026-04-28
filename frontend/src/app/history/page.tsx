@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn, formatDisplayDate, getFriendlyStage } from "@/lib/utils";
+import { localizeSessionLastError, localizeUserFacingError } from "@/lib/user-facing-copy";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import type { JournalSummary, HistoryItem, SessionSnapshot, RollbackPrecheckSummary } from "@/types/session";
@@ -230,7 +231,7 @@ export default function HistoryPage() {
         void loadJournal(selectedSessionId);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "回退过程中发生错误");
+      setError(localizeUserFacingError(err, "回退过程中发生错误。"));
     } finally {
       setActionLoading(false);
     }
@@ -310,8 +311,8 @@ export default function HistoryPage() {
 
       {sessionDetail?.last_error && (
         <ErrorAlert 
-          title="上次任务错误" 
-          message={sessionDetail.last_error} 
+          title="上次任务中断" 
+          message={localizeSessionLastError(sessionDetail.last_error)} 
         />
       )}
     </div>
@@ -471,7 +472,7 @@ export default function HistoryPage() {
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="搜索记录 ID 或路径..."
+                  placeholder="搜索时间、路径或记录 ID..."
                   className="w-full rounded-[6px] border border-on-surface/10 bg-on-surface/[0.02] py-2 pl-[2.25rem] pr-4 text-[12.5px] font-medium text-on-surface outline-none transition-all placeholder:text-ui-muted/50 focus:bg-surface focus:ring-2 focus:ring-primary/5"
                 />
               </div>

@@ -4,6 +4,7 @@ import type { HistoryItem } from "@/types/session";
 
 import {
   getHistoryEntryHref,
+  getHistoryEntryName,
   getHistoryEntryReadonlyHref,
   getHistoryEntrySummary,
   isHistorySessionEntry,
@@ -48,5 +49,9 @@ describe("use-history-list helpers", () => {
     expect(getHistoryEntrySummary(createHistoryItem({ status: "rollback_partial_failure", is_session: false }))).toBe(
       "回退部分失败",
     );
+  });
+
+  it("uses created time as the history entry name", () => {
+    expect(getHistoryEntryName(createHistoryItem({ created_at: "2026-04-21T08:30:00+08:00" }))).toBe("2026/04/21 08:30");
   });
 });

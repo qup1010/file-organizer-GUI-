@@ -779,7 +779,7 @@ export function PreviewPanel(props: PreviewPanelProps) {
   const pendingQueueCount = invalidatedItems.length + unresolvedItems.length + activeReviewItems.length;
   const reviewQueueCount = activeReviewItems.length;
   const precheckNotice = canRunPrecheck
-    ? "待处理项目已清空，可以做移动前安全检查。"
+    ? "待处理项目已清空，可以进行移动前检查。"
     : invalidatedItems.length > 0
       ? `仍有 ${invalidatedItems.length} 项需重新确认。`
       : unresolvedItems.length > 0
@@ -787,8 +787,8 @@ export function PreviewPanel(props: PreviewPanelProps) {
       : reviewQueueCount > 0
           ? `仍有 ${reviewQueueCount} 项待核对。`
           : isPlanSyncing
-            ? "方案正在更新，稍后即可检查。"
-            : "方案还没准备好做安全检查。";
+            ? "方案正在更新，稍后即可进行检查。"
+            : "方案还没准备好进行检查。";
   const visibleCount = viewMode === "before" ? filteredSourceEntries.length : filteredItems.length;
   const totalCount = viewMode === "before" ? sourceTreeEntries.length : allItems.length;
   const hasAfterPlanData = allItems.length > 0 || mkdirPreview.length > 0;
@@ -838,7 +838,7 @@ export function PreviewPanel(props: PreviewPanelProps) {
                     方案预览
                   </div>
                   <span className={cn("rounded-[3px] border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest", pendingQueueCount > 0 || !canRunPrecheck ? "border-warning/30 bg-warning/5 text-warning" : "border-success/30 bg-success/5 text-success-dim")}>
-                    {pendingQueueCount > 0 ? `待处理 ${pendingQueueCount}` : canRunPrecheck ? "可检查" : isPlanSyncing ? "更新中" : "待检查"}
+                    {pendingQueueCount > 0 ? `待处理 ${pendingQueueCount}` : canRunPrecheck ? "可进行检查" : isPlanSyncing ? "更新中" : "等待检查"}
                   </span>
                   <div className="flex shrink-0 items-center gap-1.5 rounded-[3px] border border-on-surface/8 bg-on-surface/[0.02] px-2 py-0.5 text-[9px] font-bold text-on-surface uppercase tracking-widest">
                     <Sparkles className="h-2.5 w-2.5 text-primary/60" />
@@ -1074,7 +1074,7 @@ export function PreviewPanel(props: PreviewPanelProps) {
                     !readOnly && activeReviewItems.length > 0 ? (
                       <div className="flex shrink-0 items-center gap-2">
                         {canRunPrecheck && invalidatedItems.length === 0 && unresolvedItems.length === 0 ? (
-                          <span className="hidden text-[10px] font-medium text-ui-muted/60 xl:inline">保留后可安全检查</span>
+                          <span className="hidden text-[10px] font-medium text-ui-muted/60 xl:inline">保留后可进行检查</span>
                         ) : null}
                         <button
                           type="button"

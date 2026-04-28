@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { createApiClient } from "@/lib/api";
 import { getApiBaseUrl, getApiToken } from "@/lib/runtime";
+import { localizeUserFacingError } from "@/lib/user-facing-copy";
 import { getFriendlyStage, getFriendlyStatus } from "@/lib/utils";
 import type { HistoryItem } from "@/types/session";
 
@@ -64,8 +65,23 @@ export function getHistoryEntryReadonlyHref(entry: HistoryItem): string {
     : `/history?entry_id=${entry.execution_id}`;
 }
 
-export function getHistoryEntryName(entry: HistoryItem): string {
+function getHistoryEntryFallbackName(entry: HistoryItem): string {
   return entry.target_dir.replace(/[\\/]$/, "").split(/[\\/]/).pop() || "未命名记录";
+}
+
+export function getHistoryEntryName(entry: HistoryItem): string {
+  const date = new Date(entry.created_at);
+  if (Number.isNaN(date.getTime())) {
+    return getHistoryEntryFallbackName(entry);
+  }
+  return new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
 }
 
 function filterHistoryEntries(history: HistoryItem[], query: string, filter: HistoryFilter) {
@@ -102,7 +118,7 @@ function filterHistoryEntries(history: HistoryItem[], query: string, filter: His
 }
 
 function toErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
+  return localizeUserFacingError(error, fallback);
 }
 
 export function useHistoryList({ autoLoad = true }: { autoLoad?: boolean } = {}) {

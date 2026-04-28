@@ -73,7 +73,7 @@ export function PreviewHeader({
               方案预览
             </div>
             <span className={cn("rounded-[3px] border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest", pendingQueueCount > 0 || !canRunPrecheck ? "border-warning/30 bg-warning/5 text-warning" : "border-success/30 bg-success/5 text-success-dim")}>
-              {blockingQueueCount > 0 ? `待处理 ${blockingQueueCount}` : reviewQueueCount > 0 ? `待核对 ${reviewQueueCount}` : canRunPrecheck ? "可检查" : isPlanSyncing ? "更新中" : "待检查"}
+              {blockingQueueCount > 0 ? `待处理 ${blockingQueueCount}` : reviewQueueCount > 0 ? `待核对 ${reviewQueueCount}` : canRunPrecheck ? "可进行检查" : isPlanSyncing ? "更新中" : "等待检查"}
             </span>
             <div className="flex shrink-0 items-center gap-1.5 rounded-[3px] border border-on-surface/8 bg-on-surface/[0.02] px-2 py-0.5 text-[9px] font-bold text-on-surface uppercase tracking-widest">
               <Sparkles className="h-2.5 w-2.5 text-primary/60" />
@@ -87,7 +87,7 @@ export function PreviewHeader({
 
           <div className="flex min-w-0 items-center gap-3">
             <h2 className="truncate text-[14px] font-bold tracking-tight text-on-surface">
-              {blockingQueueCount > 0 ? "先处理待处理项，再核对目标结构" : reviewQueueCount > 0 ? "核对待确认区，再检查移动风险" : "核对目标结构，准备安全检查"}
+              {blockingQueueCount > 0 ? "先处理待处理项，再核对目标结构" : reviewQueueCount > 0 ? "核对待确认区，再检查移动风险" : "核对目标结构，准备进行检查"}
             </h2>
             {plan.summary ? (
               <p className="min-w-0 flex-1 truncate text-[11px] text-ui-muted/80">{plan.summary}</p>

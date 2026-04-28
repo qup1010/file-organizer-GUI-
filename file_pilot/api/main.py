@@ -739,7 +739,10 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
     def rollback(session_id: str, payload: ConfirmPayload):
         try:
             result = app.state.service.rollback(session_id, payload.confirm)
-            return {"session_id": session_id, "session_snapshot": result.session_snapshot}
+            response = {"session_id": session_id, "session_snapshot": result.session_snapshot}
+            if result.rollback_precheck is not None:
+                response["rollback_precheck"] = result.rollback_precheck
+            return response
         except KeyError:
             raise HTTPException(status_code=404, detail="SESSION_NOT_FOUND")
         except FileNotFoundError:
@@ -747,6 +750,10 @@ def create_app(service: OrganizerSessionService | None = None) -> FastAPI:
         except RuntimeError as exc:
             if str(exc) == "SESSION_STAGE_CONFLICT":
                 return _error_response(app.state.service, session_id, "SESSION_STAGE_CONFLICT", 409)
+        except ValueError as exc:
+            if str(exc) == "confirmation_required":
+                raise HTTPException(status_code=400, detail="CONFIRMATION_REQUIRED")
+            raise
             if str(exc) == "SESSION_LOCKED":
                 return _error_response(app.state.service, session_id, "SESSION_LOCKED", 409)
             raise

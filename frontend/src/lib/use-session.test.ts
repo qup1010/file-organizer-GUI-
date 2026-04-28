@@ -430,7 +430,7 @@ describe("useSession assistant draft", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.chatError).toBe("scanning_interrupted");
+      expect(result.current.chatError).toBe("扫描过程中已中断，请重新扫描后再继续。");
     });
 
     act(() => {
@@ -447,6 +447,7 @@ describe("useSession assistant draft", () => {
 
     await waitFor(() => {
       expect(result.current.chatError).toBeNull();
+      expect(result.current.chatErrorCode).toBeNull();
     });
   });
 });

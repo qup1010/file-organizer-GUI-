@@ -265,7 +265,17 @@ class ExecutionAppService:
 
     def rollback(self, session_id: str, confirm: bool) -> SessionMutationResult:
         if not confirm:
-            raise ValueError("confirmation_required")
+            session = self.helpers.store.load(session_id)
+            if session is None:
+                journal = execution_service.load_execution_journal(session_id)
+                if journal is None:
+                    raise KeyError(f"Session {session_id} not found")
+                return self._build_rollback_precheck_result_for_journal(journal)
+
+            journal = rollback_service.load_latest_execution_for_directory(Path(session.target_dir))
+            if journal is None:
+                raise FileNotFoundError("latest_execution")
+            return self._build_rollback_precheck_result_for_session(session, journal)
 
         session = self.helpers.store.load(session_id)
         if session is None:
@@ -321,6 +331,50 @@ class ExecutionAppService:
         )
         self.helpers._record_event("rollback.completed", session)
         return SessionMutationResult(session_snapshot=self.helpers._build_snapshot(session))
+
+    def _build_rollback_precheck_result_for_session(self, session, journal) -> SessionMutationResult:
+        plan = rollback_service.build_rollback_plan(journal)
+        precheck = rollback_service.validate_rollback_preconditions(plan)
+        return SessionMutationResult(
+            session_snapshot=self.helpers._build_snapshot(session),
+            changed=False,
+            rollback_precheck=self._rollback_precheck_payload(plan, precheck),
+        )
+
+    def _build_rollback_precheck_result_for_journal(self, journal) -> SessionMutationResult:
+        plan = rollback_service.build_rollback_plan(journal)
+        precheck = rollback_service.validate_rollback_preconditions(plan)
+        return SessionMutationResult(
+            session_snapshot={
+                "session_id": journal.execution_id,
+                "target_dir": journal.target_dir,
+                "stage": "completed",
+                "execution_report": {
+                    "execution_id": journal.execution_id,
+                    "journal_id": journal.execution_id,
+                    "status": journal.status,
+                },
+                "integrity_flags": {},
+            },
+            changed=False,
+            rollback_precheck=self._rollback_precheck_payload(plan, precheck),
+        )
+
+    @staticmethod
+    def _rollback_precheck_payload(plan, precheck) -> dict:
+        return {
+            "can_execute": bool(precheck.can_execute),
+            "blocking_errors": list(precheck.blocking_errors or []),
+            "actions": [
+                {
+                    "type": action.type,
+                    "display_name": str(action.display_name or action.item_id or action.source.name or action.type),
+                    "source": action.source.as_posix(),
+                    "target": action.target.as_posix(),
+                }
+                for action in plan.actions
+            ],
+        }
 
     def rollback_execution_journal(self, journal) -> SessionMutationResult:
         if journal.status not in {"completed", "partial_failure"}:
