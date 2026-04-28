@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import {
@@ -116,6 +117,7 @@ type TargetProfileDraft = {
 
 type LaunchSection = "strategy" | "placement" | "targets";
 type ProviderSummaryKind = "text" | "vision" | "icon_image";
+const SETTINGS_TAB_IDS = ["text", "vision", "icon_image", "bg_removal", "launch", "system"] as const;
 
 const APP_CONTEXT_EVENT = "file-pilot-context-change";
 const SETTINGS_CONTEXT_KEY = "settings_header_context";
@@ -335,6 +337,8 @@ function buildTargetProfilesFingerprint(drafts: Record<string, TargetProfileDraf
 }
 
 export default function SettingsPage() {
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get("tab");
   const api = useMemo(() => createApiClient(getApiBaseUrl(), getApiToken()), []);
   const desktopReady = isTauriDesktop();
   const [snapshot, setSnapshot] = useState<SettingsSnapshot | null>(null);
@@ -355,7 +359,9 @@ export default function SettingsPage() {
   const [createPresetDialog, setCreatePresetDialog] = useState<CreatePresetDialogState | null>(null);
   const [deletePresetDialog, setDeletePresetDialog] = useState<DeletePresetDialogState | null>(null);
   const [switchPresetDialog, setSwitchPresetDialog] = useState<SwitchPresetDialogState | null>(null);
-  const [activeTab, setActiveTab] = useState<string>("text");
+  const [activeTab, setActiveTab] = useState<string>(
+    initialTab && SETTINGS_TAB_IDS.includes(initialTab as (typeof SETTINGS_TAB_IDS)[number]) ? initialTab : "text",
+  );
   const [isCompactLayout, setIsCompactLayout] = useState(false);
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [targetProfiles, setTargetProfiles] = useState<TargetProfile[]>([]);

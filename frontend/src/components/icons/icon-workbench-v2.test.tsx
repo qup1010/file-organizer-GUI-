@@ -451,6 +451,28 @@ describe("IconWorkbenchV2", () => {
     expect(screen.getByRole("button", { name: /重新连接/i })).toBeInTheDocument();
   });
 
+  it("shows the image-model banner when only the image model is missing", async () => {
+    iconApiMock.getConfig.mockResolvedValueOnce({
+      config: {
+        text_model: { base_url: "https://text.example/v1", model: "gpt-text", configured: true },
+        image_model: { base_url: "", model: "", configured: false },
+        image_size: "1024x1024",
+        analysis_concurrency_limit: 1,
+        image_concurrency_limit: 1,
+        save_mode: "centralized",
+      },
+    });
+
+    render(<IconWorkbenchV2 />);
+
+    await waitFor(() => {
+      expect(screen.getByText("AI 生图模型尚未配置")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("去配置图标生图")).toBeInTheDocument();
+    expect(screen.queryByText("AI 文本模型尚未配置")).not.toBeInTheDocument();
+  });
+
   it("rescans the session after a successful desktop apply if report sync fails", async () => {
     const user = userEvent.setup();
     vi.mocked(isTauriDesktop).mockReturnValue(true);

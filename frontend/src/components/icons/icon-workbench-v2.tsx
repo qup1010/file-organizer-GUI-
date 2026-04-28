@@ -157,6 +157,26 @@ export default function IconWorkbenchV2() {
     return Boolean(m?.configured || (m?.secret_state === "stored" && m?.model));
   }, [workbenchConfig]);
 
+  const generationConfigBannerProps = useMemo(() => {
+    if (!isTextModelConfigured) {
+      return {
+        title: "AI 文本模型尚未配置",
+        message: "未配置文本模型时，系统无法稳定完成目录分析和图标提示词生成。建议先前往“设置 > 文本模型”完成配置。",
+        actionLabel: "去配置文本模型",
+        href: "/settings?tab=text",
+      };
+    }
+    if (!isImageModelConfigured) {
+      return {
+        title: "AI 生图模型尚未配置",
+        message: "未配置生图模型时，系统无法生成图标预览。建议先前往“设置 > 图标生图”完成配置。",
+        actionLabel: "去配置图标生图",
+        href: "/settings?tab=icon_image",
+      };
+    }
+    return null;
+  }, [isImageModelConfigured, isTextModelConfigured]);
+
   const {
     templates,
     templatesLoading,
@@ -307,7 +327,7 @@ export default function IconWorkbenchV2() {
     return closeEventStream;
   }, [apiToken, baseUrl, closeEventStream, handleWorkbenchEvent, scheduleOfflineState, session?.session_id]);
 
-  const generationConfigBlockedReason = !isTextModelConfigured ? "请先在设置中配置文本模型" : !isImageModelConfigured ? "请先在设置中配置生成模型" : null;
+  const generationConfigBlockedReason = !isTextModelConfigured ? "请先在设置中配置文本模型" : !isImageModelConfigured ? "请先在设置中配置图标生图模型" : null;
   const generateBlockedReason = !hasTargets ? "先选择目标文件夹" : !hasSelectedStyle ? "先选择风格模板" : generationConfigBlockedReason || (isBusy ? "正在生成..." : null);
 
   const appendTargetPaths = useCallback(async (nextTargetPaths: string[]) => {
@@ -488,9 +508,9 @@ export default function IconWorkbenchV2() {
             <p className="truncate text-[11px] font-bold">{error}</p>
           </div>
         </div>
-      ) : generationConfigBlockedReason ? (
+      ) : generationConfigBlockedReason && generationConfigBannerProps ? (
         <div className="border-b border-on-surface/8 bg-surface px-5 py-3">
-          <ModelConfigBanner />
+          <ModelConfigBanner {...generationConfigBannerProps} />
         </div>
       ) : null}
       {streamStatus !== "connected" && session && (

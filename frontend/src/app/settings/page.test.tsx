@@ -16,6 +16,7 @@ const getTargetProfiles = vi.fn();
 const createTargetProfile = vi.fn();
 const updateTargetProfile = vi.fn();
 const deleteTargetProfile = vi.fn();
+let currentSearchParams = new URLSearchParams();
 
 vi.mock("framer-motion", () => ({
   AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -25,6 +26,10 @@ vi.mock("framer-motion", () => ({
       <button {...props}>{children}</button>
     ),
   },
+}));
+
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => currentSearchParams,
 }));
 
 vi.mock("@/lib/runtime", () => ({
@@ -165,6 +170,7 @@ function createSnapshot(): SettingsSnapshot {
 
 describe("SettingsPage preset flow", () => {
   beforeEach(() => {
+    currentSearchParams = new URLSearchParams();
     getSettings.mockReset();
     createSettingsPreset.mockReset();
     updateSettings.mockReset();
@@ -413,5 +419,15 @@ describe("SettingsPage preset flow", () => {
     await waitFor(() => {
       expect(screen.queryByText("正在验证图片理解能力...")).not.toBeInTheDocument();
     });
+  });
+
+  it("opens the requested settings tab from the query string", async () => {
+    currentSearchParams = new URLSearchParams("tab=icon_image");
+
+    render(<SettingsPage />);
+
+    expect(await screen.findByText("请先点击 + 创建一个预设")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /新建图标生图预设|新建预设/i }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /新建文本预设/i })).not.toBeInTheDocument();
   });
 });

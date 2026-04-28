@@ -16,7 +16,7 @@ export function ModelConfigBanner({
   title = "AI 文本模型尚未配置",
   message = "未配置文本模型时，系统无法稳定完成用途分析和整理规划。建议先前往“设置 > 文本模型”完成配置。",
   actionLabel = "去配置文本模型",
-  href = "/settings",
+  href = "/settings?tab=text",
   className,
 }: ModelConfigBannerProps) {
   return (
